@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.1](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.7.0...wsio-core-v0.7.1) - 2025-11-02 10:21
+
+### 🏡 Chore
+
+- update package metadata ([9d8c0de](https://github.com/ws-io/ws.io-rs/commit/9d8c0de))
+
+### 💅 Refactors
+
+- replace all `.to_string` calls with `.into` ([91b178b](https://github.com/ws-io/ws.io-rs/commit/91b178b))
+
 ## [0.7.0](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.6.1...wsio-core-v0.7.0) - 2025-10-30 12:55
 
 ### 🎨 Styles

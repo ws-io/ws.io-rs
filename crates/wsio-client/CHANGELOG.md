@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.1](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.0...wsio-client-v0.7.1) - 2025-11-02 10:21
+
+### 🏡 Chore
+
+- update package metadata ([9d8c0de](https://github.com/ws-io/ws.io-rs/commit/9d8c0de))
+
+### 🚀 Enhancements
+
+- *(client)* add `is_ready` method to client and session ([c26b878](https://github.com/ws-io/ws.io-rs/commit/c26b878))
+
 ## [0.7.0](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.6.0...wsio-client-v0.7.0) - 2025-10-31 16:59
 
 ### 💅 Refactors

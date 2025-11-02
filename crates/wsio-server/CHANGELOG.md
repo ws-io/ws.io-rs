@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.8.0...wsio-server-v0.8.1) - 2025-11-02 10:21
+
+### 🏡 Chore
+
+- update package metadata ([9d8c0de](https://github.com/ws-io/ws.io-rs/commit/9d8c0de))
+
+### 💅 Refactors
+
+- replace all `.to_string` calls with `.into` ([91b178b](https://github.com/ws-io/ws.io-rs/commit/91b178b))
+
+### 🚀 Enhancements
+
+- *(server)* add `.to` and `.except` methods to connection (similar to socket.io's `socket.to/except`) ([a23054e](https://github.com/ws-io/ws.io-rs/commit/a23054e))
+
 ## [0.8.0](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.7.0...wsio-server-v0.8.0) - 2025-10-30 12:55
 
 ### 🎨 Styles
