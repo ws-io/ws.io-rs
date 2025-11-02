@@ -257,7 +257,13 @@ impl WsIoClientSession {
     }
 
     // Public methods
+    #[inline]
     pub fn client(&self) -> WsIoClient {
         WsIoClient(self.runtime.clone())
+    }
+
+    #[inline]
+    pub fn is_ready(&self) -> bool {
+        self.status.is(SessionStatus::Ready)
     }
 }

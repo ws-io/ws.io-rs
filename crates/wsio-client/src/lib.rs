@@ -60,6 +60,11 @@ impl WsIoClient {
     }
 
     #[inline]
+    pub fn is_session_ready(&self) -> bool {
+        self.0.is_session_ready()
+    }
+
+    #[inline]
     pub fn off(&self, event: impl AsRef<str>) {
         self.0.off(event.as_ref());
     }

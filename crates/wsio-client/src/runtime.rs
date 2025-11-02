@@ -279,6 +279,11 @@ impl WsIoClientRuntime {
     }
 
     #[inline]
+    pub(crate) fn is_session_ready(&self) -> bool {
+        self.session.load().as_ref().map_or(false, |session| session.is_ready())
+    }
+
+    #[inline]
     pub(crate) fn off(&self, event: &str) {
         self.event_registry.off(event);
     }
