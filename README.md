@@ -37,7 +37,6 @@ The next features will be implemented only after my TS client development, integ
 
 ## TODO
 
-- broadcast room but except self
 - other socket.io functionality
 - try to optimize the structure rooms
 - any todo comments
