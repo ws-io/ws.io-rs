@@ -119,20 +119,20 @@ impl WsIoServerNamespaceBroadcastOperator {
     }
 
     #[inline]
-    pub fn except<I: IntoIterator<Item = S>, S: AsRef<str>>(mut self, room_names: I) -> Self {
+    pub fn except(mut self, room_names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         self.exclude_rooms
             .extend(room_names.into_iter().map(|room_name| room_name.as_ref().into()));
 
         self
     }
 
-    pub fn except_connection_ids<I: IntoIterator<Item = u64>>(mut self, connection_ids: I) -> Self {
+    pub fn except_connection_ids(mut self, connection_ids: impl IntoIterator<Item = u64>) -> Self {
         self.exclude_connection_ids.extend(connection_ids);
         self
     }
 
     #[inline]
-    pub fn to<I: IntoIterator<Item = S>, S: AsRef<str>>(mut self, room_names: I) -> Self {
+    pub fn to(mut self, room_names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         self.include_rooms
             .extend(room_names.into_iter().map(|room_name| room_name.as_ref().into()));
 

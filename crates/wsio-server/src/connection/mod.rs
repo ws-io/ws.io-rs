@@ -349,9 +349,9 @@ impl WsIoServerConnection {
     }
 
     #[inline]
-    pub fn except<I: IntoIterator<Item = S>, S: AsRef<str>>(
+    pub fn except(
         self: &Arc<Self>,
-        room_names: I,
+        room_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
         self.namespace.except(room_names).except_connection_ids(vec![self.id])
     }
@@ -373,7 +373,7 @@ impl WsIoServerConnection {
     }
 
     #[inline]
-    pub fn join<I: IntoIterator<Item = S>, S: AsRef<str>>(self: &Arc<Self>, room_names: I) {
+    pub fn join(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl AsRef<str>>) {
         for room_name in room_names {
             let room_name = room_name.as_ref();
             self.namespace.add_connection_id_to_room(room_name, self.id);
@@ -382,7 +382,7 @@ impl WsIoServerConnection {
     }
 
     #[inline]
-    pub fn leave<I: IntoIterator<Item = S>, S: AsRef<str>>(self: &Arc<Self>, room_names: I) {
+    pub fn leave(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl AsRef<str>>) {
         for room_name in room_names {
             self.namespace
                 .remove_connection_id_from_room(room_name.as_ref(), self.id);
@@ -435,9 +435,9 @@ impl WsIoServerConnection {
     }
 
     #[inline]
-    pub fn to<I: IntoIterator<Item = S>, S: AsRef<str>>(
+    pub fn to(
         self: &Arc<Self>,
-        room_names: I,
+        room_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
         self.namespace.to(room_names).except_connection_ids(vec![self.id])
     }

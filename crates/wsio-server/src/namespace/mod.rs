@@ -243,9 +243,9 @@ impl WsIoServerNamespace {
     }
 
     #[inline]
-    pub fn except<I: IntoIterator<Item = S>, S: AsRef<str>>(
+    pub fn except(
         self: &Arc<Self>,
-        room_names: I,
+        room_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
         WsIoServerNamespaceBroadcastOperator::new(self.clone()).except(room_names)
     }
@@ -278,9 +278,9 @@ impl WsIoServerNamespace {
     }
 
     #[inline]
-    pub fn to<I: IntoIterator<Item = S>, S: AsRef<str>>(
+    pub fn to(
         self: &Arc<Self>,
-        room_names: I,
+        room_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
         WsIoServerNamespaceBroadcastOperator::new(self.clone()).to(room_names)
     }
