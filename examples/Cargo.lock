@@ -1895,7 +1895,7 @@ checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
 name = "wsio-client"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1911,7 +1911,7 @@ dependencies = [
 
 [[package]]
 name = "wsio-core"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1932,7 +1932,7 @@ dependencies = [
 
 [[package]]
 name = "wsio-server"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "arc-swap",

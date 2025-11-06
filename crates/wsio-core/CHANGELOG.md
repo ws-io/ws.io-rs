@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.7.1...wsio-core-v0.8.0) - 2025-11-06 09:35
+
+### 🏡 Chore
+
+- update dependencies ([c99dd2e](https://github.com/ws-io/ws.io-rs/commit/c99dd2e))
+
+### 💅 Refactors
+
+- *(core)* [**breaking**] unify actual packet transmission data structure as tuple regardless of codec used ([38e5948](https://github.com/ws-io/ws.io-rs/commit/38e5948))
+
 ## [0.7.1](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.7.0...wsio-core-v0.7.1) - 2025-11-02 10:21
 
 ### 🏡 Chore

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.2](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.1...wsio-client-v0.7.2) - 2025-11-06 09:35
+
+### 🏡 Chore
+
+- update dependencies ([c99dd2e](https://github.com/ws-io/ws.io-rs/commit/c99dd2e))
+
+### 💅 Refactors
+
+- rename some params name ([2bd3db2](https://github.com/ws-io/ws.io-rs/commit/2bd3db2))
+
 ## [0.7.1](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.0...wsio-client-v0.7.1) - 2025-11-02 10:21
 
 ### 🏡 Chore
