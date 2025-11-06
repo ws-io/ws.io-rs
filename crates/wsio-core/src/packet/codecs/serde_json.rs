@@ -18,7 +18,7 @@ impl WsIoPacketSerdeJsonCodec {
 
     #[inline]
     pub(super) fn decode(&self, bytes: &[u8]) -> Result<WsIoPacket> {
-        Ok(from_slice::<WsIoPacket>(bytes)?)
+        Ok(WsIoPacket::from_inner(from_slice(bytes)?))
     }
 
     #[inline]
@@ -28,7 +28,7 @@ impl WsIoPacketSerdeJsonCodec {
 
     #[inline]
     pub(super) fn encode(&self, packet: &WsIoPacket) -> Result<Vec<u8>> {
-        Ok(to_vec(packet)?)
+        Ok(to_vec(&packet.to_inner_ref())?)
     }
 
     #[inline]

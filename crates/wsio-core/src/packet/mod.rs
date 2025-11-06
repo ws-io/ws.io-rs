@@ -6,7 +6,6 @@ use serde_repr::{
     Deserialize_repr,
     Serialize_repr,
 };
-use serde_with::skip_serializing_none;
 
 pub mod codecs;
 
@@ -21,32 +20,16 @@ pub enum WsIoPacketType {
 }
 
 // Structs
-#[cfg(any(
-    feature = "packet-codec-bincode",
-    feature = "packet-codec-msgpack",
-    feature = "packet-codec-postcard"
-))]
 #[derive(Deserialize)]
-struct InnerPacket(Option<Vec<u8>>, Option<String>, WsIoPacketType);
+struct InnerPacket(WsIoPacketType, Option<String>, Option<Vec<u8>>);
 
-#[cfg(any(
-    feature = "packet-codec-bincode",
-    feature = "packet-codec-msgpack",
-    feature = "packet-codec-postcard"
-))]
 #[derive(Serialize)]
-struct InnerPacketRef<'a>(&'a Option<Vec<u8>>, &'a Option<String>, &'a WsIoPacketType);
+struct InnerPacketRef<'a>(&'a WsIoPacketType, &'a Option<String>, &'a Option<Vec<u8>>);
 
-#[skip_serializing_none]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug)]
 pub struct WsIoPacket {
-    #[serde(rename = "d")]
     pub data: Option<Vec<u8>>,
-
-    #[serde(rename = "k")]
     pub key: Option<String>,
-
-    #[serde(rename = "t")]
     pub r#type: WsIoPacketType,
 }
 
@@ -58,6 +41,21 @@ impl WsIoPacket {
             key: key.map(|k| k.into()),
             r#type,
         }
+    }
+
+    // Protected methods
+    #[inline]
+    pub(self) fn from_inner(inner: InnerPacket) -> Self {
+        Self {
+            data: inner.2,
+            key: inner.1,
+            r#type: inner.0,
+        }
+    }
+
+    #[inline]
+    pub(self) fn to_inner_ref(&self) -> InnerPacketRef<'_> {
+        InnerPacketRef(&self.r#type, &self.key, &self.data)
     }
 
     // Public methods

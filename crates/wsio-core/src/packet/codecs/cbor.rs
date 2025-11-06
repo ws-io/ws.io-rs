@@ -20,7 +20,7 @@ impl WsIoPacketCborCodec {
 
     #[inline]
     pub(super) fn decode(&self, bytes: &[u8]) -> Result<WsIoPacket> {
-        Ok(from_reader(Cursor::new(bytes))?)
+        Ok(WsIoPacket::from_inner(from_reader(Cursor::new(bytes))?))
     }
 
     #[inline]
@@ -31,7 +31,7 @@ impl WsIoPacketCborCodec {
     #[inline]
     pub(super) fn encode(&self, packet: &WsIoPacket) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
-        into_writer(packet, &mut buffer)?;
+        into_writer(&packet.to_inner_ref(), &mut buffer)?;
         Ok(buffer)
     }
 

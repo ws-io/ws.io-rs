@@ -11,11 +11,7 @@ use serde::{
     de::DeserializeOwned,
 };
 
-use super::super::{
-    InnerPacket,
-    InnerPacketRef,
-    WsIoPacket,
-};
+use super::super::WsIoPacket;
 
 // Structs
 pub(super) struct WsIoPacketBincodeCodec;
@@ -25,12 +21,8 @@ impl WsIoPacketBincodeCodec {
 
     #[inline]
     pub(super) fn decode(&self, bytes: &[u8]) -> Result<WsIoPacket> {
-        let (inner_packet, _) = decode_from_slice::<InnerPacket, _>(bytes, standard())?;
-        Ok(WsIoPacket {
-            data: inner_packet.0,
-            key: inner_packet.1,
-            r#type: inner_packet.2,
-        })
+        let (inner_packet, _) = decode_from_slice(bytes, standard())?;
+        Ok(WsIoPacket::from_inner(inner_packet))
     }
 
     #[inline]
@@ -41,10 +33,7 @@ impl WsIoPacketBincodeCodec {
 
     #[inline]
     pub(super) fn encode(&self, packet: &WsIoPacket) -> Result<Vec<u8>> {
-        Ok(encode_to_vec(
-            InnerPacketRef(&packet.data, &packet.key, &packet.r#type),
-            standard(),
-        )?)
+        Ok(encode_to_vec(packet.to_inner_ref(), standard())?)
     }
 
     #[inline]
