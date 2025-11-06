@@ -228,9 +228,9 @@ impl WsIoClientSession {
         self.send_message(message).await
     }
 
-    pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, bytes: &[u8]) -> Result<()> {
+    pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
         // TODO: lazy load
-        let packet = self.runtime.config.packet_codec.decode(bytes)?;
+        let packet = self.runtime.config.packet_codec.decode(encoded_packet)?;
         match packet.r#type {
             WsIoPacketType::Disconnect => self.handle_disconnect_packet(),
             WsIoPacketType::Event => {

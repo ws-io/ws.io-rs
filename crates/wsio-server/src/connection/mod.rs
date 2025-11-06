@@ -277,9 +277,9 @@ impl WsIoServerConnection {
         self.send_message(message).await
     }
 
-    pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, bytes: &[u8]) -> Result<()> {
+    pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
         // TODO: lazy load
-        let packet = self.namespace.config.packet_codec.decode(bytes)?;
+        let packet = self.namespace.config.packet_codec.decode(encoded_packet)?;
         match packet.r#type {
             WsIoPacketType::Event => {
                 if let Some(event) = packet.key.as_deref() {
