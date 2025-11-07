@@ -166,7 +166,7 @@ impl WsIoClientSession {
         // Wake event message flush task
         self.runtime.event_message_flush_notify.notify_waiters();
 
-        // Invoke on_session_ready handler if configured
+        // Invoke on_session_ready_handler if configured
         if let Some(on_session_ready_handler) = self.runtime.config.on_session_ready_handler.clone() {
             // Run handler asynchronously in a detached task
             self.spawn_task(on_session_ready_handler(self.clone()));
@@ -195,7 +195,7 @@ impl WsIoClientSession {
         // Cancel all ongoing operations via cancel token
         self.cancel_token.load().cancel();
 
-        // Invoke on_session_close handler with timeout protection if configured
+        // Invoke on_session_close_handler with timeout protection if configured
         if let Some(on_session_close_handler) = &self.runtime.config.on_session_close_handler {
             let _ = timeout(
                 self.runtime.config.on_session_close_handler_timeout,

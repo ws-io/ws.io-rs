@@ -162,7 +162,7 @@ impl WsIoServerConnection {
         // Abort init-timeout task if still active
         abort_locked_task(&self.init_timeout_task).await;
 
-        // Invoke init_response handler with timeout protection if configured
+        // Invoke init_response_handler with timeout protection if configured
         if let Some(init_response_handler) = &self.namespace.config.init_response_handler {
             timeout(
                 self.namespace.config.init_response_handler_timeout,
@@ -189,7 +189,7 @@ impl WsIoServerConnection {
             })?;
         }
 
-        // Invoke on_connect handler with timeout protection if configured
+        // Invoke on_connect_handler with timeout protection if configured
         if let Some(on_connect_handler) = &self.namespace.config.on_connect_handler {
             timeout(
                 self.namespace.config.on_connect_handler_timeout,
@@ -208,7 +208,7 @@ impl WsIoServerConnection {
         // Send ready packet
         self.send_packet(&WsIoPacket::new_ready()).await?;
 
-        // Invoke on_ready handler if configured
+        // Invoke on_ready_handler if configured
         if let Some(on_ready_handler) = self.namespace.config.on_ready_handler.clone() {
             // Run handler asynchronously in a detached task
             self.spawn_task(on_ready_handler(self.clone()));
@@ -244,7 +244,7 @@ impl WsIoServerConnection {
         // Cancel all ongoing operations via cancel token
         self.cancel_token.load().cancel();
 
-        // Invoke on_close handler with timeout protection if configured
+        // Invoke on_close_handler with timeout protection if configured
         if let Some(on_close_handler) = self.on_close_handler.lock().await.take() {
             let _ = timeout(
                 self.namespace.config.on_close_handler_timeout,
