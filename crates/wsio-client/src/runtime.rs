@@ -188,8 +188,6 @@ impl WsIoClientRuntime {
                         },
                         _ = sleep(runtime.config.reconnect_delay) => {},
                     }
-                } else {
-                    break;
                 }
             }
         }));
@@ -222,6 +220,11 @@ impl WsIoClientRuntime {
             _ => unreachable!(),
         }
 
+        // Close session
+        if let Some(session) = self.session.load().as_ref() {
+            session.close();
+        }
+
         // Cancel all ongoing operations via cancel token and store a new one
         self.cancel_token.load().cancel();
         self.cancel_token.store(Arc::new(CancellationToken::new()));
@@ -237,11 +240,6 @@ impl WsIoClientRuntime {
 
         // Wake reconnect loop to break out of sleep early
         self.wake_reconnect_wait_notify.notify_waiters();
-
-        // Close session
-        if let Some(session) = self.session.load().as_ref() {
-            session.close();
-        }
 
         // Await connection loop task termination
         if let Some(connection_loop_task) = self.connection_loop_task.lock().await.take() {
