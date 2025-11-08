@@ -183,9 +183,7 @@ impl WsIoClientRuntime {
                 let _ = runtime.run_connection().await;
                 if runtime.status.is(RuntimeStatus::Running) {
                     select! {
-                        _ = runtime.wake_reconnect_wait_notify.notified() => {
-                            break;
-                        },
+                        _ = runtime.wake_reconnect_wait_notify.notified() => {},
                         _ = sleep(runtime.config.reconnect_delay) => {},
                     }
                 }
