@@ -223,14 +223,14 @@ impl WsIoClientRuntime {
             session.close();
         }
 
-        // Cancel all ongoing operations via cancel token and store a new one
-        self.cancel_token.load().cancel();
-        self.cancel_token.store(Arc::new(CancellationToken::new()));
-
         // Abort event-message-flush task if still active
         if let Some(event_message_flush_task) = self.event_message_flush_task.lock().await.take() {
             event_message_flush_task.abort();
         }
+
+        // Cancel all ongoing operations via cancel token and store a new one
+        self.cancel_token.load().cancel();
+        self.cancel_token.store(Arc::new(CancellationToken::new()));
 
         // Drop all pending event messages in the channel
         let mut event_message_send_rx = self.event_message_send_rx.lock().await;
