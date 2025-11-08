@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.3](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.2...wsio-client-v0.7.3) - 2025-11-08 15:17
+
+### 🏡 Chore
+
+- update some comments ([c8e62ac](https://github.com/ws-io/ws.io-rs/commit/c8e62ac))
+
+### 💅 Refactors
+
+- *(client)* remove unnecessary break ([57748ce](https://github.com/ws-io/ws.io-rs/commit/57748ce))
+
+### 🩹 Fixes
+
+- *(client)* abort event-message-flush task before canceling cancel_token on disconnect ([f9ca3fb](https://github.com/ws-io/ws.io-rs/commit/f9ca3fb))
+- *(client)* adjust timing of calling `session.close` in `disconnect` ([6809ed7](https://github.com/ws-io/ws.io-rs/commit/6809ed7))
+
 ## [0.7.2](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.1...wsio-client-v0.7.2) - 2025-11-06 09:35
 
 ### 🏡 Chore

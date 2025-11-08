@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.1](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.0...wsio-server-v0.9.1) - 2025-11-08 15:17
+
+### 🏡 Chore
+
+- update some comments ([c8e62ac](https://github.com/ws-io/ws.io-rs/commit/c8e62ac))
+
 ## [0.9.0](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.8.1...wsio-server-v0.9.0) - 2025-11-06 09:35
 
 ### 🏡 Chore
