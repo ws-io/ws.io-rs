@@ -121,7 +121,7 @@ impl WsIoClientSession {
             _ => bail!("Received init packet in invalid status: {status:?}"),
         }
 
-        // Abort init-timeout task if still active
+        // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
 
         // Invoke init_handler with timeout protection if configured
@@ -160,7 +160,7 @@ impl WsIoClientSession {
             _ => bail!("Received ready packet in invalid status: {status:?}"),
         }
 
-        // Abort ready-timeout task if still active
+        // Abort ready-timeout task
         abort_locked_task(&self.ready_timeout_task).await;
 
         // Wake event message flush task
@@ -188,7 +188,7 @@ impl WsIoClientSession {
         // Set state to Closing
         self.status.store(SessionStatus::Closing);
 
-        // Abort timeout tasks if still active
+        // Abort timeout tasks
         abort_locked_task(&self.init_timeout_task).await;
         abort_locked_task(&self.ready_timeout_task).await;
 

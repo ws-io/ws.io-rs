@@ -159,7 +159,7 @@ impl WsIoServerConnection {
             _ => bail!("Received init packet in invalid status: {status:?}"),
         }
 
-        // Abort init-timeout task if still active
+        // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
 
         // Invoke init_response_handler with timeout protection if configured
@@ -238,7 +238,7 @@ impl WsIoServerConnection {
 
         self.joined_rooms.clear();
 
-        // Abort init-timeout task if still active
+        // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
 
         // Cancel all ongoing operations via cancel token
