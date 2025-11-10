@@ -67,11 +67,11 @@ pub(crate) struct WsIoClientRuntime {
     connect_url: Url,
     connection_loop_task: Mutex<Option<JoinHandle<()>>>,
     pub(crate) event_message_flush_notify: Notify,
-    event_message_flush_task: Mutex<Option<JoinHandle<()>>>,
-    event_message_send_rx: Mutex<Receiver<Arc<Message>>>,
-    event_message_send_tx: Sender<Arc<Message>>,
     pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession, WsIoClientRuntime>,
     operate_lock: Mutex<()>,
+    send_event_message_rx: Mutex<Receiver<Arc<Message>>>,
+    send_event_message_task: Mutex<Option<JoinHandle<()>>>,
+    send_event_message_tx: Sender<Arc<Message>>,
     session: ArcSwapOption<WsIoClientSession>,
     status: AtomicStatus<RuntimeStatus>,
     wake_reconnect_wait_notify: Notify,
@@ -87,18 +87,18 @@ impl TaskSpawner for WsIoClientRuntime {
 impl WsIoClientRuntime {
     pub(crate) fn new(config: WsIoClientConfig, connect_url: Url) -> Arc<Self> {
         let channel_capacity = channel_capacity_from_websocket_config(&config.websocket_config);
-        let (event_message_send_tx, event_message_send_rx) = channel(channel_capacity);
+        let (send_event_message_tx, send_event_message_rx) = channel(channel_capacity);
         Arc::new(Self {
             cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
             config,
             connect_url,
             connection_loop_task: Mutex::new(None),
             event_message_flush_notify: Notify::new(),
-            event_message_flush_task: Mutex::new(None),
-            event_message_send_rx: Mutex::new(event_message_send_rx),
-            event_message_send_tx,
             event_registry: WsIoEventRegistry::new(),
             operate_lock: Mutex::new(()),
+            send_event_message_rx: Mutex::new(send_event_message_rx),
+            send_event_message_task: Mutex::new(None),
+            send_event_message_tx,
             session: ArcSwapOption::new(None),
             status: AtomicStatus::new(RuntimeStatus::Stopped),
             wake_reconnect_wait_notify: Notify::new(),
@@ -190,11 +190,11 @@ impl WsIoClientRuntime {
             }
         }));
 
-        // Create flush messages task
+        // Create send event message task
         let runtime = self.clone();
-        *self.event_message_flush_task.lock().await = Some(spawn(async move {
-            let mut event_message_send_rx = runtime.event_message_send_rx.lock().await;
-            while let Some(message) = event_message_send_rx.recv().await {
+        *self.send_event_message_task.lock().await = Some(spawn(async move {
+            let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
+            while let Some(message) = send_event_message_rx.recv().await {
                 loop {
                     if let Some(session) = runtime.session.load().as_ref()
                         && session.emit_event_message(message.clone()).await.is_ok()
@@ -223,9 +223,9 @@ impl WsIoClientRuntime {
             session.close();
         }
 
-        // Abort event-message-flush task if still active
-        if let Some(event_message_flush_task) = self.event_message_flush_task.lock().await.take() {
-            event_message_flush_task.abort();
+        // Abort send-event-message task
+        if let Some(send_event_message_task) = self.send_event_message_task.lock().await.take() {
+            send_event_message_task.abort();
         }
 
         // Cancel all ongoing operations via cancel token and store a new one
@@ -233,8 +233,8 @@ impl WsIoClientRuntime {
         self.cancel_token.store(Arc::new(CancellationToken::new()));
 
         // Drop all pending event messages in the channel
-        let mut event_message_send_rx = self.event_message_send_rx.lock().await;
-        while event_message_send_rx.try_recv().is_ok() {}
+        let mut send_event_message_rx = self.send_event_message_rx.lock().await;
+        while send_event_message_rx.try_recv().is_ok() {}
 
         // Wake reconnect loop to break out of sleep early
         self.wake_reconnect_wait_notify.notify_waiters();
@@ -252,7 +252,7 @@ impl WsIoClientRuntime {
             format!("Cannot emit in invalid status: {status:?}")
         })?;
 
-        self.event_message_send_tx
+        self.send_event_message_tx
             .send(
                 self.encode_packet_to_message(&WsIoPacket::new_event(
                     event,
