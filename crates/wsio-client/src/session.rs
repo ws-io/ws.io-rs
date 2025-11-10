@@ -163,8 +163,8 @@ impl WsIoClientSession {
         // Abort ready-timeout task
         abort_locked_task(&self.ready_timeout_task).await;
 
-        // Wake event message flush task
-        self.runtime.event_message_flush_notify.notify_waiters();
+        // Wake send event message task
+        self.runtime.wake_send_event_message_task_notify.notify_waiters();
 
         // Invoke on_session_ready_handler if configured
         if let Some(on_session_ready_handler) = self.runtime.config.on_session_ready_handler.clone() {

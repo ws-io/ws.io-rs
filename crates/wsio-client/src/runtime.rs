@@ -66,7 +66,6 @@ pub(crate) struct WsIoClientRuntime {
     pub(crate) config: WsIoClientConfig,
     connect_url: Url,
     connection_loop_task: Mutex<Option<JoinHandle<()>>>,
-    pub(crate) event_message_flush_notify: Notify,
     pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession, WsIoClientRuntime>,
     operate_lock: Mutex<()>,
     send_event_message_rx: Mutex<Receiver<Arc<Message>>>,
@@ -75,6 +74,7 @@ pub(crate) struct WsIoClientRuntime {
     session: ArcSwapOption<WsIoClientSession>,
     status: AtomicStatus<RuntimeStatus>,
     wake_reconnect_wait_notify: Notify,
+    pub(crate) wake_send_event_message_task_notify: Notify,
 }
 
 impl TaskSpawner for WsIoClientRuntime {
@@ -93,7 +93,6 @@ impl WsIoClientRuntime {
             config,
             connect_url,
             connection_loop_task: Mutex::new(None),
-            event_message_flush_notify: Notify::new(),
             event_registry: WsIoEventRegistry::new(),
             operate_lock: Mutex::new(()),
             send_event_message_rx: Mutex::new(send_event_message_rx),
@@ -102,6 +101,7 @@ impl WsIoClientRuntime {
             session: ArcSwapOption::new(None),
             status: AtomicStatus::new(RuntimeStatus::Stopped),
             wake_reconnect_wait_notify: Notify::new(),
+            wake_send_event_message_task_notify: Notify::new(),
         })
     }
 
@@ -202,7 +202,7 @@ impl WsIoClientRuntime {
                         break;
                     }
 
-                    runtime.event_message_flush_notify.notified().await;
+                    runtime.wake_send_event_message_task_notify.notified().await;
                 }
             }
         }));
