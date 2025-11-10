@@ -5,7 +5,9 @@ header = """
 """
 
 body = """
-## [{{ version }}]{%- if release_link -%}({{ release_link }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d %H:%M") }}
+## {{ version }} - {{ timestamp | date(format="%Y-%m-%d %H:%M") }}
+
+{% if release_link %}[compare changes]({{ release_link }}){% endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 
