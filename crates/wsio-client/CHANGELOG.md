@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.4 - 2025-11-12 01:24
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.3...wsio-client-v0.7.4)
+
+### 🏡 Chore
+
+- update some comments ([23a2919](https://github.com/ws-io/ws.io-rs/commit/23a2919))
+
+### 💅 Refactors
+
+- *(client)* rename some internal variables ([774dcb9](https://github.com/ws-io/ws.io-rs/commit/774dcb9))
+- *(client)* rename some internal variables ([6dc637e](https://github.com/ws-io/ws.io-rs/commit/6dc637e))
+
+### 🩹 Fixes
+
+- ignore event packets received when not in ready state ([a651d33](https://github.com/ws-io/ws.io-rs/commit/a651d33))
+
 ## [0.7.3](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.2...wsio-client-v0.7.3) - 2025-11-08 15:17
 
 ### 🏡 Chore

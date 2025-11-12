@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.2 - 2025-11-12 01:24
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.1...wsio-server-v0.9.2)
+
+### 🏡 Chore
+
+- update some comments ([23a2919](https://github.com/ws-io/ws.io-rs/commit/23a2919))
+
+### 🩹 Fixes
+
+- ignore event packets received when not in ready state ([a651d33](https://github.com/ws-io/ws.io-rs/commit/a651d33))
+
 ## [0.9.1](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.0...wsio-server-v0.9.1) - 2025-11-08 15:17
 
 ### 🏡 Chore
