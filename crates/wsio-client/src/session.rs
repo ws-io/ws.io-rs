@@ -102,13 +102,15 @@ impl WsIoClientSession {
 
     #[inline]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
-        self.runtime.event_registry.dispatch_event_packet(
-            self.clone(),
-            event,
-            &self.runtime.config.packet_codec,
-            packet_data,
-            &self.runtime,
-        );
+        if self.is_ready() {
+            self.runtime.event_registry.dispatch_event_packet(
+                self.clone(),
+                event,
+                &self.runtime.config.packet_codec,
+                packet_data,
+                &self.runtime,
+            );
+        }
 
         Ok(())
     }

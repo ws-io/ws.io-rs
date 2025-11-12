@@ -140,13 +140,15 @@ impl WsIoServerConnection {
     // Private methods
     #[inline]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
-        self.event_registry.dispatch_event_packet(
-            self.clone(),
-            event,
-            &self.namespace.config.packet_codec,
-            packet_data,
-            self,
-        );
+        if self.is_ready() {
+            self.event_registry.dispatch_event_packet(
+                self.clone(),
+                event,
+                &self.namespace.config.packet_codec,
+                packet_data,
+                self,
+            );
+        }
 
         Ok(())
     }
@@ -370,6 +372,11 @@ impl WsIoServerConnection {
     #[inline]
     pub fn id(&self) -> u64 {
         self.id
+    }
+
+    #[inline]
+    pub fn is_ready(&self) -> bool {
+        self.status.is(ConnectionStatus::Ready)
     }
 
     #[inline]
