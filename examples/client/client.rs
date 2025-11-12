@@ -54,13 +54,13 @@ static DISCONNECT: LazyLock<WsIoClient> = LazyLock::new(|| {
     client
 });
 
-static MSG_PACK: LazyLock<WsIoClient> = LazyLock::new(|| {
+static MSGPACK: LazyLock<WsIoClient> = LazyLock::new(|| {
     const NAMESPACE: &str = "/msgpack";
     let client = WsIoClient::builder(format!("ws://127.0.0.1:8000/{NAMESPACE}").as_str())
         .unwrap()
         .on_session_close(|session| on_session_close(session, NAMESPACE))
         .on_session_ready(|session| on_session_ready(session, NAMESPACE))
-        .packet_codec(WsIoPacketCodec::MsgPack)
+        .packet_codec(WsIoPacketCodec::Msgpack)
         .build();
 
     client.on("test", |_, _: Arc<()>| on_event(NAMESPACE));
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
         CBOR.connect(),
         DISCONNECT.connect(),
         INIT.connect(),
-        MSG_PACK.connect(),
+        MSGPACK.connect(),
         POSTCARD.connect(),
         SERDE_JSON.connect(),
         SONIC_RS.connect(),
@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
         CBOR.disconnect(),
         DISCONNECT.disconnect(),
         INIT.disconnect(),
-        MSG_PACK.disconnect(),
+        MSGPACK.disconnect(),
         POSTCARD.disconnect(),
         SERDE_JSON.disconnect(),
         SONIC_RS.disconnect(),

@@ -26,7 +26,7 @@ use self::bincode::WsIoPacketBincodeCodec;
 #[cfg(feature = "packet-codec-cbor")]
 use self::cbor::WsIoPacketCborCodec;
 #[cfg(feature = "packet-codec-msgpack")]
-use self::msgpack::WsIoPacketMsgPackCodec;
+use self::msgpack::WsIoPacketMsgpackCodec;
 #[cfg(feature = "packet-codec-postcard")]
 use self::postcard::WsIoPacketPostcardCodec;
 use self::serde_json::WsIoPacketSerdeJsonCodec;
@@ -44,7 +44,7 @@ pub enum WsIoPacketCodec {
     Cbor,
 
     #[cfg(feature = "packet-codec-msgpack")]
-    MsgPack,
+    Msgpack,
 
     #[cfg(feature = "packet-codec-postcard")]
     Postcard,
@@ -66,7 +66,7 @@ impl WsIoPacketCodec {
             Self::Cbor => WsIoPacketCborCodec.decode(bytes),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::MsgPack => WsIoPacketMsgPackCodec.decode(bytes),
+            Self::Msgpack => WsIoPacketMsgpackCodec.decode(bytes),
 
             #[cfg(feature = "packet-codec-postcard")]
             Self::Postcard => WsIoPacketPostcardCodec.decode(bytes),
@@ -88,7 +88,7 @@ impl WsIoPacketCodec {
             Self::Cbor => WsIoPacketCborCodec.decode_data(bytes),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::MsgPack => WsIoPacketMsgPackCodec.decode_data(bytes),
+            Self::Msgpack => WsIoPacketMsgpackCodec.decode_data(bytes),
 
             #[cfg(feature = "packet-codec-postcard")]
             Self::Postcard => WsIoPacketPostcardCodec.decode_data(bytes),
@@ -110,7 +110,7 @@ impl WsIoPacketCodec {
             Self::Cbor => WsIoPacketCborCodec.encode(packet),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::MsgPack => WsIoPacketMsgPackCodec.encode(packet),
+            Self::Msgpack => WsIoPacketMsgpackCodec.encode(packet),
 
             #[cfg(feature = "packet-codec-postcard")]
             Self::Postcard => WsIoPacketPostcardCodec.encode(packet),
@@ -132,7 +132,7 @@ impl WsIoPacketCodec {
             Self::Cbor => WsIoPacketCborCodec.encode_data(data),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::MsgPack => WsIoPacketMsgPackCodec.encode_data(data),
+            Self::Msgpack => WsIoPacketMsgpackCodec.encode_data(data),
 
             #[cfg(feature = "packet-codec-postcard")]
             Self::Postcard => WsIoPacketPostcardCodec.encode_data(data),
@@ -154,7 +154,7 @@ impl WsIoPacketCodec {
             Self::Cbor => WsIoPacketCborCodec::IS_TEXT,
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::MsgPack => WsIoPacketMsgPackCodec::IS_TEXT,
+            Self::Msgpack => WsIoPacketMsgpackCodec::IS_TEXT,
 
             #[cfg(feature = "packet-codec-postcard")]
             Self::Postcard => WsIoPacketPostcardCodec::IS_TEXT,

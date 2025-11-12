@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
         .new_namespace_builder("/msgpack")?
         .on_connect(on_connect)
         .on_ready(on_ready)
-        .packet_codec(WsIoPacketCodec::MsgPack)
+        .packet_codec(WsIoPacketCodec::Msgpack)
         .register()?;
 
     // Register /postcard namespace
