@@ -9,7 +9,7 @@ mod config;
 pub mod connection;
 pub mod namespace;
 mod request;
-mod request_adapters;
+pub mod request_adapters;
 mod runtime;
 
 #[cfg(feature = "tower")]

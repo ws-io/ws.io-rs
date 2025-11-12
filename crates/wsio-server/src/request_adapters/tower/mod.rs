@@ -1,2 +1,2 @@
-pub(crate) mod layer;
+pub mod layer;
 pub(crate) mod service;

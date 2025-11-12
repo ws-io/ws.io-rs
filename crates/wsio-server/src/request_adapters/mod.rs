@@ -1,2 +1,2 @@
 #[cfg(feature = "tower")]
-pub(crate) mod tower;
+pub mod tower;
