@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.4 - 2025-11-12 10:03
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.3...wsio-server-v0.9.4)
+
+### 🚀 Enhancements
+
+- *(server)* make `WsIoServerLayer` is public ([1a484cf](https://github.com/ws-io/ws.io-rs/commit/1a484cf))
+
 ## 0.9.3 - 2025-11-12 09:15
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.2...wsio-server-v0.9.3)
