@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 - 2025-11-12 09:15
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.8.0...wsio-core-v0.9.0)
+
+### 💅 Refactors
+
+- rename `MsgPack` to `Msgpack` and use `to_vec_named` for internal encoding ([2dc3615](https://github.com/ws-io/ws.io-rs/commit/2dc3615))
+
 ## [0.8.0](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.7.1...wsio-core-v0.8.0) - 2025-11-06 09:35
 
 ### 🏡 Chore

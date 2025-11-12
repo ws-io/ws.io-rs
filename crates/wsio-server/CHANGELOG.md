@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.3 - 2025-11-12 09:15
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.2...wsio-server-v0.9.3)
+
+### 🏡 Chore
+
+- updated the following local packages: wsio-core ([0000000](https://github.com/ws-io/ws.io-rs/commit/0000000))
+
 ## 0.9.2 - 2025-11-12 01:24
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.1...wsio-server-v0.9.2)

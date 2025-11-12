@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.5 - 2025-11-12 09:15
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.4...wsio-client-v0.7.5)
+
+### 🏡 Chore
+
+- updated the following local packages: wsio-core ([0000000](https://github.com/ws-io/ws.io-rs/commit/0000000))
+
 ## 0.7.4 - 2025-11-12 01:24
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.3...wsio-client-v0.7.4)
