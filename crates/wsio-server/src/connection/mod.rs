@@ -140,15 +140,13 @@ impl WsIoServerConnection {
     // Private methods
     #[inline]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
-        if self.is_ready() {
-            self.event_registry.dispatch_event_packet(
-                self.clone(),
-                event,
-                &self.namespace.config.packet_codec,
-                packet_data,
-                self,
-            );
-        }
+        self.event_registry.dispatch_event_packet(
+            self.clone(),
+            event,
+            &self.namespace.config.packet_codec,
+            packet_data,
+            self,
+        );
 
         Ok(())
     }
@@ -284,11 +282,15 @@ impl WsIoServerConnection {
         let packet = self.namespace.config.packet_codec.decode(encoded_packet)?;
         match packet.r#type {
             WsIoPacketType::Event => {
-                if let Some(event) = packet.key.as_deref() {
-                    self.handle_event_packet(event, packet.data)
-                } else {
-                    bail!("Event packet missing key");
+                if self.is_ready() {
+                    if let Some(event) = packet.key.as_deref() {
+                        return self.handle_event_packet(event, packet.data);
+                    } else {
+                        bail!("Event packet missing key");
+                    }
                 }
+
+                Ok(())
             }
             WsIoPacketType::Init => self.handle_init_packet(packet.data.as_deref()).await,
             _ => Ok(()),

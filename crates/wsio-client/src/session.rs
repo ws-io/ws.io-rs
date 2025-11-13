@@ -102,15 +102,13 @@ impl WsIoClientSession {
 
     #[inline]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
-        if self.is_ready() {
-            self.runtime.event_registry.dispatch_event_packet(
-                self.clone(),
-                event,
-                &self.runtime.config.packet_codec,
-                packet_data,
-                &self.runtime,
-            );
-        }
+        self.runtime.event_registry.dispatch_event_packet(
+            self.clone(),
+            event,
+            &self.runtime.config.packet_codec,
+            packet_data,
+            &self.runtime,
+        );
 
         Ok(())
     }
@@ -236,11 +234,15 @@ impl WsIoClientSession {
         match packet.r#type {
             WsIoPacketType::Disconnect => self.handle_disconnect_packet(),
             WsIoPacketType::Event => {
-                if let Some(event) = packet.key.as_deref() {
-                    self.handle_event_packet(event, packet.data)
-                } else {
-                    bail!("Event packet missing key");
+                if self.is_ready() {
+                    if let Some(event) = packet.key.as_deref() {
+                        return self.handle_event_packet(event, packet.data);
+                    } else {
+                        bail!("Event packet missing key");
+                    }
                 }
+
+                Ok(())
             }
             WsIoPacketType::Init => self.handle_init_packet(packet.data.as_deref()).await,
             WsIoPacketType::Ready => self.handle_ready_packet().await,
