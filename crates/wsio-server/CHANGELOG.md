@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.6 - 2025-11-13 09:32
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.5...wsio-server-v0.9.6)
+
+### 🚀 Enhancements
+
+- *(server)* treat 1-byte binary data from client as heartbeat and ignore processing ([0084288](https://github.com/ws-io/ws.io-rs/commit/0084288))
+
 ## 0.9.5 - 2025-11-13 04:25
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.4...wsio-server-v0.9.5)
