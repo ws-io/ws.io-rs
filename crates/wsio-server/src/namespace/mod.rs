@@ -121,7 +121,14 @@ impl WsIoServerNamespace {
         let mut read_ws_stream_task = spawn(async move {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
-                    Ok(Message::Binary(bytes)) => connection_clone.handle_incoming_packet(&bytes).await,
+                    Ok(Message::Binary(bytes)) => {
+                        // Treat any single-byte binary frame as a client heartbeat and ignore it
+                        if bytes.len() == 1 {
+                            continue;
+                        }
+
+                        connection_clone.handle_incoming_packet(&bytes).await
+                    }
                     Ok(Message::Close(_)) => break,
                     Ok(Message::Text(text)) => connection_clone.handle_incoming_packet(text.as_bytes()).await,
                     Err(_) => break,
