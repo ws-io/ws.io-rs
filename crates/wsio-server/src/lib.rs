@@ -33,9 +33,17 @@ impl WsIoServer {
         WsIoServerBuilder::new()
     }
 
+    pub async fn close_all(&self) {
+        self.0.close_all().await
+    }
+
     #[inline]
     pub fn connection_count(&self) -> usize {
         self.0.connection_count()
+    }
+
+    pub async fn disconnect_all(&self) {
+        self.0.disconnect_all().await
     }
 
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {

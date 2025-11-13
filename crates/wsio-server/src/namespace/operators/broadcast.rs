@@ -87,6 +87,14 @@ impl WsIoServerNamespaceBroadcastOperator {
     }
 
     // Public methods
+    pub async fn close(&self) {
+        self.for_each_target_connections(|connection| async move {
+            connection.close();
+            Ok(())
+        })
+        .await;
+    }
+
     pub async fn disconnect(&self) -> Result<()> {
         let message = self.namespace.encode_packet_to_message(&WsIoPacket::new_disconnect())?;
         self.for_each_target_connections(move |connection| {

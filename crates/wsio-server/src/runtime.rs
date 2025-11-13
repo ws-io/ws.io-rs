@@ -66,6 +66,10 @@ impl WsIoServerRuntime {
         self.connection_ids.len()
     }
 
+    pub(crate) async fn close_all(&self) {
+        join_all(self.clone_namespaces().iter().map(|namespace| namespace.close_all())).await;
+    }
+
     pub(crate) async fn emit<D: Serialize>(&self, event: &str, data: Option<&D>) -> Result<()> {
         self.status.ensure(WsIoServerRuntimeStatus::Running, |status| {
             format!("Cannot emit in invalid status: {status:?}",)
@@ -79,6 +83,15 @@ impl WsIoServerRuntime {
         .await;
 
         Ok(())
+    }
+
+    pub(crate) async fn disconnect_all(&self) {
+        join_all(
+            self.clone_namespaces()
+                .iter()
+                .map(|namespace| namespace.disconnect_all()),
+        )
+        .await;
     }
 
     #[inline]

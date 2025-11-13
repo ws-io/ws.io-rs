@@ -231,9 +231,19 @@ impl WsIoServerNamespace {
     }
 
     // Public methods
+    pub async fn close_all(self: &Arc<Self>) {
+        WsIoServerNamespaceBroadcastOperator::new(self.clone()).close().await;
+    }
+
     #[inline]
     pub fn connection_count(&self) -> usize {
         self.connections.len()
+    }
+
+    pub async fn disconnect_all(self: &Arc<Self>) -> Result<()> {
+        WsIoServerNamespaceBroadcastOperator::new(self.clone())
+            .disconnect()
+            .await
     }
 
     pub async fn emit<D: Serialize>(self: &Arc<Self>, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
@@ -267,10 +277,7 @@ impl WsIoServerNamespace {
             _ => unreachable!(),
         }
 
-        let _ = WsIoServerNamespaceBroadcastOperator::new(self.clone())
-            .disconnect()
-            .await;
-
+        self.close_all().await;
         let mut connection_task_set = self.connection_task_set.lock().await;
         while connection_task_set.join_next().await.is_some() {}
 
