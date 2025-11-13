@@ -51,7 +51,7 @@ use self::extensions::ConnectionExtensions;
 use crate::{
     WsIoServer,
     core::{
-        atomic::status::AtomicStatus,
+        atomic::r#enum::AtomicEnum,
         channel_capacity_from_websocket_config,
         event::registry::WsIoEventRegistry,
         packet::{
@@ -74,7 +74,7 @@ use crate::{
 // Enums
 #[repr(u8)]
 #[derive(Debug, Eq, IntoPrimitive, PartialEq, TryFromPrimitive)]
-enum ConnectionStatus {
+enum ConnectionState {
     Activating,
     AwaitingInit,
     Closed,
@@ -98,7 +98,7 @@ pub struct WsIoServerConnection {
     namespace: Arc<WsIoServerNamespace>,
     on_close_handler: Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
     request_uri: Uri,
-    status: AtomicStatus<ConnectionStatus>,
+    state: AtomicEnum<ConnectionState>,
 }
 
 impl TaskSpawner for WsIoServerConnection {
@@ -131,7 +131,7 @@ impl WsIoServerConnection {
                 namespace,
                 on_close_handler: Mutex::new(None),
                 request_uri,
-                status: AtomicStatus::new(ConnectionStatus::Created),
+                state: AtomicEnum::new(ConnectionState::Created),
             }),
             message_rx,
         )
@@ -153,10 +153,10 @@ impl WsIoServerConnection {
 
     async fn handle_init_packet(self: &Arc<Self>, packet_data: Option<&[u8]>) -> Result<()> {
         // Verify current state; only valid from AwaitingInit → Initiating
-        let status = self.status.get();
-        match status {
-            ConnectionStatus::AwaitingInit => self.status.try_transition(status, ConnectionStatus::Initiating)?,
-            _ => bail!("Received init packet in invalid status: {status:?}"),
+        let state = self.state.get();
+        match state {
+            ConnectionState::AwaitingInit => self.state.try_transition(state, ConnectionState::Initiating)?,
+            _ => bail!("Received init packet in invalid state: {state:?}"),
         }
 
         // Abort init-timeout task
@@ -172,8 +172,8 @@ impl WsIoServerConnection {
         }
 
         // Activate connection
-        self.status
-            .try_transition(ConnectionStatus::Initiating, ConnectionStatus::Activating)?;
+        self.state
+            .try_transition(ConnectionState::Initiating, ConnectionState::Activating)?;
 
         // Invoke middleware with timeout protection if configured
         if let Some(middleware) = &self.namespace.config.middleware {
@@ -184,8 +184,8 @@ impl WsIoServerConnection {
             .await??;
 
             // Ensure connection is still in Activating state
-            self.status.ensure(ConnectionStatus::Activating, |status| {
-                format!("Cannot activate connection in invalid status: {status:?}")
+            self.state.ensure(ConnectionState::Activating, |state| {
+                format!("Cannot activate connection in invalid state: {state:?}")
             })?;
         }
 
@@ -199,8 +199,8 @@ impl WsIoServerConnection {
         }
 
         // Transition state to Ready
-        self.status
-            .try_transition(ConnectionStatus::Activating, ConnectionStatus::Ready)?;
+        self.state
+            .try_transition(ConnectionState::Activating, ConnectionState::Ready)?;
 
         // Insert connection into namespace
         self.namespace.insert_connection(self.clone());
@@ -225,7 +225,7 @@ impl WsIoServerConnection {
     // Protected methods
     pub(crate) async fn cleanup(self: &Arc<Self>) {
         // Set connection state to Closing
-        self.status.store(ConnectionStatus::Closing);
+        self.state.store(ConnectionState::Closing);
 
         // Remove connection from namespace
         self.namespace.remove_connection(self.id);
@@ -254,15 +254,15 @@ impl WsIoServerConnection {
         }
 
         // Set connection state to Closed
-        self.status.store(ConnectionStatus::Closed);
+        self.state.store(ConnectionState::Closed);
     }
 
     #[inline]
     pub(crate) fn close(&self) {
         // Skip if connection is already Closing or Closed, otherwise set connection state to Closing
-        match self.status.get() {
-            ConnectionStatus::Closed | ConnectionStatus::Closing => return,
-            _ => self.status.store(ConnectionStatus::Closing),
+        match self.state.get() {
+            ConnectionState::Closed | ConnectionState::Closing => return,
+            _ => self.state.store(ConnectionState::Closing),
         }
 
         // Send websocket close frame to initiate graceful shutdown
@@ -270,8 +270,8 @@ impl WsIoServerConnection {
     }
 
     pub(crate) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
-        self.status.ensure(ConnectionStatus::Ready, |status| {
-            format!("Cannot emit in invalid status: {status:?}")
+        self.state.ensure(ConnectionState::Ready, |state| {
+            format!("Cannot emit in invalid state: {state:?}")
         })?;
 
         self.send_message(message).await
@@ -299,8 +299,8 @@ impl WsIoServerConnection {
 
     pub(crate) async fn init(self: &Arc<Self>) -> Result<()> {
         // Verify current state; only valid Created
-        self.status.ensure(ConnectionStatus::Created, |status| {
-            format!("Cannot init connection in invalid status: {status:?}")
+        self.state.ensure(ConnectionState::Created, |state| {
+            format!("Cannot init connection in invalid state: {state:?}")
         })?;
 
         // Generate init request data if init request handler is configured
@@ -315,14 +315,14 @@ impl WsIoServerConnection {
         };
 
         // Transition state to AwaitingInit
-        self.status
-            .try_transition(ConnectionStatus::Created, ConnectionStatus::AwaitingInit)?;
+        self.state
+            .try_transition(ConnectionState::Created, ConnectionState::AwaitingInit)?;
 
         // Spawn init-response-timeout watchdog to close connection if init not received in time
         let connection = self.clone();
         *self.init_timeout_task.lock().await = Some(spawn(async move {
             sleep(connection.namespace.config.init_response_timeout).await;
-            if connection.status.is(ConnectionStatus::AwaitingInit) {
+            if connection.state.is(ConnectionState::AwaitingInit) {
                 connection.close();
             }
         }));
@@ -378,7 +378,7 @@ impl WsIoServerConnection {
 
     #[inline]
     pub fn is_ready(&self) -> bool {
-        self.status.is(ConnectionStatus::Ready)
+        self.state.is(ConnectionState::Ready)
     }
 
     #[inline]

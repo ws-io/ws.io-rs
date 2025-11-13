@@ -31,7 +31,7 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     WsIoClient,
     core::{
-        atomic::status::AtomicStatus,
+        atomic::r#enum::AtomicEnum,
         channel_capacity_from_websocket_config,
         packet::{
             WsIoPacket,
@@ -46,7 +46,7 @@ use crate::{
 // Enums
 #[repr(u8)]
 #[derive(Debug, Eq, IntoPrimitive, PartialEq, TryFromPrimitive)]
-enum SessionStatus {
+enum SessionState {
     AwaitingInit,
     AwaitingReady,
     Closed,
@@ -64,7 +64,7 @@ pub struct WsIoClientSession {
     message_tx: Sender<Arc<Message>>,
     ready_timeout_task: Mutex<Option<JoinHandle<()>>>,
     runtime: Arc<WsIoClientRuntime>,
-    status: AtomicStatus<SessionStatus>,
+    state: AtomicEnum<SessionState>,
 }
 
 impl TaskSpawner for WsIoClientSession {
@@ -86,7 +86,7 @@ impl WsIoClientSession {
                 message_tx,
                 ready_timeout_task: Mutex::new(None),
                 runtime,
-                status: AtomicStatus::new(SessionStatus::Created),
+                state: AtomicEnum::new(SessionState::Created),
             }),
             message_rx,
         )
@@ -115,10 +115,10 @@ impl WsIoClientSession {
 
     async fn handle_init_packet(self: &Arc<Self>, packet_data: Option<&[u8]>) -> Result<()> {
         // Verify current state; only valid from AwaitingInit → Initiating
-        let status = self.status.get();
-        match status {
-            SessionStatus::AwaitingInit => self.status.try_transition(status, SessionStatus::Initiating)?,
-            _ => bail!("Received init packet in invalid status: {status:?}"),
+        let state = self.state.get();
+        match state {
+            SessionState::AwaitingInit => self.state.try_transition(state, SessionState::Initiating)?,
+            _ => bail!("Received init packet in invalid state: {state:?}"),
         }
 
         // Abort init-timeout task
@@ -136,14 +136,14 @@ impl WsIoClientSession {
         };
 
         // Transition state to AwaitingReady
-        self.status
-            .try_transition(SessionStatus::Initiating, SessionStatus::AwaitingReady)?;
+        self.state
+            .try_transition(SessionState::Initiating, SessionState::AwaitingReady)?;
 
         // Spawn ready-timeout watchdog to close session if Ready is not received in time
         let session = self.clone();
         *self.ready_timeout_task.lock().await = Some(spawn(async move {
             sleep(session.runtime.config.ready_packet_timeout).await;
-            if session.status.is(SessionStatus::AwaitingReady) {
+            if session.state.is(SessionState::AwaitingReady) {
                 session.close();
             }
         }));
@@ -154,10 +154,10 @@ impl WsIoClientSession {
 
     async fn handle_ready_packet(self: &Arc<Self>) -> Result<()> {
         // Verify current state; only valid from AwaitingReady → Ready
-        let status = self.status.get();
-        match status {
-            SessionStatus::AwaitingReady => self.status.try_transition(status, SessionStatus::Ready)?,
-            _ => bail!("Received ready packet in invalid status: {status:?}"),
+        let state = self.state.get();
+        match state {
+            SessionState::AwaitingReady => self.state.try_transition(state, SessionState::Ready)?,
+            _ => bail!("Received ready packet in invalid state: {state:?}"),
         }
 
         // Abort ready-timeout task
@@ -186,7 +186,7 @@ impl WsIoClientSession {
     // Protected methods
     pub(crate) async fn cleanup(self: &Arc<Self>) {
         // Set state to Closing
-        self.status.store(SessionStatus::Closing);
+        self.state.store(SessionState::Closing);
 
         // Abort timeout tasks
         abort_locked_task(&self.init_timeout_task).await;
@@ -205,15 +205,15 @@ impl WsIoClientSession {
         }
 
         // Set state to Closed
-        self.status.store(SessionStatus::Closed);
+        self.state.store(SessionState::Closed);
     }
 
     #[inline]
     pub(crate) fn close(&self) {
         // Skip if session is already Closing or Closed, otherwise set state to Closing
-        match self.status.get() {
-            SessionStatus::Closed | SessionStatus::Closing => return,
-            _ => self.status.store(SessionStatus::Closing),
+        match self.state.get() {
+            SessionState::Closed | SessionState::Closing => return,
+            _ => self.state.store(SessionState::Closing),
         }
 
         // Send websocket close frame to initiate graceful shutdown
@@ -221,8 +221,8 @@ impl WsIoClientSession {
     }
 
     pub(crate) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
-        self.status.ensure(SessionStatus::Ready, |status| {
-            format!("Cannot emit event message in invalid status: {status:?}")
+        self.state.ensure(SessionState::Ready, |state| {
+            format!("Cannot emit event message in invalid state: {state:?}")
         })?;
 
         self.send_message(message).await
@@ -250,11 +250,11 @@ impl WsIoClientSession {
     }
 
     pub(crate) async fn init(self: &Arc<Self>) {
-        self.status.store(SessionStatus::AwaitingInit);
+        self.state.store(SessionState::AwaitingInit);
         let session = self.clone();
         *self.init_timeout_task.lock().await = Some(spawn(async move {
             sleep(session.runtime.config.init_packet_timeout).await;
-            if session.status.is(SessionStatus::AwaitingInit) {
+            if session.state.is(SessionState::AwaitingInit) {
                 session.close();
             }
         }));
@@ -268,6 +268,6 @@ impl WsIoClientSession {
 
     #[inline]
     pub fn is_ready(&self) -> bool {
-        self.status.is(SessionStatus::Ready)
+        self.state.is(SessionState::Ready)
     }
 }

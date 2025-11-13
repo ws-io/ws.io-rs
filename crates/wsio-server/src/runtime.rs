@@ -15,7 +15,7 @@ use serde::Serialize;
 use crate::{
     config::WsIoServerConfig,
     core::{
-        atomic::status::AtomicStatus,
+        atomic::r#enum::AtomicEnum,
         types::hashers::{
             FxDashSet,
             FxHashMap,
@@ -41,7 +41,7 @@ pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_ids: FxDashSet<u64>,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
-    pub(crate) status: AtomicStatus<WsIoServerRuntimeStatus>,
+    pub(crate) status: AtomicEnum<WsIoServerRuntimeStatus>,
 }
 
 impl WsIoServerRuntime {
@@ -50,7 +50,7 @@ impl WsIoServerRuntime {
             config,
             connection_ids: FxDashSet::default(),
             namespaces: RwLock::new(FxHashMap::default()),
-            status: AtomicStatus::new(WsIoServerRuntimeStatus::Running),
+            status: AtomicEnum::new(WsIoServerRuntimeStatus::Running),
         })
     }
 

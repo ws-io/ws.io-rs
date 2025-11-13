@@ -46,7 +46,7 @@ use crate::{
     WsIoServer,
     connection::WsIoServerConnection,
     core::{
-        atomic::status::AtomicStatus,
+        atomic::r#enum::AtomicEnum,
         packet::WsIoPacket,
         types::hashers::{
             FxDashMap,
@@ -75,7 +75,7 @@ pub struct WsIoServerNamespace {
     connection_task_set: Mutex<JoinSet<()>>,
     rooms: FxDashMap<String, Arc<FxDashSet<u64>>>,
     runtime: Arc<WsIoServerRuntime>,
-    status: AtomicStatus<NamespaceStatus>,
+    status: AtomicEnum<NamespaceStatus>,
 }
 
 impl WsIoServerNamespace {
@@ -86,7 +86,7 @@ impl WsIoServerNamespace {
             connection_task_set: Mutex::new(JoinSet::new()),
             rooms: FxDashMap::default(),
             runtime,
-            status: AtomicStatus::new(NamespaceStatus::Running),
+            status: AtomicEnum::new(NamespaceStatus::Running),
         })
     }
 
