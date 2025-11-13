@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 - 2025-11-13 04:25
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.9.0...wsio-core-v0.10.0)
+
+### 💅 Refactors
+
+- rename `AtomicStatus` to `AtomicEnum`, `SessionStatus` to `SessionState`, `ConnectionStatus` to `ConnectionState` ([15d6f96](https://github.com/ws-io/ws.io-rs/commit/15d6f96))
+
 ## 0.9.0 - 2025-11-12 09:15
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.8.0...wsio-core-v0.9.0)

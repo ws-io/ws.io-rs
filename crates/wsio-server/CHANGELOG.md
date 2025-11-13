@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.5 - 2025-11-13 04:25
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.4...wsio-server-v0.9.5)
+
+### 💅 Refactors
+
+- rename `AtomicStatus` to `AtomicEnum`, `SessionStatus` to `SessionState`, `ConnectionStatus` to `ConnectionState` ([15d6f96](https://github.com/ws-io/ws.io-rs/commit/15d6f96))
+- adjust timing of status check in handle event packet ([034c3e8](https://github.com/ws-io/ws.io-rs/commit/034c3e8))
+
+### 🚀 Enhancements
+
+- *(server)* directly close connections during shutdown and add `close_all`/`disconnect_all` methods ([1dd4868](https://github.com/ws-io/ws.io-rs/commit/1dd4868))
+
 ## 0.9.4 - 2025-11-12 10:03
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.3...wsio-server-v0.9.4)

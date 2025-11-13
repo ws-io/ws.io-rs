@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.6 - 2025-11-13 04:25
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.5...wsio-client-v0.7.6)
+
+### 💅 Refactors
+
+- rename `AtomicStatus` to `AtomicEnum`, `SessionStatus` to `SessionState`, `ConnectionStatus` to `ConnectionState` ([15d6f96](https://github.com/ws-io/ws.io-rs/commit/15d6f96))
+- adjust timing of status check in handle event packet ([034c3e8](https://github.com/ws-io/ws.io-rs/commit/034c3e8))
+
 ## 0.7.5 - 2025-11-12 09:15
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.4...wsio-client-v0.7.5)
