@@ -49,12 +49,12 @@ impl WsIoClientBuilder {
             config: WsIoClientConfig {
                 init_handler: None,
                 init_handler_timeout: Duration::from_secs(3),
-                init_packet_timeout: Duration::from_secs(3),
+                init_packet_timeout: Duration::from_secs(5),
                 on_session_close_handler: None,
                 on_session_close_handler_timeout: Duration::from_secs(2),
                 on_session_ready_handler: None,
                 packet_codec: WsIoPacketCodec::SerdeJson,
-                ready_packet_timeout: Duration::from_secs(3),
+                ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),
                 websocket_config: WebSocketConfig::default()
                     .max_frame_size(Some(8 * 1024 * 1024))

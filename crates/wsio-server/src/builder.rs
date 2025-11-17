@@ -22,9 +22,9 @@ impl WsIoServerBuilder {
                 init_request_handler_timeout: Duration::from_secs(3),
                 init_response_handler_timeout: Duration::from_secs(3),
                 init_response_timeout: Duration::from_secs(5),
-                middleware_execution_timeout: Duration::from_secs(3),
+                middleware_execution_timeout: Duration::from_secs(2),
                 on_close_handler_timeout: Duration::from_secs(2),
-                on_connect_handler_timeout: Duration::from_secs(2),
+                on_connect_handler_timeout: Duration::from_secs(3),
                 packet_codec: WsIoPacketCodec::SerdeJson,
                 request_path: "/ws.io".into(),
                 websocket_config: WebSocketConfig::default()
