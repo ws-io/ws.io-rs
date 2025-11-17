@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.7 - 2025-11-17 01:44
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.6...wsio-server-v0.9.7)
+
+### 🏡 Chore
+
+- unify and organize all default timeout durations ([277ea3b](https://github.com/ws-io/ws.io-rs/commit/277ea3b))
+- *(server)* update deps ([741b869](https://github.com/ws-io/ws.io-rs/commit/741b869))
+
 ## 0.9.6 - 2025-11-13 09:32
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.5...wsio-server-v0.9.6)
