@@ -3,7 +3,10 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::Result;
+use anyhow::{
+    Result,
+    bail,
+};
 use serde::{
     Serialize,
     de::DeserializeOwned,
@@ -37,8 +40,18 @@ impl WsIoClient {
     {
         let url = match url.try_into() {
             Ok(url) => url,
-            Err(e) => panic!("Invalid URL: {e}"),
+            Err(err) => bail!("Invalid URL: {err}"),
         };
+
+        if url.scheme() == "wss"
+            && !cfg!(any(
+                feature = "tls-native",
+                feature = "tls-rustls-native",
+                feature = "tls-rustls-webpki",
+            ))
+        {
+            bail!("TLS is required for wss:// URLs, but no TLS feature is enabled");
+        }
 
         WsIoClientBuilder::new(url)
     }
