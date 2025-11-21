@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    LazyLock,
+};
 
 use anyhow::{
     Result,
@@ -62,6 +65,7 @@ pub struct WsIoClientSession {
     cancel_token: ArcSwap<CancellationToken>,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
     message_tx: Sender<Arc<Message>>,
+    ping_task: Mutex<Option<JoinHandle<()>>>,
     ready_timeout_task: Mutex<Option<JoinHandle<()>>>,
     runtime: Arc<WsIoClientRuntime>,
     state: AtomicEnumCell<SessionState>,
@@ -84,6 +88,7 @@ impl WsIoClientSession {
                 cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
                 init_timeout_task: Mutex::new(None),
                 message_tx,
+                ping_task: Mutex::new(None),
                 ready_timeout_task: Mutex::new(None),
                 runtime,
                 state: AtomicEnumCell::new(SessionState::Created),
@@ -188,8 +193,9 @@ impl WsIoClientSession {
         // Set state to Closing
         self.state.store(SessionState::Closing);
 
-        // Abort timeout tasks
+        // Abort tasks
         abort_locked_task(&self.init_timeout_task).await;
+        abort_locked_task(&self.ping_task).await;
         abort_locked_task(&self.ready_timeout_task).await;
 
         // Cancel all ongoing operations via cancel token
@@ -252,10 +258,23 @@ impl WsIoClientSession {
     pub(crate) async fn init(self: &Arc<Self>) {
         self.state.store(SessionState::AwaitingInit);
         let session = self.clone();
+
+        // Create init-timeout watchdog to close session if init not received in time
         *self.init_timeout_task.lock().await = Some(spawn(async move {
             sleep(session.runtime.config.init_packet_timeout).await;
             if session.state.is(SessionState::AwaitingInit) {
                 session.close();
+            }
+        }));
+
+        // Create ping task to send 1-byte heartbeat frame to keep the connection alive
+        let session = self.clone();
+        *self.ping_task.lock().await = Some(spawn(async move {
+            loop {
+                sleep(session.runtime.config.ping_interval).await;
+                if session.send_message(PING_MESSAGE.clone()).await.is_err() {
+                    session.close();
+                }
             }
         }));
     }
@@ -271,3 +290,6 @@ impl WsIoClientSession {
         self.state.is(SessionState::Ready)
     }
 }
+
+// Constants/Statics
+static PING_MESSAGE: LazyLock<Arc<Message>> = LazyLock::new(|| Arc::new(Message::Binary(vec![0x01].into())));

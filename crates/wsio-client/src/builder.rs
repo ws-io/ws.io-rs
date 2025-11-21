@@ -54,6 +54,7 @@ impl WsIoClientBuilder {
                 on_session_close_handler_timeout: Duration::from_secs(2),
                 on_session_ready_handler: None,
                 packet_codec: WsIoPacketCodec::SerdeJson,
+                ping_interval: Duration::from_secs(25),
                 ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),
                 websocket_config: WebSocketConfig::default()
@@ -115,6 +116,11 @@ impl WsIoClientBuilder {
 
     pub fn packet_codec(mut self, packet_codec: WsIoPacketCodec) -> Self {
         self.config.packet_codec = packet_codec;
+        self
+    }
+
+    pub fn ping_interval(mut self, duration: Duration) -> Self {
+        self.config.ping_interval = duration;
         self
     }
 

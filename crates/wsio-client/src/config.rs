@@ -49,6 +49,8 @@ pub(crate) struct WsIoClientConfig {
 
     pub(crate) packet_codec: WsIoPacketCodec,
 
+    pub(crate) ping_interval: Duration,
+
     /// Maximum duration to wait for the client to send the ready packet.
     pub(crate) ready_packet_timeout: Duration,
 
