@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.9 - 2025-11-21 05:26
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.8...wsio-client-v0.7.9)
+
+### 🚀 Enhancements
+
+- *(client)* add additional tracing features ([afe0f1e](https://github.com/ws-io/ws.io-rs/commit/afe0f1e))
+
 ## 0.7.8 - 2025-11-21 01:56
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.7...wsio-client-v0.7.8)
