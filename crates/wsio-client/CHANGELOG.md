@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.12 - 2025-11-21 06:24
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.11...wsio-client-v0.7.12)
+
+### 🚀 Enhancements
+
+- *(client)* periodically send ping frames after connection to prevent it from being closed ([1219b60](https://github.com/ws-io/ws.io-rs/commit/1219b60))
+
 ## 0.7.11 - 2025-11-21 05:44
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.9...wsio-client-v0.7.11)
