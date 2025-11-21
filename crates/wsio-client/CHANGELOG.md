@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.10 - 2025-11-21 05:44
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.9...wsio-client-v0.7.10)
+
+### 🚀 Enhancements
+
+- *(client)* add TLS-related features for `tokio-tungstenite` and validate TLS feature when using `wss` in client builder ([144a6a5](https://github.com/ws-io/ws.io-rs/commit/144a6a5))
+
 ## 0.7.9 - 2025-11-21 05:26
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.8...wsio-client-v0.7.9)
