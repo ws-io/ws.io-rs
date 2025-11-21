@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.8 - 2025-11-21 01:56
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.7...wsio-client-v0.7.8)
+
+### 💅 Refactors
+
+- extract some internal types and utilities into a separate crate ([3b02fd0](https://github.com/ws-io/ws.io-rs/commit/3b02fd0))
+
 ## 0.7.7 - 2025-11-17 01:44
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.6...wsio-client-v0.7.7)
