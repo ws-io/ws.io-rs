@@ -9,6 +9,7 @@ use futures_util::{
     SinkExt,
     StreamExt,
 };
+use kikiutils::atomic::enum_cell::AtomicEnumCell;
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
@@ -42,7 +43,6 @@ use url::Url;
 use crate::{
     config::WsIoClientConfig,
     core::{
-        atomic::r#enum::AtomicEnum,
         channel_capacity_from_websocket_config,
         event::registry::WsIoEventRegistry,
         packet::WsIoPacket,
@@ -72,7 +72,7 @@ pub(crate) struct WsIoClientRuntime {
     send_event_message_task: Mutex<Option<JoinHandle<()>>>,
     send_event_message_tx: Sender<Arc<Message>>,
     session: ArcSwapOption<WsIoClientSession>,
-    status: AtomicEnum<RuntimeStatus>,
+    status: AtomicEnumCell<RuntimeStatus>,
     wake_reconnect_wait_notify: Notify,
     pub(crate) wake_send_event_message_task_notify: Notify,
 }
@@ -99,7 +99,7 @@ impl WsIoClientRuntime {
             send_event_message_task: Mutex::new(None),
             send_event_message_tx,
             session: ArcSwapOption::new(None),
-            status: AtomicEnum::new(RuntimeStatus::Stopped),
+            status: AtomicEnumCell::new(RuntimeStatus::Stopped),
             wake_reconnect_wait_notify: Notify::new(),
             wake_send_event_message_task_notify: Notify::new(),
         })

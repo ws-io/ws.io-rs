@@ -16,6 +16,10 @@ use http::{
     HeaderMap,
     Uri,
 };
+use kikiutils::{
+    atomic::enum_cell::AtomicEnumCell,
+    types::fx_collections::FxDashSet,
+};
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
@@ -51,7 +55,6 @@ use self::extensions::ConnectionExtensions;
 use crate::{
     WsIoServer,
     core::{
-        atomic::r#enum::AtomicEnum,
         channel_capacity_from_websocket_config,
         event::registry::WsIoEventRegistry,
         packet::{
@@ -59,10 +62,7 @@ use crate::{
             WsIoPacketType,
         },
         traits::task::spawner::TaskSpawner,
-        types::{
-            BoxAsyncUnaryResultHandler,
-            hashers::FxDashSet,
-        },
+        types::BoxAsyncUnaryResultHandler,
         utils::task::abort_locked_task,
     },
     namespace::{
@@ -98,7 +98,7 @@ pub struct WsIoServerConnection {
     namespace: Arc<WsIoServerNamespace>,
     on_close_handler: Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
     request_uri: Uri,
-    state: AtomicEnum<ConnectionState>,
+    state: AtomicEnumCell<ConnectionState>,
 }
 
 impl TaskSpawner for WsIoServerConnection {
@@ -131,7 +131,7 @@ impl WsIoServerConnection {
                 namespace,
                 on_close_handler: Mutex::new(None),
                 request_uri,
-                state: AtomicEnum::new(ConnectionState::Created),
+                state: AtomicEnumCell::new(ConnectionState::Created),
             }),
             message_rx,
         )

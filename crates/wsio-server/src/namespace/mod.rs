@@ -14,6 +14,13 @@ use hyper::upgrade::{
     Upgraded,
 };
 use hyper_util::rt::TokioIo;
+use kikiutils::{
+    atomic::enum_cell::AtomicEnumCell,
+    types::fx_collections::{
+        FxDashMap,
+        FxDashSet,
+    },
+};
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
@@ -45,14 +52,7 @@ use self::{
 use crate::{
     WsIoServer,
     connection::WsIoServerConnection,
-    core::{
-        atomic::r#enum::AtomicEnum,
-        packet::WsIoPacket,
-        types::hashers::{
-            FxDashMap,
-            FxDashSet,
-        },
-    },
+    core::packet::WsIoPacket,
     runtime::{
         WsIoServerRuntime,
         WsIoServerRuntimeStatus,
@@ -75,7 +75,7 @@ pub struct WsIoServerNamespace {
     connection_task_set: Mutex<JoinSet<()>>,
     rooms: FxDashMap<String, Arc<FxDashSet<u64>>>,
     runtime: Arc<WsIoServerRuntime>,
-    status: AtomicEnum<NamespaceStatus>,
+    status: AtomicEnumCell<NamespaceStatus>,
 }
 
 impl WsIoServerNamespace {
@@ -86,7 +86,7 @@ impl WsIoServerNamespace {
             connection_task_set: Mutex::new(JoinSet::new()),
             rooms: FxDashMap::default(),
             runtime,
-            status: AtomicEnum::new(NamespaceStatus::Running),
+            status: AtomicEnumCell::new(NamespaceStatus::Running),
         })
     }
 

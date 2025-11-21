@@ -5,6 +5,7 @@ use anyhow::{
     bail,
 };
 use arc_swap::ArcSwap;
+use kikiutils::atomic::enum_cell::AtomicEnumCell;
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
@@ -31,7 +32,6 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     WsIoClient,
     core::{
-        atomic::r#enum::AtomicEnum,
         channel_capacity_from_websocket_config,
         packet::{
             WsIoPacket,
@@ -64,7 +64,7 @@ pub struct WsIoClientSession {
     message_tx: Sender<Arc<Message>>,
     ready_timeout_task: Mutex<Option<JoinHandle<()>>>,
     runtime: Arc<WsIoClientRuntime>,
-    state: AtomicEnum<SessionState>,
+    state: AtomicEnumCell<SessionState>,
 }
 
 impl TaskSpawner for WsIoClientSession {
@@ -86,7 +86,7 @@ impl WsIoClientSession {
                 message_tx,
                 ready_timeout_task: Mutex::new(None),
                 runtime,
-                state: AtomicEnum::new(SessionState::Created),
+                state: AtomicEnumCell::new(SessionState::Created),
             }),
             message_rx,
         )

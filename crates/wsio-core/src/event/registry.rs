@@ -17,13 +17,13 @@ use std::{
 };
 
 use anyhow::Result;
+use kikiutils::types::fx_collections::FxHashMap;
 use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
 
 use crate::{
     packet::codecs::WsIoPacketCodec,
     traits::task::spawner::TaskSpawner,
-    types::hashers::FxHashMap,
 };
 
 // Types

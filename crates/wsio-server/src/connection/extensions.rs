@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::core::types::hashers::FxDashMap;
+use kikiutils::types::fx_collections::FxDashMap;
 
 // Structs
 pub struct ConnectionExtensions {

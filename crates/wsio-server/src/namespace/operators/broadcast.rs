@@ -9,6 +9,7 @@ use futures_util::{
     future::ready,
     stream::iter,
 };
+use kikiutils::types::fx_collections::FxHashSet;
 use serde::Serialize;
 
 use super::super::{
@@ -17,10 +18,7 @@ use super::super::{
 };
 use crate::{
     connection::WsIoServerConnection,
-    core::{
-        packet::WsIoPacket,
-        types::hashers::FxHashSet,
-    },
+    core::packet::WsIoPacket,
 };
 
 // Structs

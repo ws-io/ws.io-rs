@@ -5,6 +5,13 @@ use anyhow::{
     bail,
 };
 use futures_util::future::join_all;
+use kikiutils::{
+    atomic::enum_cell::AtomicEnumCell,
+    types::fx_collections::{
+        FxDashSet,
+        FxHashMap,
+    },
+};
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
@@ -14,13 +21,6 @@ use serde::Serialize;
 
 use crate::{
     config::WsIoServerConfig,
-    core::{
-        atomic::r#enum::AtomicEnum,
-        types::hashers::{
-            FxDashSet,
-            FxHashMap,
-        },
-    },
     namespace::{
         WsIoServerNamespace,
         builder::WsIoServerNamespaceBuilder,
@@ -41,7 +41,7 @@ pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_ids: FxDashSet<u64>,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
-    pub(crate) status: AtomicEnum<WsIoServerRuntimeStatus>,
+    pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
 }
 
 impl WsIoServerRuntime {
@@ -50,7 +50,7 @@ impl WsIoServerRuntime {
             config,
             connection_ids: FxDashSet::default(),
             namespaces: RwLock::new(FxHashMap::default()),
-            status: AtomicEnum::new(WsIoServerRuntimeStatus::Running),
+            status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
         })
     }
 
