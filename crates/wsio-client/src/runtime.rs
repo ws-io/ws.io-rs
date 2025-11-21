@@ -180,7 +180,14 @@ impl WsIoClientRuntime {
                     break;
                 }
 
+                #[cfg(feature = "tracing")]
+                let _ = runtime.run_connection().await.inspect_err(|err| {
+                    tracing::error!("Failed to run connection: {err:#?}");
+                });
+
+                #[cfg(not(feature = "tracing"))]
                 let _ = runtime.run_connection().await;
+
                 if runtime.status.is(RuntimeStatus::Running) {
                     select! {
                         _ = runtime.wake_reconnect_wait_notify.notified() => {},
