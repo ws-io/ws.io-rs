@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.7.10 - 2025-11-21 05:44
+## 0.7.11 - 2025-11-21 05:44
 
-[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.9...wsio-client-v0.7.10)
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.9...wsio-client-v0.7.11)
 
 ### 🚀 Enhancements
 
