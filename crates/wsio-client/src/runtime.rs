@@ -181,9 +181,9 @@ impl WsIoClientRuntime {
                 }
 
                 #[cfg(feature = "tracing")]
-                let _ = runtime.run_connection().await.inspect_err(|err| {
+                if let Err(err) = runtime.run_connection().await {
                     tracing::error!("Failed to run connection: {err:#?}");
-                });
+                }
 
                 #[cfg(not(feature = "tracing"))]
                 let _ = runtime.run_connection().await;

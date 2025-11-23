@@ -355,9 +355,9 @@ impl WsIoServerConnection {
     #[inline]
     pub fn except(
         self: &Arc<Self>,
-        room_names: impl IntoIterator<Item = impl AsRef<str>>,
+        room_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
-        self.namespace.except(room_names).except_connection_ids(vec![self.id])
+        self.namespace.except(room_names).except_connection_ids([self.id])
     }
 
     #[cfg(feature = "connection-extensions")]
@@ -382,21 +382,21 @@ impl WsIoServerConnection {
     }
 
     #[inline]
-    pub fn join(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl AsRef<str>>) {
+    pub fn join(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl Into<String>>) {
         for room_name in room_names {
-            let room_name = room_name.as_ref();
-            self.namespace.add_connection_id_to_room(room_name, self.id);
-            self.joined_rooms.insert(room_name.into());
+            let room_name = room_name.into();
+            self.namespace.add_connection_id_to_room(&room_name, self.id);
+            self.joined_rooms.insert(room_name);
         }
     }
 
     #[inline]
-    pub fn leave(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl AsRef<str>>) {
+    pub fn leave(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl Into<String>>) {
         for room_name in room_names {
-            self.namespace
-                .remove_connection_id_from_room(room_name.as_ref(), self.id);
+            let room_name = &room_name.into();
+            self.namespace.remove_connection_id_from_room(room_name, self.id);
 
-            self.joined_rooms.remove(room_name.as_ref());
+            self.joined_rooms.remove(room_name);
         }
     }
 
@@ -446,9 +446,9 @@ impl WsIoServerConnection {
     #[inline]
     pub fn to(
         self: &Arc<Self>,
-        room_names: impl IntoIterator<Item = impl AsRef<str>>,
+        room_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
-        self.namespace.to(room_names).except_connection_ids(vec![self.id])
+        self.namespace.to(room_names).except_connection_ids([self.id])
     }
 }
 
