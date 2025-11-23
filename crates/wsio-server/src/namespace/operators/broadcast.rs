@@ -22,6 +22,7 @@ use crate::{
 };
 
 // Structs
+#[derive(Clone)]
 pub struct WsIoServerNamespaceBroadcastOperator {
     exclude_connection_ids: HashSet<u64>,
     exclude_rooms: HashSet<String>,
@@ -85,7 +86,7 @@ impl WsIoServerNamespaceBroadcastOperator {
     }
 
     // Public methods
-    pub async fn close(&self) {
+    pub async fn close(self) {
         self.for_each_target_connections(|connection| async move {
             connection.close();
             Ok(())
@@ -93,7 +94,7 @@ impl WsIoServerNamespaceBroadcastOperator {
         .await;
     }
 
-    pub async fn disconnect(&self) -> Result<()> {
+    pub async fn disconnect(self) -> Result<()> {
         let message = self.namespace.encode_packet_to_message(&WsIoPacket::new_disconnect())?;
         self.for_each_target_connections(move |connection| {
             let message = message.clone();
@@ -104,7 +105,7 @@ impl WsIoServerNamespaceBroadcastOperator {
         Ok(())
     }
 
-    pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
+    pub async fn emit<D: Serialize>(self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         self.namespace.status.ensure(NamespaceStatus::Running, |status| {
             format!("Cannot emit in invalid status: {status:?}")
         })?;
