@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.9 - 2025-11-23 11:04
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.8...wsio-server-v0.9.9)
+
+### 🩹 Fixes
+
+- change some iterator impls from `AsRef<str>` to `Into<String>` to fix certain errors ([33a0675](https://github.com/ws-io/ws.io-rs/commit/33a0675))
+
 ## 0.9.8 - 2025-11-21 01:56
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.7...wsio-server-v0.9.8)
