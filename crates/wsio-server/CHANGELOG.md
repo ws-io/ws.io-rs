@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 - 2025-11-23 13:22
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.9...wsio-server-v0.10.0)
+
+### 💅 Refactors
+
+- [**breaking**] make `close`, `disconnect`, and `emit` methods on `WsIoServerNamespaceBroadcastOperator` consume `self`, and add `Clone` derive ([4e50742](https://github.com/ws-io/ws.io-rs/commit/4e50742))
+
 ## 0.9.9 - 2025-11-23 11:04
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.8...wsio-server-v0.9.9)

@@ -1,6 +1,6 @@
 [package]
 name = "wsio-server"
-version = "0.9.9"
+version = "0.10.0"
 
 authors.workspace = true
 categories.workspace = true
