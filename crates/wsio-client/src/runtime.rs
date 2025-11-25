@@ -175,11 +175,7 @@ impl WsIoClientRuntime {
         // Create connection loop task
         let runtime = self.clone();
         *self.connection_loop_task.lock().await = Some(spawn(async move {
-            loop {
-                if !runtime.status.is(RuntimeStatus::Running) {
-                    break;
-                }
-
+            while runtime.status.is(RuntimeStatus::Running) {
                 #[cfg(feature = "tracing")]
                 if let Err(err) = runtime.run_connection().await {
                     tracing::error!("Failed to run connection: {err:#?}");
