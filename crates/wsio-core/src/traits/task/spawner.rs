@@ -12,7 +12,7 @@ pub trait TaskSpawner: Send + Sync + 'static {
 
     #[inline]
     fn spawn_task<F: Future<Output = Result<()>> + Send + 'static>(&self, future: F) {
-        let cancel_token = self.cancel_token().clone();
+        let cancel_token = self.cancel_token();
         spawn(async move {
             select! {
                 _ = cancel_token.cancelled() => {},
