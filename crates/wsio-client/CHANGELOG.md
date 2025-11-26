@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.14 - 2025-11-26 06:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.13...wsio-client-v0.7.14)
+
+### 💅 Refactors
+
+- *(client)* create `notified` before calling `emit_event_message` and awaiting in `send_event_message_task` ([433bb3c](https://github.com/ws-io/ws.io-rs/commit/433bb3c))
+- *(client)* replace `wake_reconnect_wait_notify` with `cancel_token` control ([c86ddd0](https://github.com/ws-io/ws.io-rs/commit/c86ddd0))
+- *(client)* replace in-loop running-state check with `while` condition ([69d9088](https://github.com/ws-io/ws.io-rs/commit/69d9088))
+
 ## 0.7.13 - 2025-11-23 11:04
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.12...wsio-client-v0.7.13)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1 - 2025-11-26 06:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.10.0...wsio-server-v0.10.1)
+
+### 🏡 Chore
+
+- *(server)* upgrade deps ([2c85994](https://github.com/ws-io/ws.io-rs/commit/2c85994))
+
 ## 0.10.0 - 2025-11-23 13:22
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.9.9...wsio-server-v0.10.0)

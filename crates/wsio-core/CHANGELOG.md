@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1 - 2025-11-26 06:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.11.0...wsio-core-v0.11.1)
+
+### 💅 Refactors
+
+- *(core)* remove unnecessary `clone` ([1d95406](https://github.com/ws-io/ws.io-rs/commit/1d95406))
+
 ## 0.11.0 - 2025-11-21 01:56
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.10.0...wsio-core-v0.11.0)
