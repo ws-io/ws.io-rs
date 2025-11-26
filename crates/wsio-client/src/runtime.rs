@@ -73,7 +73,6 @@ pub(crate) struct WsIoClientRuntime {
     send_event_message_tx: Sender<Arc<Message>>,
     session: ArcSwapOption<WsIoClientSession>,
     status: AtomicEnumCell<RuntimeStatus>,
-    wake_reconnect_wait_notify: Notify,
     pub(crate) wake_send_event_message_task_notify: Notify,
 }
 
@@ -100,7 +99,6 @@ impl WsIoClientRuntime {
             send_event_message_tx,
             session: ArcSwapOption::new(None),
             status: AtomicEnumCell::new(RuntimeStatus::Stopped),
-            wake_reconnect_wait_notify: Notify::new(),
             wake_send_event_message_task_notify: Notify::new(),
         })
     }
@@ -176,6 +174,7 @@ impl WsIoClientRuntime {
         let runtime = self.clone();
         *self.connection_loop_task.lock().await = Some(spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
+                let cancel_token = runtime.cancel_token();
                 #[cfg(feature = "tracing")]
                 if let Err(err) = runtime.run_connection().await {
                     tracing::error!("Failed to run connection: {err:#?}");
@@ -183,10 +182,9 @@ impl WsIoClientRuntime {
 
                 #[cfg(not(feature = "tracing"))]
                 let _ = runtime.run_connection().await;
-
                 if runtime.status.is(RuntimeStatus::Running) {
                     select! {
-                        _ = runtime.wake_reconnect_wait_notify.notified() => {},
+                        _ = cancel_token.cancelled() => {},
                         _ = sleep(runtime.config.reconnect_delay) => {},
                     }
                 }
@@ -231,16 +229,13 @@ impl WsIoClientRuntime {
             send_event_message_task.abort();
         }
 
-        // Cancel all ongoing operations via cancel token and store a new one
+        // Cancel all ongoing operations and reconnect sleep via cancel token and store a new one
         self.cancel_token.load().cancel();
         self.cancel_token.store(Arc::new(CancellationToken::new()));
 
         // Drop all pending event messages in the channel
         let mut send_event_message_rx = self.send_event_message_rx.lock().await;
         while send_event_message_rx.try_recv().is_ok() {}
-
-        // Wake reconnect loop to break out of sleep early
-        self.wake_reconnect_wait_notify.notify_waiters();
 
         // Await connection loop task termination
         if let Some(connection_loop_task) = self.connection_loop_task.lock().await.take() {
