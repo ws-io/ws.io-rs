@@ -105,12 +105,18 @@ impl WsIoClientRuntime {
 
     // Private methods
     async fn run_connection(self: &Arc<Self>) -> Result<()> {
+        // Connect to server
         let (ws_stream, _) =
             connect_async_with_config(self.connect_url.as_str(), Some(self.config.websocket_config), false).await?;
 
+        // Get cancel token
+        let cancel_token = self.cancel_token.load_full();
+
+        // Create session and init
         let (session, mut message_rx) = WsIoClientSession::new(self.clone());
         session.init().await;
 
+        // Create read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
         let session_clone = session.clone();
         let mut read_ws_stream_task = spawn(async move {
@@ -145,7 +151,20 @@ impl WsIoClientRuntime {
         });
 
         self.session.store(Some(session.clone()));
+
+        // Wait for any of the tasks to finish or cancel
         select! {
+            _ = cancel_token.cancelled() => {
+                session.close();
+                select! {
+                    _ = &mut read_ws_stream_task => {
+                        write_ws_stream_task.abort();
+                    },
+                    _ = &mut write_ws_stream_task => {
+                        read_ws_stream_task.abort();
+                    },
+                }
+            }
             _ = &mut read_ws_stream_task => {
                 write_ws_stream_task.abort();
             },
@@ -174,7 +193,7 @@ impl WsIoClientRuntime {
         let runtime = self.clone();
         *self.connection_loop_task.lock().await = Some(spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
-                let cancel_token = runtime.cancel_token();
+                let cancel_token = runtime.cancel_token.load_full();
                 #[cfg(feature = "tracing")]
                 if let Err(err) = runtime.run_connection().await {
                     tracing::error!("Failed to run connection: {err:#?}");
@@ -220,17 +239,12 @@ impl WsIoClientRuntime {
             _ => unreachable!(),
         }
 
-        // Close session
-        if let Some(session) = self.session.load().as_ref() {
-            session.close();
-        }
-
         // Abort send-event-message task
         if let Some(send_event_message_task) = self.send_event_message_task.lock().await.take() {
             send_event_message_task.abort();
         }
 
-        // Cancel all ongoing operations and reconnect sleep via cancel token and store a new one
+        // Cancel token to abort all waiting operations (ongoing operations, connection loop task), and create a new one
         self.cancel_token.load().cancel();
         self.cancel_token.store(Arc::new(CancellationToken::new()));
 
