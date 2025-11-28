@@ -22,7 +22,7 @@ repository.workspace = true
 [dependencies]
 anyhow = "1.0.100"
 arc-swap = "1.7.1"
-futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.31", default-features = false }
 http = "1.4.0"
 http-body = "1.0.1"
 hyper = "1.8.1"
