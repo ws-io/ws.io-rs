@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.15 - 2025-11-29 07:30
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.14...wsio-client-v0.7.15)
+
+### 🏡 Chore
+
+- update deps ([e13c875](https://github.com/ws-io/ws.io-rs/commit/e13c875))
+
+### 🩹 Fixes
+
+- *(client)* in `run_connection`, wait on cancel token in post-spawn `select`; call `session.close` upon cancel and await read/write tasks; simplify `disconnect` to rely solely on cancel token ([5b17ce3](https://github.com/ws-io/ws.io-rs/commit/5b17ce3))
+
 ## 0.7.14 - 2025-11-26 06:01
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.13...wsio-client-v0.7.14)
