@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.16 - 2025-11-30 06:36
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.15...wsio-client-v0.7.16)
+
+### 🩹 Fixes
+
+- *(client)* create new cancel token in `connect` instead of in `disconnect` ([638db51](https://github.com/ws-io/ws.io-rs/commit/638db51))
+
 ## 0.7.15 - 2025-11-29 07:30
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.14...wsio-client-v0.7.15)
