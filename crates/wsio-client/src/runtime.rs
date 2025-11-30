@@ -109,9 +109,6 @@ impl WsIoClientRuntime {
         let (ws_stream, _) =
             connect_async_with_config(self.connect_url.as_str(), Some(self.config.websocket_config), false).await?;
 
-        // Get cancel token
-        let cancel_token = self.cancel_token.load_full();
-
         // Create session and init
         let (session, mut message_rx) = WsIoClientSession::new(self.clone());
         session.init().await;
@@ -152,7 +149,8 @@ impl WsIoClientRuntime {
 
         self.session.store(Some(session.clone()));
 
-        // Wait for any of the tasks to finish or cancel
+        // Wait for any of the tasks to finish or canceled
+        let cancel_token = self.cancel_token();
         select! {
             _ = cancel_token.cancelled() => {
                 session.close();
@@ -189,11 +187,13 @@ impl WsIoClientRuntime {
             _ => unreachable!(),
         }
 
+        // Create new cancel token
+        self.cancel_token.store(Arc::new(CancellationToken::new()));
+
         // Create connection loop task
         let runtime = self.clone();
         *self.connection_loop_task.lock().await = Some(spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
-                let cancel_token = runtime.cancel_token.load_full();
                 #[cfg(feature = "tracing")]
                 if let Err(err) = runtime.run_connection().await {
                     tracing::error!("Failed to run connection: {err:#?}");
@@ -202,6 +202,7 @@ impl WsIoClientRuntime {
                 #[cfg(not(feature = "tracing"))]
                 let _ = runtime.run_connection().await;
                 if runtime.status.is(RuntimeStatus::Running) {
+                    let cancel_token = runtime.cancel_token();
                     select! {
                         _ = cancel_token.cancelled() => {},
                         _ = sleep(runtime.config.reconnect_delay) => {},
@@ -244,9 +245,8 @@ impl WsIoClientRuntime {
             send_event_message_task.abort();
         }
 
-        // Cancel token to abort all waiting operations (ongoing operations, connection loop task), and create a new one
+        // Cancel token to abort all waiting operations (ongoing operations, connection loop task)
         self.cancel_token.load().cancel();
-        self.cancel_token.store(Arc::new(CancellationToken::new()));
 
         // Drop all pending event messages in the channel
         let mut send_event_message_rx = self.send_event_message_rx.lock().await;
