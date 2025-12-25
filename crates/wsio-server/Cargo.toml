@@ -21,12 +21,12 @@ repository.workspace = true
 # Dependencies
 [dependencies]
 anyhow = "1.0.100"
-arc-swap = "1.7.1"
+arc-swap = "1.8.0"
 futures-util = { version = "0.3.31", default-features = false }
 http = "1.4.0"
 http-body = "1.0.1"
 hyper = "1.8.1"
-hyper-util = { version = "0.1.18", features = ["tokio"] }
+hyper-util = { version = "0.1.19", features = ["tokio"] }
 kikiutils = { version = "0.7.2", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.5"
 parking_lot = "0.12.5"
