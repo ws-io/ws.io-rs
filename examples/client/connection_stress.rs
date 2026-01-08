@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
+use tikv_jemallocator::Jemalloc;
 use tokio::{
     sync::Semaphore,
     time::sleep,
@@ -16,6 +17,8 @@ use wsio_client::{
 // Constants/Statics
 const CLIENT_COUNT: usize = 10000;
 const CONNECT_CONCURRENCY: usize = 1000;
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() -> Result<()> {

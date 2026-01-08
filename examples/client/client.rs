@@ -8,11 +8,12 @@ use kikiutils::{
     signal::wait_for_shutdown_signal,
     tracing::init_tracing_with_local_time_format,
 };
+use tikv_jemallocator::Jemalloc;
 use tokio::join;
 use wsio_client::{
     WsIoClient,
-    session::WsIoClientSession,
     core::packet::codecs::WsIoPacketCodec,
+    session::WsIoClientSession,
 };
 
 // Constants/Statics
@@ -54,6 +55,8 @@ static DISCONNECT: LazyLock<WsIoClient> = LazyLock::new(|| {
     client
 });
 
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 static MSGPACK: LazyLock<WsIoClient> = LazyLock::new(|| {
     const NAMESPACE: &str = "/msgpack";
     let client = WsIoClient::builder(format!("ws://127.0.0.1:8000/{NAMESPACE}").as_str())
