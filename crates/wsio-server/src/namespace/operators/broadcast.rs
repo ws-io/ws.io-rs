@@ -67,7 +67,7 @@ impl WsIoServerNamespaceBroadcastOperator {
         }
 
         for exclude_connection_id in &self.exclude_connection_ids {
-            target_connection_ids.remove(&exclude_connection_id);
+            target_connection_ids.remove(exclude_connection_id);
         }
 
         iter(target_connection_ids)
