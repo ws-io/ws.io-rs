@@ -6,7 +6,6 @@ edition.workspace = true
 # Dependencies
 [dependencies]
 anyhow.workspace = true
-axum.workspace = true
 kikiutils.workspace = true
 tikv-jemallocator.workspace = true
 tokio.workspace = true
