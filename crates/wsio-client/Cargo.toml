@@ -36,7 +36,6 @@ wsio-core = { path = "../wsio-core", version = "0.11.2" }
 # Features
 [features]
 ## Define features
-packet-codec-bincode = ["wsio-core/packet-codec-bincode"]
 packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
 packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
@@ -49,7 +48,6 @@ tracing = ["dep:tracing"]
 ## Default and alias
 default = []
 all = [
-  "packet-codec-bincode",
   "packet-codec-cbor",
   "packet-codec-msgpack",
   "packet-codec-postcard",

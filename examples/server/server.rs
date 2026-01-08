@@ -74,14 +74,6 @@ async fn main() -> Result<()> {
     let _ = init_tracing_with_local_time_format();
     tracing::info!("pid: {}", id());
 
-    // Register /bincode namespace
-    WS_IO_SERVER
-        .new_namespace_builder("/bincode")?
-        .on_connect(on_connect)
-        .on_ready(on_ready)
-        .packet_codec(WsIoPacketCodec::Bincode)
-        .register()?;
-
     // Register /cbor namespace
     WS_IO_SERVER
         .new_namespace_builder("/cbor")?

@@ -27,9 +27,9 @@ async fn main() -> Result<()> {
     for i in 0..CLIENT_COUNT {
         let permit = sem.clone().acquire_owned().await?;
         handles.push(tokio::spawn(async move {
-            let client = WsIoClient::builder("ws://127.0.0.1:8000/bincode")
+            let client = WsIoClient::builder("ws://127.0.0.1:8000/postcard")
                 .unwrap()
-                .packet_codec(WsIoPacketCodec::Bincode)
+                .packet_codec(WsIoPacketCodec::Postcard)
                 .build();
 
             client.connect().await;

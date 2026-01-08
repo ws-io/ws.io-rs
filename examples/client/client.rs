@@ -17,19 +17,6 @@ use wsio_client::{
 };
 
 // Constants/Statics
-static BINCODE: LazyLock<WsIoClient> = LazyLock::new(|| {
-    const NAMESPACE: &str = "/bincode";
-    let client = WsIoClient::builder(format!("ws://127.0.0.1:8000/{NAMESPACE}").as_str())
-        .unwrap()
-        .on_session_close(|session| on_session_close(session, NAMESPACE))
-        .on_session_ready(|session| on_session_ready(session, NAMESPACE))
-        .packet_codec(WsIoPacketCodec::Bincode)
-        .build();
-
-    client.on("test", |_, _: Arc<()>| on_event(NAMESPACE));
-    client
-});
-
 static CBOR: LazyLock<WsIoClient> = LazyLock::new(|| {
     const NAMESPACE: &str = "/cbor";
     let client = WsIoClient::builder(format!("ws://127.0.0.1:8000/{NAMESPACE}").as_str())
@@ -142,7 +129,6 @@ async fn on_event(namespace: &str) -> Result<()> {
 async fn main() -> Result<()> {
     let _ = init_tracing_with_local_time_format();
     join!(
-        BINCODE.connect(),
         CBOR.connect(),
         DISCONNECT.connect(),
         INIT.connect(),
@@ -154,7 +140,6 @@ async fn main() -> Result<()> {
 
     let _ = wait_for_shutdown_signal().await;
     join!(
-        BINCODE.disconnect(),
         CBOR.disconnect(),
         DISCONNECT.disconnect(),
         INIT.disconnect(),

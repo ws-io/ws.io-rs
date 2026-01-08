@@ -21,7 +21,6 @@ repository.workspace = true
 # Dependencies
 [dependencies]
 anyhow = "1.0.100"
-bincode = { version = "2.0.1", features = ["serde"], optional = true }
 ciborium = { version = "0.2.2", optional = true }
 kikiutils = { version = "0.7.2", features = ["fx-collections"] }
 parking_lot = "0.12.5"
@@ -38,7 +37,6 @@ tungstenite = { version = "0.28.0", default-features = false }
 # Features
 [features]
 ## Define features
-packet-codec-bincode = ["dep:bincode"]
 packet-codec-cbor = ["dep:ciborium"]
 packet-codec-msgpack = ["dep:rmp-serde"]
 packet-codec-postcard = ["dep:postcard"]
@@ -47,7 +45,6 @@ packet-codec-sonic-rs = ["dep:sonic-rs"]
 ## Default and alias
 default = []
 all = [
-  "packet-codec-bincode",
   "packet-codec-cbor",
   "packet-codec-msgpack",
   "packet-codec-postcard",

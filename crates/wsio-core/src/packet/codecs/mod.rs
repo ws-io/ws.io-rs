@@ -4,9 +4,6 @@ use serde::{
     de::DeserializeOwned,
 };
 
-#[cfg(feature = "packet-codec-bincode")]
-mod bincode;
-
 #[cfg(feature = "packet-codec-cbor")]
 mod cbor;
 
@@ -21,8 +18,6 @@ mod serde_json;
 #[cfg(feature = "packet-codec-sonic-rs")]
 mod sonic_rs;
 
-#[cfg(feature = "packet-codec-bincode")]
-use self::bincode::WsIoPacketBincodeCodec;
 #[cfg(feature = "packet-codec-cbor")]
 use self::cbor::WsIoPacketCborCodec;
 #[cfg(feature = "packet-codec-msgpack")]
@@ -37,9 +32,6 @@ use super::WsIoPacket;
 // Enums
 #[derive(Clone, Copy, Debug)]
 pub enum WsIoPacketCodec {
-    #[cfg(feature = "packet-codec-bincode")]
-    Bincode,
-
     #[cfg(feature = "packet-codec-cbor")]
     Cbor,
 
@@ -59,9 +51,6 @@ impl WsIoPacketCodec {
     #[inline]
     pub fn decode(&self, bytes: &[u8]) -> Result<WsIoPacket> {
         match self {
-            #[cfg(feature = "packet-codec-bincode")]
-            Self::Bincode => WsIoPacketBincodeCodec.decode(bytes),
-
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec.decode(bytes),
 
@@ -81,9 +70,6 @@ impl WsIoPacketCodec {
     #[inline]
     pub fn decode_data<D: DeserializeOwned>(&self, bytes: &[u8]) -> Result<D> {
         match self {
-            #[cfg(feature = "packet-codec-bincode")]
-            Self::Bincode => WsIoPacketBincodeCodec.decode_data(bytes),
-
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec.decode_data(bytes),
 
@@ -103,9 +89,6 @@ impl WsIoPacketCodec {
     #[inline]
     pub fn encode(&self, packet: &WsIoPacket) -> Result<Vec<u8>> {
         match self {
-            #[cfg(feature = "packet-codec-bincode")]
-            Self::Bincode => WsIoPacketBincodeCodec.encode(packet),
-
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec.encode(packet),
 
@@ -125,9 +108,6 @@ impl WsIoPacketCodec {
     #[inline]
     pub fn encode_data<D: Serialize>(&self, data: &D) -> Result<Vec<u8>> {
         match self {
-            #[cfg(feature = "packet-codec-bincode")]
-            Self::Bincode => WsIoPacketBincodeCodec.encode_data(data),
-
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec.encode_data(data),
 
@@ -147,9 +127,6 @@ impl WsIoPacketCodec {
     #[inline]
     pub fn is_text(&self) -> bool {
         match self {
-            #[cfg(feature = "packet-codec-bincode")]
-            Self::Bincode => WsIoPacketBincodeCodec::IS_TEXT,
-
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec::IS_TEXT,
 
