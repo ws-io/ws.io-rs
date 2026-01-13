@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.0 - 2026-01-13 02:14
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.11.2...wsio-core-v0.12.0)
+
+### 🏡 Chore
+
+- update deps ([86c5861](https://github.com/ws-io/ws.io-rs/commit/86c5861))
+- update deps ([902b742](https://github.com/ws-io/ws.io-rs/commit/902b742))
+
+### 💅 Refactors
+
+- [**breaking**] completely remove bincode-related packet codec support due to bincode being permanently unmaintained ([9bd8cc0](https://github.com/ws-io/ws.io-rs/commit/9bd8cc0))
+
 ## 0.11.2 - 2025-11-29 07:30
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.11.1...wsio-core-v0.11.2)

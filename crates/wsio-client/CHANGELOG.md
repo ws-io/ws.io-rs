@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 - 2026-01-13 02:14
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.16...wsio-client-v0.8.0)
+
+### 🏡 Chore
+
+- update deps ([86c5861](https://github.com/ws-io/ws.io-rs/commit/86c5861))
+- update deps ([902b742](https://github.com/ws-io/ws.io-rs/commit/902b742))
+
+### 💅 Refactors
+
+- [**breaking**] completely remove bincode-related packet codec support due to bincode being permanently unmaintained ([9bd8cc0](https://github.com/ws-io/ws.io-rs/commit/9bd8cc0))
+
+### 🩹 Fixes
+
+- lint code ([47f5268](https://github.com/ws-io/ws.io-rs/commit/47f5268))
+
 ## 0.7.16 - 2025-11-30 06:36
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.7.15...wsio-client-v0.7.16)

@@ -1,6 +1,6 @@
 [package]
 name = "wsio-server"
-version = "0.10.2"
+version = "0.11.0"
 
 authors.workspace = true
 categories.workspace = true
@@ -36,7 +36,7 @@ tokio-tungstenite = { version = "0.28.0", default-features = false, features = [
 tokio-util = "0.7.18"
 tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
-wsio-core = { path = "../wsio-core", version = "0.11.2" }
+wsio-core = { path = "../wsio-core", version = "0.12.0" }
 url = "2.5.7"
 
 # Features
