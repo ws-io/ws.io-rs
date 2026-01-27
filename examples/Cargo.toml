@@ -14,7 +14,7 @@ tikv-jemallocator = { version = "0.6.1", features = ["background_threads_runtime
 tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
 tracing = "0.1.44"
 wsio-client = { path = "../crates/wsio-client", features = ["full"] }
-wsio-server = { path = "../crates/wsio-server", features = ["full"] }
+wsio-server = { path = "../crates/wsio-server", features = ["full", "roaring-simd"] }
 
 # Profiles
 [profile.release]
