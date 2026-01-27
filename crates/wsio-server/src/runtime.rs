@@ -4,19 +4,18 @@ use anyhow::{
     Result,
     bail,
 };
+use arc_swap::ArcSwap;
 use futures_util::future::join_all;
 use kikiutils::{
     atomic::enum_cell::AtomicEnumCell,
-    types::fx_collections::{
-        FxDashSet,
-        FxHashMap,
-    },
+    types::fx_collections::FxHashMap,
 };
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
 use parking_lot::RwLock;
+use roaring::RoaringTreemap;
 use serde::Serialize;
 
 use crate::{
@@ -39,7 +38,7 @@ pub(crate) enum WsIoServerRuntimeStatus {
 // Structs
 pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
-    connection_ids: FxDashSet<u64>,
+    connection_ids: ArcSwap<RoaringTreemap>,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
     pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
 }
@@ -48,7 +47,7 @@ impl WsIoServerRuntime {
     pub(crate) fn new(config: WsIoServerConfig) -> Arc<Self> {
         Arc::new(Self {
             config,
-            connection_ids: FxDashSet::default(),
+            connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             namespaces: RwLock::new(FxHashMap::default()),
             status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
         })
@@ -63,7 +62,7 @@ impl WsIoServerRuntime {
     // Protected methods
     #[inline]
     pub(crate) fn connection_count(&self) -> usize {
-        self.connection_ids.len()
+        self.connection_ids.load().len() as usize
     }
 
     pub(crate) async fn close_all(&self) {
@@ -100,8 +99,12 @@ impl WsIoServerRuntime {
     }
 
     #[inline]
-    pub(crate) fn insert_connection_id(&self, connection_id: u64) {
-        self.connection_ids.insert(connection_id);
+    pub(crate) fn insert_connection_id(&self, id: u64) {
+        self.connection_ids.rcu(|old_connection_ids| {
+            let mut new_connection_ids = (**old_connection_ids).clone();
+            new_connection_ids.insert(id);
+            new_connection_ids
+        });
     }
 
     #[inline]
@@ -130,7 +133,11 @@ impl WsIoServerRuntime {
 
     #[inline]
     pub(crate) fn remove_connection_id(&self, id: u64) {
-        self.connection_ids.remove(&id);
+        self.connection_ids.rcu(|old_connection_ids| {
+            let mut new_connection_ids = (**old_connection_ids).clone();
+            new_connection_ids.remove(id);
+            new_connection_ids
+        });
     }
 
     pub(crate) async fn remove_namespace(&self, path: &str) {
