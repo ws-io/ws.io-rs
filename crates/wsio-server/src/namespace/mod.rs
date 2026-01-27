@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use arc_swap::ArcSwap;
 use futures_util::{
     SinkExt,
     StreamExt,
@@ -16,15 +17,13 @@ use hyper::upgrade::{
 use hyper_util::rt::TokioIo;
 use kikiutils::{
     atomic::enum_cell::AtomicEnumCell,
-    types::fx_collections::{
-        FxDashMap,
-        FxDashSet,
-    },
+    types::fx_collections::FxDashMap,
 };
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
+use roaring::RoaringTreemap;
 use serde::Serialize;
 use tokio::{
     join,
@@ -71,9 +70,10 @@ enum NamespaceStatus {
 // Structs
 pub struct WsIoServerNamespace {
     pub(crate) config: WsIoServerNamespaceConfig,
+    connection_ids: ArcSwap<RoaringTreemap>,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
     connection_task_set: Mutex<JoinSet<()>>,
-    rooms: FxDashMap<String, Arc<FxDashSet<u64>>>,
+    rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Arc<WsIoServerRuntime>,
     status: AtomicEnumCell<NamespaceStatus>,
 }
@@ -82,6 +82,7 @@ impl WsIoServerNamespace {
     fn new(config: WsIoServerNamespaceConfig, runtime: Arc<WsIoServerRuntime>) -> Arc<Self> {
         Arc::new(Self {
             config,
+            connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             connections: FxDashMap::default(),
             connection_task_set: Mutex::new(JoinSet::new()),
             rooms: FxDashMap::default(),
@@ -185,11 +186,7 @@ impl WsIoServerNamespace {
     // Protected methods
     #[inline]
     pub(crate) fn add_connection_id_to_room(&self, room_name: &str, connection_id: u64) {
-        self.rooms
-            .entry(room_name.into())
-            .or_default()
-            .clone()
-            .insert(connection_id);
+        self.rooms.entry(room_name.into()).or_default().insert(connection_id);
     }
 
     #[inline]
@@ -219,19 +216,30 @@ impl WsIoServerNamespace {
     pub(crate) fn insert_connection(&self, connection: Arc<WsIoServerConnection>) {
         self.connections.insert(connection.id(), connection.clone());
         self.runtime.insert_connection_id(connection.id());
+        self.connection_ids.rcu(|old_connection_ids| {
+            let mut new_connection_ids = (**old_connection_ids).clone();
+            new_connection_ids.insert(connection.id());
+            new_connection_ids
+        });
     }
 
     #[inline]
     pub(crate) fn remove_connection(&self, id: u64) {
         self.connections.remove(&id);
         self.runtime.remove_connection_id(id);
+        self.connection_ids.rcu(|old_connection_ids| {
+            let mut new_connection_ids = (**old_connection_ids).clone();
+            new_connection_ids.remove(id);
+            new_connection_ids
+        });
     }
 
     #[inline]
     pub(crate) fn remove_connection_id_from_room(&self, room_name: &str, connection_id: u64) {
-        if let Some(room) = self.rooms.get(room_name).map(|entry| entry.clone()) {
-            room.remove(&connection_id);
-            if room.is_empty() {
+        if let Some(mut entry) = self.rooms.get_mut(room_name) {
+            entry.remove(connection_id);
+            if entry.is_empty() {
+                drop(entry);
                 self.rooms.remove(room_name);
             }
         }

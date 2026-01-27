@@ -9,7 +9,7 @@ use futures_util::{
     future::ready,
     stream::iter,
 };
-use kikiutils::types::fx_collections::FxHashSet;
+use roaring::RoaringTreemap;
 use serde::Serialize;
 
 use super::super::{
@@ -47,27 +47,34 @@ impl WsIoServerNamespaceBroadcastOperator {
         F: Fn(Arc<WsIoServerConnection>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
-        let mut target_connection_ids = FxHashSet::default();
-        if self.include_rooms.is_empty() {
-            target_connection_ids.extend(self.namespace.connections.iter().map(|entry| *entry.key()));
+        let mut target_connection_ids = if self.include_rooms.is_empty() {
+            (**self.namespace.connection_ids.load()).clone()
         } else {
+            let mut connection_ids = RoaringTreemap::new();
             for room_name in &self.include_rooms {
                 if let Some(room) = self.namespace.rooms.get(room_name) {
-                    target_connection_ids.extend(room.iter().map(|entry| *entry.key()));
+                    connection_ids |= room.value();
                 }
             }
+
+            connection_ids
         };
 
         for room_name in &self.exclude_rooms {
             if let Some(room) = self.namespace.rooms.get(room_name) {
-                for entry in room.iter() {
-                    target_connection_ids.remove(&entry);
+                target_connection_ids -= room.value();
+                if target_connection_ids.is_empty() {
+                    break;
                 }
             }
         }
 
         for exclude_connection_id in &self.exclude_connection_ids {
-            target_connection_ids.remove(exclude_connection_id);
+            target_connection_ids.remove(*exclude_connection_id);
+        }
+
+        if target_connection_ids.is_empty() {
+            return;
         }
 
         iter(target_connection_ids)

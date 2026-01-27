@@ -38,6 +38,7 @@ tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
 wsio-core = { path = "../wsio-core", version = "0.12.0" }
 url = "2.5.7"
+roaring = "0.11.3"
 
 # Features
 [features]
@@ -47,6 +48,7 @@ packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
 packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
 packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
+roaring-simd = ["roaring/simd"]
 tower = [
   "dep:tower-layer",
   "dep:tower-service",
