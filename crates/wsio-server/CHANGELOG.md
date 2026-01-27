@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.1 - 2026-01-27 06:16
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.11.0...wsio-server-v0.11.1)
+
+### 💅 Refactors
+
+- optimize server room system ([e09aee0](https://github.com/ws-io/ws.io-rs/commit/e09aee0))
+
+### 🔥 Performance
+
+- change `WsIoServerRuntime.connection_ids` to use `RoaringTreemap` ([90f4829](https://github.com/ws-io/ws.io-rs/commit/90f4829))
+
 ## 0.11.0 - 2026-01-13 02:14
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.10.2...wsio-server-v0.11.0)
