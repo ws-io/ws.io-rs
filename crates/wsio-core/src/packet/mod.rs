@@ -79,3 +79,41 @@ impl WsIoPacket {
         Self::new(WsIoPacketType::Ready, None, None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_packet_constructors() {
+        // Disconnect
+        let packet = WsIoPacket::new_disconnect();
+        assert!(matches!(packet.r#type, WsIoPacketType::Disconnect));
+        assert_eq!(packet.key, None);
+        assert_eq!(packet.data, None);
+
+        // Event without data
+        let packet = WsIoPacket::new_event("chat", None);
+        assert!(matches!(packet.r#type, WsIoPacketType::Event));
+        assert_eq!(packet.key.as_deref(), Some("chat"));
+        assert_eq!(packet.data, None);
+
+        // Event with data
+        let packet = WsIoPacket::new_event("chat", Some(vec![1, 2, 3]));
+        assert!(matches!(packet.r#type, WsIoPacketType::Event));
+        assert_eq!(packet.key.as_deref(), Some("chat"));
+        assert_eq!(packet.data.as_deref(), Some(&[1, 2, 3][..]));
+
+        // Init with data
+        let packet = WsIoPacket::new_init(Some(vec![4, 5, 6]));
+        assert!(matches!(packet.r#type, WsIoPacketType::Init));
+        assert_eq!(packet.key, None);
+        assert_eq!(packet.data.as_deref(), Some(&[4, 5, 6][..]));
+
+        // Ready
+        let packet = WsIoPacket::new_ready();
+        assert!(matches!(packet.r#type, WsIoPacketType::Ready));
+        assert_eq!(packet.key, None);
+        assert_eq!(packet.data, None);
+    }
+}
