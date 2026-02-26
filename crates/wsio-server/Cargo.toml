@@ -48,7 +48,6 @@ packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
 packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
 packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
-roaring-simd = ["roaring/simd"]
 tower = [
   "dep:tower-layer",
   "dep:tower-service",
