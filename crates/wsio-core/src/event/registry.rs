@@ -107,10 +107,16 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
 
     #[inline]
     pub fn off_by_handler_id(&self, event: &str, handler_id: u32) {
-        if let Some(event_entry) = self.event_entries.write().get(event).cloned() {
+        if let Some(event_entry) = self.event_entries.read().get(event) {
             event_entry.handlers.write().remove(&handler_id);
-            if event_entry.handlers.read().is_empty() {
-                self.event_entries.write().remove(event);
+            if !event_entry.handlers.read().is_empty() {
+                return;
+            }
+        }
+
+        if let Entry::Occupied(entry) = self.event_entries.write().entry(event.into()) {
+            if entry.get().handlers.read().is_empty() {
+                entry.remove();
             }
         }
     }
