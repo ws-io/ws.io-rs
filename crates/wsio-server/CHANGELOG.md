@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.2 - 2026-02-26 05:59
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.11.1...wsio-server-v0.11.2)
+
+### 🏡 Chore
+
+- *(server)* remove `roaring/simd` feature ([5c794a7](https://github.com/ws-io/ws.io-rs/commit/5c794a7))
+
 ## 0.11.1 - 2026-01-27 06:16
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.11.0...wsio-server-v0.11.1)

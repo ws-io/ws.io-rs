@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.1 - 2026-02-26 05:59
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.0...wsio-core-v0.12.1)
+
+### ✅ Tests
+
+- *(core)* add some test units ([4045d7d](https://github.com/ws-io/ws.io-rs/commit/4045d7d))
+
+### 🩹 Fixes
+
+- *(core)* resolve potential lock and data race conditions in `WsIoEventRegistry.off_by_handler_id` ([2a28d3d](https://github.com/ws-io/ws.io-rs/commit/2a28d3d))
+
 ## 0.12.0 - 2026-01-13 02:14
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.11.2...wsio-core-v0.12.0)
