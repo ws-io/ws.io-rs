@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.2 - 2026-03-02 03:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.1...wsio-core-v0.12.2)
+
+### ✅ Tests
+
+- add benches for event registry and packet codecs ([4d9f013](https://github.com/ws-io/ws.io-rs/commit/4d9f013))
+- add unit for packet codec ([f7bb03a](https://github.com/ws-io/ws.io-rs/commit/f7bb03a))
+
 ## 0.12.1 - 2026-02-26 05:59
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.0...wsio-core-v0.12.1)

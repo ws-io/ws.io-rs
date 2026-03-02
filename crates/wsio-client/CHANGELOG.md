@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 - 2026-03-02 03:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.1...wsio-client-v0.8.2)
+
+### 🏡 Chore
+
+- updated the following local packages: wsio-core ([0000000](https://github.com/ws-io/ws.io-rs/commit/0000000))
+
 ## 0.8.1 - 2026-02-26 05:59
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.0...wsio-client-v0.8.1)
