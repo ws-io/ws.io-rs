@@ -1,0 +1,49 @@
+name: Test and upload coverage on release
+
+on:
+  push:
+    tags:
+      - wsio-client-v*
+      - wsio-core-v*
+      - wsio-server-v*
+  workflow_dispatch: null
+
+jobs:
+  test:
+    name: Rust ${{ matrix.rust }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        rust:
+          - stable
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run tests and show coverage
+        run: cargo llvm-cov --all-features --color always
+
+      - name: Generate lcov report
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+
+      - name: Upload lcov report to codecov
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          files: ./lcov.info
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
