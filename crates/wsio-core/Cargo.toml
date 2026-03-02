@@ -34,6 +34,9 @@ tokio = { version = "1.49.0", features = ["macros", "rt", "sync"] }
 tokio-util = "0.7.18"
 tungstenite = { version = "0.28.0", default-features = false }
 
+[dev-dependencies]
+criterion = { version = "0.8.2", features = ["async_tokio"] }
+
 # Features
 [features]
 ## Define features
@@ -52,3 +55,12 @@ all = [
 ]
 
 full = ["all"]
+
+# Benchmarks
+[[bench]]
+name = "event_registry"
+harness = false
+
+[[bench]]
+name = "packet_codecs"
+harness = false
