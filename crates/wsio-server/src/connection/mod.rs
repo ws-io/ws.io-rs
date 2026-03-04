@@ -454,3 +454,97 @@ impl WsIoServerConnection {
 
 // Constants/Statics
 static NEXT_CONNECTION_ID: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(0));
+
+#[cfg(test)]
+mod tests {
+    use http::{
+        HeaderMap,
+        Uri,
+    };
+
+    use super::*;
+
+    async fn create_test_connection() -> Arc<WsIoServerConnection> {
+        let server = Arc::new(WsIoServer::builder().build());
+        let namespace = server.new_namespace_builder("/socket").unwrap().register().unwrap();
+        let (connection, _rx) =
+            WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
+
+        connection
+    }
+
+    #[tokio::test]
+    async fn test_handle_incoming_packet_decode_error() {
+        let connection = create_test_connection().await;
+        let garbage_data = b"obviously not valid json or messagepack";
+        // Should seamlessly return a Result::Err, not panic
+        let result = connection.handle_incoming_packet(garbage_data).await;
+        assert!(result.is_err(), "Decoding garbage payload should trigger an error");
+    }
+
+    #[tokio::test]
+    async fn test_handle_init_packet_in_invalid_state() {
+        let connection = create_test_connection().await;
+        assert_eq!(connection.state.get(), ConnectionState::Created);
+
+        // Sending an init packet when the connection is merely `Created` (not yet `AwaitingInit`) should throw an error
+        // Init packet JSON encoded (type: 2 = Init) -> serialized as tuple array
+        let encoded = b"[2,null,null]";
+
+        // This simulates a manual client Init push before server starts the handshake buffer
+        let result = connection.handle_incoming_packet(encoded).await;
+        assert!(
+            result.is_err(),
+            "Should error because state is Created, not AwaitingInit"
+        );
+
+        assert!(result.unwrap_err().to_string().contains("invalid state"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_event_packet_missing_key() {
+        let connection = create_test_connection().await;
+
+        // Force the connection into the Ready state so it accepts Event packets
+        connection.state.store(ConnectionState::Ready);
+
+        // Manufacture an Event packet manually without a key (type: 1 = Event) -> serialized as tuple array
+        let encoded = b"[1,null,null]";
+
+        let result = connection.handle_incoming_packet(encoded).await;
+        assert!(result.is_err(), "Should bail on missing event key");
+        assert_eq!(result.unwrap_err().to_string(), "Event packet missing key");
+    }
+
+    #[tokio::test]
+    async fn test_connection_close_state_transitions() {
+        let connection = create_test_connection().await;
+        assert_eq!(connection.state.get(), ConnectionState::Created);
+
+        connection.close();
+        assert_eq!(connection.state.get(), ConnectionState::Closing);
+
+        // Calling close again when Closing shouldn't alter anything
+        connection.close();
+        assert_eq!(connection.state.get(), ConnectionState::Closing);
+    }
+
+    #[tokio::test]
+    async fn test_connection_cleanup() {
+        let connection = create_test_connection().await;
+        let namespace = connection.namespace();
+
+        // Insert connection manually for test
+        namespace.insert_connection(connection.clone());
+        assert_eq!(namespace.connection_count(), 1);
+
+        connection.join(["room_a", "room_b"]);
+        assert!(connection.joined_rooms.contains("room_a"));
+
+        connection.cleanup().await;
+
+        assert_eq!(connection.state.get(), ConnectionState::Closed);
+        assert!(connection.joined_rooms.is_empty());
+        assert_eq!(namespace.connection_count(), 0);
+    }
+}

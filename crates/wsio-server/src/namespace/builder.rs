@@ -175,3 +175,65 @@ impl WsIoServerNamespaceBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::WsIoServer;
+
+    #[tokio::test]
+    async fn test_namespace_builder_configuration() {
+        let server = Arc::new(WsIoServer::builder().build());
+        let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
+            .broadcast_concurrency_limit(42)
+            .init_request_handler_timeout(Duration::from_secs(1))
+            .init_response_handler_timeout(Duration::from_secs(2))
+            .init_response_timeout(Duration::from_secs(3))
+            .middleware_execution_timeout(Duration::from_secs(4))
+            .on_close_handler_timeout(Duration::from_secs(5))
+            .on_connect_handler_timeout(Duration::from_secs(6))
+            .packet_codec(WsIoPacketCodec::Msgpack)
+            .websocket_config_mut(|config| {
+                *config = config.max_frame_size(Some(888));
+            });
+
+        let config = &builder.config;
+        assert_eq!(config.path, "/custom");
+        assert_eq!(config.broadcast_concurrency_limit, 42);
+        assert_eq!(config.init_request_handler_timeout, Duration::from_secs(1));
+        assert_eq!(config.init_response_handler_timeout, Duration::from_secs(2));
+        assert_eq!(config.init_response_timeout, Duration::from_secs(3));
+        assert_eq!(config.middleware_execution_timeout, Duration::from_secs(4));
+        assert_eq!(config.on_close_handler_timeout, Duration::from_secs(5));
+        assert_eq!(config.on_connect_handler_timeout, Duration::from_secs(6));
+        assert!(matches!(config.packet_codec, WsIoPacketCodec::Msgpack));
+        assert_eq!(config.websocket_config.max_frame_size, Some(888));
+    }
+
+    #[test]
+    fn test_namespace_duplicate_registration_fails() {
+        let server = Arc::new(WsIoServer::builder().build());
+
+        let builder1 = WsIoServerNamespaceBuilder::new("/socket", server.0.clone());
+        let register1_result = builder1.register();
+        assert!(
+            register1_result.is_ok(),
+            "First namespace component should register successfully"
+        );
+
+        // Attempting to register the same path should yield an Err
+        let builder2 = WsIoServerNamespaceBuilder::new("/socket", server.0.clone());
+        let register2_result = builder2.register();
+        assert!(
+            register2_result.is_err(),
+            "Duplicate namespace registration should fail on Runtime"
+        );
+
+        match register2_result {
+            Err(e) => {
+                assert!(e.to_string().contains("already exists"));
+            }
+            Ok(_) => panic!("Should have failed"),
+        }
+    }
+}

@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::Serialize;
 pub use wsio_core as core;
 
-mod builder;
+pub mod builder;
 mod config;
 pub mod connection;
 pub mod namespace;

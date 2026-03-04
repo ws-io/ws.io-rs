@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 pub use wsio_core as core;
 
-mod builder;
+pub mod builder;
 mod config;
 mod runtime;
 pub mod session;

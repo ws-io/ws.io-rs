@@ -97,3 +97,48 @@ impl WsIoServerBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn test_builder_configuration_chaining() {
+        let server = WsIoServer::builder()
+            .broadcast_concurrency_limit(1024)
+            .init_request_handler_timeout(Duration::from_secs(1))
+            .init_response_handler_timeout(Duration::from_secs(2))
+            .init_response_timeout(Duration::from_secs(3))
+            .middleware_execution_timeout(Duration::from_secs(4))
+            .on_close_handler_timeout(Duration::from_secs(5))
+            .on_connect_handler_timeout(Duration::from_secs(6))
+            .packet_codec(WsIoPacketCodec::Msgpack)
+            .request_path("/custom")
+            .websocket_config_mut(|config| {
+                *config = config.max_frame_size(Some(999));
+            })
+            .build();
+
+        // Access internal config through the built runtime
+        let config = &server.0.config;
+        assert_eq!(config.broadcast_concurrency_limit, 1024);
+        assert_eq!(config.init_request_handler_timeout, Duration::from_secs(1));
+        assert_eq!(config.init_response_handler_timeout, Duration::from_secs(2));
+        assert_eq!(config.init_response_timeout, Duration::from_secs(3));
+        assert_eq!(config.middleware_execution_timeout, Duration::from_secs(4));
+        assert_eq!(config.on_close_handler_timeout, Duration::from_secs(5));
+        assert_eq!(config.on_connect_handler_timeout, Duration::from_secs(6));
+        assert!(matches!(config.packet_codec, WsIoPacketCodec::Msgpack));
+        assert_eq!(config.request_path, "/custom");
+        assert_eq!(config.websocket_config.max_frame_size, Some(999));
+    }
+
+    #[test]
+    fn test_builder_websocket_config_override() {
+        let config = WebSocketConfig::default().max_frame_size(Some(42));
+        let server = WsIoServer::builder().websocket_config(config).build();
+        assert_eq!(server.0.config.websocket_config.max_frame_size, Some(42));
+    }
+}

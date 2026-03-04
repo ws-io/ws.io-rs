@@ -40,6 +40,11 @@ wsio-core = { path = "../wsio-core", version = "0.12.2" }
 url = "2.5.7"
 roaring = "0.11.3"
 
+[dev-dependencies]
+axum = { version = "0.8.8", features = ["ws"] }
+wsio-client = { path = "../wsio-client", features = ["full"] }
+wsio-server = { path = "./", features = ["full"] }
+
 # Features
 [features]
 ## Define features
