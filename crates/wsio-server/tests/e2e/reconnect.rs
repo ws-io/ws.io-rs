@@ -20,7 +20,7 @@ async fn test_e2e_client_reconnect() {
     let (server_task, server, ws_url) = setup_server().await;
 
     // Register a default namespace "/socket"
-    let namespace_builder = server.new_namespace_builder("/socket").unwrap();
+    let namespace_builder = server.new_namespace_builder("/socket");
     let survivor_msg_count = Arc::new(AtomicUsize::new(0));
     let survivor_msg_count_clone = survivor_msg_count.clone();
     namespace_builder

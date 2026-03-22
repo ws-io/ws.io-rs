@@ -466,7 +466,7 @@ mod tests {
 
     async fn create_test_connection() -> Arc<WsIoServerConnection> {
         let server = Arc::new(WsIoServer::builder().build());
-        let namespace = server.new_namespace_builder("/socket").unwrap().register().unwrap();
+        let namespace = server.new_namespace_builder("/socket").register().unwrap();
         let (connection, _rx) =
             WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
 

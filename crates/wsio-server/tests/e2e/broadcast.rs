@@ -20,7 +20,7 @@ async fn test_e2e_broadcast_and_rooms() {
     let (server_task, server, ws_url) = setup_server().await;
 
     // Register a default namespace "/socket"
-    let namespace_builder = server.new_namespace_builder("/socket").unwrap();
+    let namespace_builder = server.new_namespace_builder("/socket");
     let server_namespace = namespace_builder
         .on_connect(|ctx| async move {
             // When client sends "join_room", server puts them into the specified room

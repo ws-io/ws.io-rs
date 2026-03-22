@@ -123,12 +123,8 @@ impl WsIoServerRuntime {
     }
 
     #[inline]
-    pub(crate) fn new_namespace_builder(self: &Arc<Self>, path: &str) -> Result<WsIoServerNamespaceBuilder> {
-        if self.namespaces.read().contains_key(path) {
-            bail!("Namespace {path} already exists");
-        }
-
-        Ok(WsIoServerNamespaceBuilder::new(path, self.clone()))
+    pub(crate) fn new_namespace_builder(self: &Arc<Self>, path: &str) -> WsIoServerNamespaceBuilder {
+        WsIoServerNamespaceBuilder::new(path, self.clone())
     }
 
     #[inline]

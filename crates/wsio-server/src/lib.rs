@@ -66,7 +66,7 @@ impl WsIoServer {
     }
 
     #[inline]
-    pub fn new_namespace_builder(&self, path: impl AsRef<str>) -> Result<WsIoServerNamespaceBuilder> {
+    pub fn new_namespace_builder(&self, path: impl AsRef<str>) -> WsIoServerNamespaceBuilder {
         self.0.new_namespace_builder(path.as_ref())
     }
 
