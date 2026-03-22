@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use axum::{
     Router,
@@ -8,7 +11,9 @@ use tokio::{
     net::TcpListener,
     spawn,
     task::JoinHandle,
+    time::sleep,
 };
+use wsio_client::WsIoClient;
 use wsio_server::WsIoServer;
 
 mod broadcast;
@@ -32,4 +37,41 @@ pub(self) async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
     });
 
     (server_task, server, ws_url)
+}
+
+// ============================================================================
+// Client Helpers
+// ============================================================================
+
+/// Create and connect a client, waiting for session to be ready
+pub(self) async fn create_connected_client(ws_url: &str) -> WsIoClient {
+    let client = WsIoClient::builder(ws_url).unwrap().build();
+    client.connect().await;
+    while !client.is_session_ready() {
+        sleep(Duration::from_millis(10)).await;
+    }
+    client
+}
+
+/// Wait for all given clients to have their sessions NOT ready (disconnected)
+/// Returns the number of clients confirmed disconnected
+pub(self) async fn wait_for_clients_disconnected(clients: &[WsIoClient]) -> usize {
+    for _ in 0..100 {
+        if clients.iter().all(|c| !c.is_session_ready()) {
+            return clients.len();
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+
+    0 // timeout
+}
+
+/// Disconnect all clients and abort server task
+pub(self) async fn cleanup_e2e(clients: Vec<WsIoClient>, server_task: JoinHandle<()>) {
+    for client in clients {
+        client.disconnect().await;
+    }
+
+    server_task.abort();
+    let _ = server_task.await;
 }

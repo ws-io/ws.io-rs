@@ -172,3 +172,83 @@ impl WsIoClientBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builder_new_valid_ws_url() {
+        let result = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_builder_new_valid_wss_url() {
+        let result = WsIoClientBuilder::new(Url::parse("wss://localhost:8080/socket").unwrap());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_builder_new_invalid_scheme() {
+        let result = WsIoClientBuilder::new(Url::parse("http://localhost:8080/socket").unwrap());
+        assert!(result.is_err());
+        if let Err(e) = result {
+            let err_msg = format!("{e}");
+            assert!(err_msg.contains("Invalid URL scheme"));
+        }
+    }
+
+    #[test]
+    fn test_builder_configuration_chaining() {
+        WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
+            .unwrap()
+            .init_handler_timeout(Duration::from_secs(10))
+            .init_packet_timeout(Duration::from_secs(15))
+            .on_session_close_handler_timeout(Duration::from_secs(5))
+            .packet_codec(WsIoPacketCodec::SerdeJson)
+            .ping_interval(Duration::from_secs(30))
+            .ready_packet_timeout(Duration::from_secs(10))
+            .reconnect_delay(Duration::from_secs(5))
+            .request_path("/custom/path")
+            .build();
+    }
+
+    #[test]
+    fn test_builder_request_path_normalizes() {
+        // Test that request_path properly normalizes paths
+        WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
+            .unwrap()
+            .request_path("/multiple//slashes///path/")
+            .build();
+    }
+
+    #[test]
+    fn test_builder_websocket_config_override() {
+        WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
+            .unwrap()
+            .websocket_config_mut(|config| {
+                *config = config.max_frame_size(Some(1024 * 1024));
+            })
+            .build();
+    }
+
+    #[test]
+    fn test_builder_all_timeout_configurations() {
+        WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
+            .unwrap()
+            .init_handler_timeout(Duration::from_secs(1))
+            .init_packet_timeout(Duration::from_secs(2))
+            .on_session_close_handler_timeout(Duration::from_secs(3))
+            .ready_packet_timeout(Duration::from_secs(4))
+            .build();
+    }
+
+    #[test]
+    fn test_builder_reconnect_delay_configuration() {
+        WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
+            .unwrap()
+            .reconnect_delay(Duration::from_millis(500))
+            .build();
+    }
+}

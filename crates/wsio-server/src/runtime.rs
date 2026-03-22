@@ -155,3 +155,101 @@ impl WsIoServerRuntime {
         self.status.store(WsIoServerRuntimeStatus::Stopped);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+
+    use super::*;
+    use crate::core::packet::codecs::WsIoPacketCodec;
+
+    fn create_test_config() -> WsIoServerConfig {
+        WsIoServerConfig {
+            broadcast_concurrency_limit: 16,
+            http_request_upgrade_timeout: Duration::from_secs(3),
+            init_request_handler_timeout: Duration::from_secs(3),
+            init_response_handler_timeout: Duration::from_secs(3),
+            init_response_timeout: Duration::from_secs(3),
+            middleware_execution_timeout: Duration::from_secs(3),
+            on_close_handler_timeout: Duration::from_secs(3),
+            on_connect_handler_timeout: Duration::from_secs(3),
+            packet_codec: WsIoPacketCodec::SerdeJson,
+            request_path: "/socket".into(),
+            websocket_config: WebSocketConfig::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_runtime_new() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        assert_eq!(runtime.namespace_count(), 0);
+        assert_eq!(runtime.connection_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_runtime_get_namespace_not_found() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        assert!(runtime.get_namespace("/nonexistent").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_runtime_insert_namespace_and_get() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        runtime.new_namespace_builder("/test").register().unwrap();
+        assert_eq!(runtime.namespace_count(), 1);
+        assert_eq!(runtime.get_namespace("/test").unwrap().path(), "/test");
+    }
+
+    #[tokio::test]
+    async fn test_runtime_insert_duplicate_namespace_fails() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        let namespace = runtime.new_namespace_builder("/test").register().unwrap();
+        let result = runtime.insert_namespace(namespace);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_runtime_connection_id_tracking() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        runtime.insert_connection_id(1);
+        runtime.insert_connection_id(2);
+        assert_eq!(runtime.connection_count(), 2);
+
+        runtime.remove_connection_id(1);
+        assert_eq!(runtime.connection_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_runtime_remove_namespace_not_found() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        // Removing non-existent namespace should not panic
+        runtime.remove_namespace("/nonexistent").await;
+        assert_eq!(runtime.namespace_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_runtime_new_namespace_builder() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        let builder = runtime.new_namespace_builder("/test");
+        let namespace = builder.register().unwrap();
+        assert_eq!(namespace.path(), "/test");
+        assert_eq!(runtime.namespace_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_runtime_emit_invalid_status() {
+        let runtime = WsIoServerRuntime::new(create_test_config());
+        // Insert namespace first to make emit work (namespace-level emit checks runtime status)
+        let namespace = runtime.new_namespace_builder("/test").register().unwrap();
+
+        // Shutdown runtime to make it invalid for emit
+        runtime.shutdown().await;
+
+        let result = namespace.emit("test_event", Option::<&()>::None).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid status"));
+    }
+}

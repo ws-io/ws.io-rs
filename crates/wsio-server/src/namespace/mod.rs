@@ -306,3 +306,177 @@ impl WsIoServerNamespace {
         WsIoServerNamespaceBroadcastOperator::new(self.clone()).to(room_names)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+
+    use super::*;
+    use crate::{
+        config::WsIoServerConfig,
+        core::packet::codecs::WsIoPacketCodec,
+    };
+
+    fn create_test_namespace() -> Arc<WsIoServerNamespace> {
+        let runtime = WsIoServerRuntime::new(WsIoServerConfig {
+            broadcast_concurrency_limit: 16,
+            http_request_upgrade_timeout: Duration::from_secs(3),
+            init_request_handler_timeout: Duration::from_secs(3),
+            init_response_handler_timeout: Duration::from_secs(3),
+            init_response_timeout: Duration::from_secs(3),
+            middleware_execution_timeout: Duration::from_secs(3),
+            on_close_handler_timeout: Duration::from_secs(3),
+            on_connect_handler_timeout: Duration::from_secs(3),
+            packet_codec: WsIoPacketCodec::SerdeJson,
+            request_path: "/socket".into(),
+            websocket_config: WebSocketConfig::default(),
+        });
+        runtime.new_namespace_builder("/test").register().unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_namespace_new() {
+        let namespace = create_test_namespace();
+        assert_eq!(namespace.path(), "/test");
+        assert_eq!(namespace.connection_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_namespace_connection_count() {
+        let namespace = create_test_namespace();
+        assert_eq!(namespace.connection_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_namespace_server() {
+        let namespace = create_test_namespace();
+        namespace.server();
+    }
+
+    #[tokio::test]
+    async fn test_namespace_to_broadcast_operator() {
+        let namespace = create_test_namespace();
+        namespace.to(["room1", "room2"]);
+    }
+
+    #[tokio::test]
+    async fn test_namespace_except_broadcast_operator() {
+        let namespace = create_test_namespace();
+        namespace.except(["room1", "room2"]);
+    }
+
+    #[tokio::test]
+    async fn test_namespace_add_remove_connection_id_to_room() {
+        let namespace = create_test_namespace();
+        namespace.add_connection_id_to_room("room1", 1);
+        namespace.add_connection_id_to_room("room1", 2);
+        namespace.add_connection_id_to_room("room2", 3);
+
+        // Remove should work
+        namespace.remove_connection_id_from_room("room1", 1);
+        namespace.remove_connection_id_from_room("room1", 2);
+        namespace.remove_connection_id_from_room("room2", 3);
+    }
+
+    #[tokio::test]
+    async fn test_namespace_remove_connection_id_from_empty_room() {
+        let namespace = create_test_namespace();
+        // Removing from non-existent room should not panic
+        namespace.remove_connection_id_from_room("nonexistent", 1);
+    }
+
+    #[tokio::test]
+    async fn test_namespace_encode_packet_to_message() {
+        let namespace = create_test_namespace();
+        let packet = WsIoPacket::new_disconnect();
+        namespace.encode_packet_to_message(&packet).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_namespace_shutdown_idempotent() {
+        let namespace = create_test_namespace();
+        namespace.clone().shutdown().await;
+        // Shutting down again should be safe
+        namespace.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_new() {
+        let namespace = create_test_namespace();
+        // Just verify we can create an operator
+        namespace.to(["room1", "room2"]);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_to_chaining() {
+        let namespace = create_test_namespace();
+        // Chaining should work - just verify it doesn't panic
+        namespace.to(["room1"]).to(["room2"]);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_except_chaining() {
+        let namespace = create_test_namespace();
+        // Chaining should work - just verify it doesn't panic
+        namespace.except(["room1"]).except(["room2"]);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_except_connection_ids() {
+        let namespace = create_test_namespace();
+        // except_connection_ids is on the broadcast operator, not namespace
+        namespace
+            .clone()
+            .except([1.to_string()])
+            .except_connection_ids([1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_to_with_empty_rooms() {
+        let namespace = create_test_namespace();
+        // Empty rooms - should still work (broadcast to all)
+        namespace.to(Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_combined() {
+        let namespace = create_test_namespace();
+        // Combined chaining should work without panicking
+        namespace
+            .to(["room1", "room2"])
+            .except(["room3"])
+            .except_connection_ids([100]);
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_disconnect_with_no_connections() {
+        let namespace = create_test_namespace();
+        // disconnect with no connections should return Ok
+        let op = namespace.to(["room1"]);
+        let result = op.clone().disconnect().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_emit_requires_running() {
+        let namespace = create_test_namespace();
+        // Shutdown to make status invalid
+        namespace.clone().shutdown().await;
+
+        let op = namespace.to(["room1"]);
+        let result = op.emit("event", Option::<&()>::None).await;
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("invalid status"));
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_operator_close_is_noop_when_empty() {
+        let namespace = create_test_namespace();
+        // close with no connections should not panic
+        let op = namespace.to(["room1"]);
+        op.clone().close().await;
+    }
+}
