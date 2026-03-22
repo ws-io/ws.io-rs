@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.12.0 - 2026-03-22 19:45
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.11.3...wsio-server-v0.12.0)
+
+### ✅ Tests
+
+- add more unit and e2e ([24b6bac](https://github.com/ws-io/ws.io-rs/commit/24b6bac))
+- *(server)* add `ConnectionExtensions` unit ([1d2d8bb](https://github.com/ws-io/ws.io-rs/commit/1d2d8bb))
+- add more units ([d973d57](https://github.com/ws-io/ws.io-rs/commit/d973d57))
+
+### 🏡 Chore
+
+- lint code ([7c03d10](https://github.com/ws-io/ws.io-rs/commit/7c03d10))
+
+### 💅 Refactors
+
+- *(server)* [**breaking**] remove name check from `new_namespace_builder` and return `WsIoServerNamespaceBuilder` direct ([9600364](https://github.com/ws-io/ws.io-rs/commit/9600364))
+
+### 🚀 Enhancements
+
+- *(server)* add `http_request_upgrade_timeout` config to server and namespace to resolve `handle_on_upgrade_request` may wait forever issue ([e9a0078](https://github.com/ws-io/ws.io-rs/commit/e9a0078))
+
+### 🩹 Fixes
+
+- *(server)* resolved `WsIoServerNamespace.remove_connection_id_from_room` method race issue ([46db631](https://github.com/ws-io/ws.io-rs/commit/46db631))
+
 ## 0.11.3 - 2026-03-02 03:01
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.11.2...wsio-server-v0.11.3)

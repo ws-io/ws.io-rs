@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.3 - 2026-03-22 19:45
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.2...wsio-client-v0.8.3)
+
+### ✅ Tests
+
+- add more unit and e2e ([24b6bac](https://github.com/ws-io/ws.io-rs/commit/24b6bac))
+- add more units ([d973d57](https://github.com/ws-io/ws.io-rs/commit/d973d57))
+
+### 🏡 Chore
+
+- lint code ([7c03d10](https://github.com/ws-io/ws.io-rs/commit/7c03d10))
+
 ## 0.8.2 - 2026-03-02 03:01
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.1...wsio-client-v0.8.2)

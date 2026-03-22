@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.3 - 2026-03-22 19:45
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.2...wsio-core-v0.12.3)
+
+### ✅ Tests
+
+- *(core)* add unit for `WsIoEventRegistry` ([12f1189](https://github.com/ws-io/ws.io-rs/commit/12f1189))
+
+### 🏡 Chore
+
+- lint code ([7c03d10](https://github.com/ws-io/ws.io-rs/commit/7c03d10))
+
 ## 0.12.2 - 2026-03-02 03:01
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.1...wsio-core-v0.12.2)
