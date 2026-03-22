@@ -238,11 +238,9 @@ impl WsIoServerNamespace {
     pub(crate) fn remove_connection_id_from_room(&self, room_name: &str, connection_id: u64) {
         if let Some(mut entry) = self.rooms.get_mut(room_name) {
             entry.remove(connection_id);
-            if entry.is_empty() {
-                drop(entry);
-                self.rooms.remove(room_name);
-            }
         }
+
+        self.rooms.remove_if(room_name, |_, entry| entry.is_empty());
     }
 
     // Public methods
