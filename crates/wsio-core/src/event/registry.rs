@@ -114,11 +114,10 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
             }
         }
 
-        if let Entry::Occupied(entry) = self.event_entries.write().entry(event.into()) {
-            if entry.get().handlers.read().is_empty() {
+        if let Entry::Occupied(entry) = self.event_entries.write().entry(event.into())
+            && entry.get().handlers.read().is_empty() {
                 entry.remove();
             }
-        }
     }
 
     #[inline]

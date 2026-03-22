@@ -46,9 +46,6 @@ async fn test_client_builder_configuration_chaining() {
         .reconnect_delay(Duration::from_secs(5))
         .request_path("/custom/path")
         .build();
-
-    // Just verify build succeeds with all configurations
-    assert!(true);
 }
 
 #[tokio::test]
@@ -58,9 +55,6 @@ async fn test_client_builder_request_path_normalizes() {
         .unwrap()
         .request_path("/multiple//slashes///path/")
         .build();
-
-    // Build succeeds - path normalization is internal
-    assert!(true);
 }
 
 #[tokio::test]
@@ -71,8 +65,6 @@ async fn test_client_builder_websocket_config_override() {
             *config = config.max_frame_size(Some(1024 * 1024));
         })
         .build();
-
-    assert!(true);
 }
 
 #[tokio::test]
@@ -90,8 +82,6 @@ async fn test_client_builder_with_init_handler() {
             }
         })
         .build();
-
-    assert!(true);
 }
 
 #[tokio::test]
