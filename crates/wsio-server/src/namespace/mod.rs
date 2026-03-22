@@ -31,6 +31,7 @@ use tokio::{
     spawn,
     sync::Mutex,
     task::JoinSet,
+    time::timeout,
 };
 use tokio_tungstenite::{
     WebSocketStream,
@@ -206,7 +207,7 @@ impl WsIoServerNamespace {
     ) {
         let namespace = self.clone();
         self.connection_task_set.lock().await.spawn(async move {
-            if let Ok(upgraded) = on_upgrade.await {
+            if let Ok(Ok(upgraded)) = timeout(namespace.config.http_request_upgrade_timeout, on_upgrade).await {
                 let _ = namespace.handle_upgraded_request(headers, request_uri, upgraded).await;
             }
         });

@@ -31,6 +31,7 @@ impl WsIoServerNamespaceBuilder {
         Self {
             config: WsIoServerNamespaceConfig {
                 broadcast_concurrency_limit: runtime.config.broadcast_concurrency_limit,
+                http_request_upgrade_timeout: runtime.config.http_request_upgrade_timeout,
                 init_request_handler: None,
                 init_request_handler_timeout: runtime.config.init_request_handler_timeout,
                 init_response_handler: None,
@@ -56,8 +57,8 @@ impl WsIoServerNamespaceBuilder {
         self
     }
 
-    pub fn middleware_execution_timeout(mut self, duration: Duration) -> Self {
-        self.config.middleware_execution_timeout = duration;
+    pub fn http_request_upgrade_timeout(mut self, duration: Duration) -> Self {
+        self.config.http_request_upgrade_timeout = duration;
         self
     }
 
@@ -73,6 +74,11 @@ impl WsIoServerNamespaceBuilder {
 
     pub fn init_response_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_timeout = duration;
+        self
+    }
+
+    pub fn middleware_execution_timeout(mut self, duration: Duration) -> Self {
+        self.config.middleware_execution_timeout = duration;
         self
     }
 

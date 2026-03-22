@@ -45,6 +45,9 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Maximum number of concurrent broadcast operations.
     pub(crate) broadcast_concurrency_limit: usize,
 
+    /// Maximum duration to wait for the http request to upgrade the connection.
+    pub(super) http_request_upgrade_timeout: Duration,
+
     pub(crate) init_request_handler: Option<InitRequestHandler>,
 
     /// Maximum duration allowed for the init request handler to execute.

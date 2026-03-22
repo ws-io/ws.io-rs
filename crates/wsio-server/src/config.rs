@@ -12,6 +12,11 @@ pub(crate) struct WsIoServerConfig {
     /// Can be overridden by namespace-level configuration.
     pub(crate) broadcast_concurrency_limit: usize,
 
+    /// Maximum duration allowed for the http request upgrade  to complete.
+    ///
+    /// Can be overridden by namespace-level configuration.
+    pub(crate) http_request_upgrade_timeout: Duration,
+
     /// Maximum duration allowed for the init request handler to execute.
     ///
     /// Can be overridden by namespace-level configuration.

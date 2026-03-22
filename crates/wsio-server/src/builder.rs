@@ -19,6 +19,7 @@ impl WsIoServerBuilder {
         Self {
             config: WsIoServerConfig {
                 broadcast_concurrency_limit: 512,
+                http_request_upgrade_timeout: Duration::from_secs(3),
                 init_request_handler_timeout: Duration::from_secs(3),
                 init_response_handler_timeout: Duration::from_secs(3),
                 init_response_timeout: Duration::from_secs(5),
@@ -45,6 +46,11 @@ impl WsIoServerBuilder {
 
     pub fn build(self) -> WsIoServer {
         WsIoServer(WsIoServerRuntime::new(self.config))
+    }
+
+    pub fn http_request_upgrade_timeout(mut self, duration: Duration) -> Self {
+        self.config.http_request_upgrade_timeout = duration;
+        self
     }
 
     pub fn init_request_handler_timeout(mut self, duration: Duration) -> Self {
