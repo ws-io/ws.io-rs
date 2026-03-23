@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -33,11 +33,11 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests and show coverage
-        run: cargo llvm-cov --all-features --color always
+        run: cargo coverage
 
       - name: Generate lcov report
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+        run: cargo coverage-generate
 
       - name: Upload lcov report to codecov
         if: ${{ matrix.os == 'ubuntu-latest' }}
