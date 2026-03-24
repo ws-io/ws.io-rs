@@ -1,5 +1,5 @@
 [alias]
-format = "fmt --all -- --check"
-format-fix = "fmt --all"
+coverage = "llvm-cov --all-features --color always"
+coverage-generate = "llvm-cov --all-features --lcov --output-path ./lcov.info"
 lint = "clippy --all-features --all-targets -- -D warnings"
 lint-fix = "clippy --all-features --all-targets --fix -- -D warnings"
