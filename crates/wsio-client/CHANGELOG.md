@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.4 - 2026-03-24 07:00
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.3...wsio-client-v0.8.4)
+
+### 🏡 Chore
+
+- upgrade deps ([378bf42](https://github.com/ws-io/ws.io-rs/commit/378bf42))
+
 ## 0.8.3 - 2026-03-22 19:45
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.2...wsio-client-v0.8.3)
