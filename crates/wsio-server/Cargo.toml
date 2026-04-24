@@ -20,24 +20,24 @@ repository.workspace = true
 
 # Dependencies
 [dependencies]
-anyhow = "1.0.100"
-arc-swap = "1.8.0"
-futures-util = { version = "0.3.31", default-features = false }
+anyhow = "1.0.102"
+arc-swap = "1.9.1"
+futures-util = { version = "0.3.32", default-features = false }
 http = "1.4.0"
 http-body = "1.0.1"
-hyper = "1.8.1"
+hyper = "1.9.0"
 hyper-util = { version = "0.1.19", features = ["tokio"] }
 kikiutils = { version = "0.7.2", features = ["atomic-enum-cell", "fx-collections"] }
-num_enum = "0.7.5"
+num_enum = "0.7.6"
 parking_lot = "0.12.5"
 serde = "1.0.228"
-tokio = { version = "1.49.0", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.52.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["handshake"] }
 tokio-util = "0.7.18"
 tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
 wsio-core = { path = "../wsio-core", version = "0.12.4" }
-url = "2.5.7"
+url = "2.5.8"
 roaring = "0.11.3"
 
 [dev-dependencies]

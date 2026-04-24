@@ -20,17 +20,17 @@ repository.workspace = true
 
 # Dependencies
 [dependencies]
-anyhow = "1.0.100"
-arc-swap = "1.8.0"
-futures-util = { version = "0.3.31", default-features = false }
-kikiutils = { version = "0.7.2", features = ["atomic-enum-cell"] }
-num_enum = "0.7.5"
+anyhow = "1.0.102"
+arc-swap = "1.9.1"
+futures-util = { version = "0.3.32", default-features = false }
+kikiutils = { version = "0.7.3", features = ["atomic-enum-cell"] }
+num_enum = "0.7.6"
 serde = "1.0.228"
-tokio = { version = "1.49.0", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.52.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = "0.29.0"
 tokio-util = "0.7.18"
 tracing = { version = "0.1.44", optional = true }
-url = "2.5.7"
+url = "2.5.8"
 wsio-core = { path = "../wsio-core", version = "0.12.4" }
 
 # Features
