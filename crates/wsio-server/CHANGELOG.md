@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.2 - 2026-05-03 13:42
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.12.1...wsio-server-v0.12.2)
+
+### 🏡 Chore
+
+- *(server)* upgrade deps ([96fdbd5](https://github.com/ws-io/ws.io-rs/commit/96fdbd5))
+- *(server)* change `WsIoServerService` new method to `pub(super)` ([64d9362](https://github.com/ws-io/ws.io-rs/commit/64d9362))
+- update deps ([acfdd1e](https://github.com/ws-io/ws.io-rs/commit/acfdd1e))
+
 ## 0.12.1 - 2026-03-24 07:00
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.12.0...wsio-server-v0.12.1)

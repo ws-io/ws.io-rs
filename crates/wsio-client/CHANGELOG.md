@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.5 - 2026-05-03 13:42
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.4...wsio-client-v0.8.5)
+
+### 🏡 Chore
+
+- update deps ([acfdd1e](https://github.com/ws-io/ws.io-rs/commit/acfdd1e))
+
 ## 0.8.4 - 2026-03-24 07:00
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.3...wsio-client-v0.8.4)
