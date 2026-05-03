@@ -30,18 +30,18 @@ hyper-util = { version = "0.1.19", features = ["tokio"] }
 kikiutils = { version = "0.7.2", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
 parking_lot = "0.12.5"
+roaring = "0.11.4"
 serde = "1.0.228"
 tokio = { version = "1.52.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "0.29.0", default-features = false, features = ["handshake"] }
 tokio-util = "0.7.18"
 tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
-wsio-core = { path = "../wsio-core", version = "0.12.4" }
 url = "2.5.8"
-roaring = "0.11.3"
+wsio-core = { path = "../wsio-core", version = "0.12.4" }
 
 [dev-dependencies]
-axum = { version = "0.8.8", features = ["ws"] }
+axum = { version = "0.8.9", features = ["ws"] }
 wsio-client = { path = "../wsio-client", features = ["full"] }
 wsio-server = { path = "./", features = ["full"] }
 
