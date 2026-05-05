@@ -1,4 +1,4 @@
-name: Test and upload coverage on release
+name: Multi-Platform Verification & Code Coverage
 
 on:
   # push:
