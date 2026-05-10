@@ -217,6 +217,12 @@ impl WsIoClientRuntime {
             let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
             while let Some(message) = send_event_message_rx.recv().await {
                 loop {
+                    if let Some(session) = runtime.session.load().as_ref()
+                        && session.emit_event_message(message.clone()).await.is_ok()
+                    {
+                        break;
+                    }
+
                     let notified = runtime.wake_send_event_message_task_notify.notified();
                     if let Some(session) = runtime.session.load().as_ref()
                         && session.emit_event_message(message.clone()).await.is_ok()
