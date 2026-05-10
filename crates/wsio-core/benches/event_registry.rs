@@ -4,7 +4,10 @@ use std::{
 };
 
 use criterion::{
+    BatchSize,
+    BenchmarkId,
     Criterion,
+    Throughput,
     criterion_group,
     criterion_main,
 };
@@ -15,7 +18,6 @@ use wsio_core::{
     traits::task::spawner::TaskSpawner,
 };
 
-// 1. A dummy spawner that does nothing but drop the task or immediately resolve it
 struct DummySpawner {
     cancel_token: Arc<CancellationToken>,
 }
@@ -26,45 +28,107 @@ impl TaskSpawner for DummySpawner {
     }
 
     fn spawn_task<F: std::future::Future<Output = anyhow::Result<()>> + Send + 'static>(&self, _future: F) {
-        // We do not actually spawn Tokio tasks in the benchmark to avoid measuring Tokio's scheduler overhead.
-        // We solely want to measure the EventRegistry's internal dispatching mechanics (locks, maps, clones).
+        // Drop tasks so this benchmark isolates registry lookup, decode scheduling,
+        // handler snapshotting, and spawner calls rather than Tokio scheduler cost.
     }
 }
 
-// 2. Dummy Connection Context
 struct DummyConnection;
 
-fn bench_event_dispatcher(criterion: &mut Criterion) {
-    let registry = Arc::new(WsIoEventRegistry::<DummyConnection, DummySpawner>::new());
-    let spawner = Arc::new(DummySpawner {
+fn spawner() -> Arc<DummySpawner> {
+    Arc::new(DummySpawner {
         cancel_token: Arc::new(CancellationToken::new()),
-    });
+    })
+}
 
-    let ctx = Arc::new(DummyConnection);
-
-    // Register 100 handlers on the same event to see iteration cost
-    for _ in 0..100 {
+fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnection, DummySpawner> {
+    let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
+    for _ in 0..handler_count {
         registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
             Ok(())
         });
     }
 
+    registry
+}
+
+fn bench_event_dispatch(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("event_registry/dispatch");
+    let spawner = spawner();
+    let ctx = Arc::new(DummyConnection);
     let packet_codec = WsIoPacketCodec::SerdeJson;
     let packet_data = packet_codec.encode_data(&"Hello world benchmark").unwrap();
 
-    // The core benchmark loop for event registry
-    criterion.bench_function("dispatch_100_handlers", |bencher| {
-        bencher.iter(|| {
-            registry.dispatch_event_packet(
-                black_box(ctx.clone()),
-                black_box("chat"),
-                black_box(&packet_codec),
-                black_box(Some(packet_data.clone())),
-                black_box(&spawner),
-            );
-        })
-    });
+    for handler_count in [0, 1, 10, 100] {
+        let registry = Arc::new(registry_with_handlers(handler_count));
+        group.throughput(Throughput::Elements(handler_count.max(1) as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(handler_count),
+            &handler_count,
+            |bencher, _| {
+                bencher.iter(|| {
+                    registry.dispatch_event_packet(
+                        black_box(ctx.clone()),
+                        black_box("chat"),
+                        black_box(&packet_codec),
+                        black_box(Some(packet_data.clone())),
+                        black_box(&spawner),
+                    );
+                })
+            },
+        );
+    }
+
+    group.finish();
 }
 
-criterion_group!(benches, bench_event_dispatcher);
+fn bench_event_registry_mutation(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("event_registry/mutation");
+
+    group.bench_function("register_new_event", |bencher| {
+        bencher.iter_batched(
+            WsIoEventRegistry::<DummyConnection, DummySpawner>::new,
+            |registry| {
+                black_box(
+                    registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
+                        Ok(())
+                    }),
+                );
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("register_existing_event", |bencher| {
+        bencher.iter_batched(
+            || registry_with_handlers(1),
+            |registry| {
+                black_box(
+                    registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
+                        Ok(())
+                    }),
+                );
+            },
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("off_by_handler_id_last_handler", |bencher| {
+        bencher.iter_batched(
+            || {
+                let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
+                let handler_id = registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
+                    Ok(())
+                });
+                (registry, handler_id)
+            },
+            |(registry, handler_id)| registry.off_by_handler_id(black_box("chat"), black_box(handler_id)),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_event_dispatch, bench_event_registry_mutation);
 criterion_main!(benches);

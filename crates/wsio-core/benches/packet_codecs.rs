@@ -1,7 +1,9 @@
 use std::hint::black_box;
 
 use criterion::{
+    BenchmarkId,
     Criterion,
+    Throughput,
     criterion_group,
     criterion_main,
 };
@@ -21,13 +23,15 @@ struct BenchPayload {
     data: Vec<u8>,
 }
 
-fn bench_codecs(criterion: &mut Criterion) {
-    let payload = BenchPayload {
+fn payload(bytes: usize) -> BenchPayload {
+    BenchPayload {
         id: 12345,
         message: "This is a performance test for packet codecs".to_string(),
-        data: vec![0; 256], // 256 bytes payload
-    };
+        data: vec![0; bytes],
+    }
+}
 
+fn bench_codecs(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("packet_codecs");
 
     let codecs = [
@@ -43,36 +47,56 @@ fn bench_codecs(criterion: &mut Criterion) {
     ];
 
     for (name, codec) in codecs {
-        // Benchmark Encode Data
-        group.bench_function(format!("{}_encode_data", name), |bencher| {
-            bencher.iter(|| {
-                let _ = codec.encode_data(black_box(&payload)).unwrap();
-            })
-        });
+        for payload_size in [0, 256, 4096] {
+            let payload = payload(payload_size);
+            let encoded_data = codec.encode_data(&payload).unwrap();
+            let packet = WsIoPacket::new_event("benchmark_event", Some(encoded_data.clone()));
+            let encoded_packet = codec.encode(&packet).unwrap();
 
-        // Benchmark Decode Data
-        let encoded_data = codec.encode_data(&payload).unwrap();
-        group.bench_function(format!("{}_decode_data", name), |bencher| {
-            bencher.iter(|| {
-                let _: BenchPayload = codec.decode_data(black_box(&encoded_data)).unwrap();
-            })
-        });
+            group.throughput(Throughput::Bytes(payload_size.max(1) as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("{name}/encode_data"), payload_size),
+                &payload,
+                |bencher, payload| {
+                    bencher.iter(|| {
+                        let _ = codec.encode_data(black_box(payload)).unwrap();
+                    })
+                },
+            );
 
-        // Benchmark Encode Packet
-        let packet = WsIoPacket::new_event("benchmark_event", Some(encoded_data.clone()));
-        group.bench_function(format!("{}_encode_packet", name), |bencher| {
-            bencher.iter(|| {
-                let _ = codec.encode(black_box(&packet)).unwrap();
-            })
-        });
+            group.throughput(Throughput::Bytes(encoded_data.len() as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("{name}/decode_data"), payload_size),
+                &encoded_data,
+                |bencher, encoded_data| {
+                    bencher.iter(|| {
+                        let _: BenchPayload = codec.decode_data(black_box(encoded_data)).unwrap();
+                    })
+                },
+            );
 
-        // Benchmark Decode Packet
-        let encoded_packet = codec.encode(&packet).unwrap();
-        group.bench_function(format!("{}_decode_packet", name), |bencher| {
-            bencher.iter(|| {
-                let _ = codec.decode(black_box(&encoded_packet)).unwrap();
-            })
-        });
+            group.throughput(Throughput::Bytes(encoded_data.len() as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("{name}/encode_packet"), payload_size),
+                &packet,
+                |bencher, packet| {
+                    bencher.iter(|| {
+                        let _ = codec.encode(black_box(packet)).unwrap();
+                    })
+                },
+            );
+
+            group.throughput(Throughput::Bytes(encoded_packet.len() as u64));
+            group.bench_with_input(
+                BenchmarkId::new(format!("{name}/decode_packet"), payload_size),
+                &encoded_packet,
+                |bencher, encoded_packet| {
+                    bencher.iter(|| {
+                        let _ = codec.decode(black_box(encoded_packet)).unwrap();
+                    })
+                },
+            );
+        }
     }
 
     group.finish();
