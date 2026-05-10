@@ -102,3 +102,36 @@ impl WsIoClient {
         self.0.spawn_task(future);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builder_rejects_unparseable_url() {
+        let result = WsIoClient::builder("not a url");
+
+        match result {
+            Ok(_) => panic!("invalid URL should fail"),
+            Err(err) => assert!(err.to_string().contains("Invalid URL")),
+        }
+    }
+
+    #[test]
+    fn builder_rejects_wss_without_tls_features() {
+        let result = WsIoClient::builder("wss://localhost/socket");
+
+        if cfg!(any(
+            feature = "tls-native",
+            feature = "tls-rustls-native",
+            feature = "tls-rustls-webpki",
+        )) {
+            assert!(result.is_ok());
+        } else {
+            match result {
+                Ok(_) => panic!("wss URL should fail when no TLS feature is enabled"),
+                Err(err) => assert!(err.to_string().contains("TLS is required")),
+            }
+        }
+    }
+}

@@ -192,6 +192,7 @@ mod tests {
         let server = Arc::new(WsIoServer::builder().build());
         let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
             .broadcast_concurrency_limit(42)
+            .http_request_upgrade_timeout(Duration::from_millis(750))
             .init_request_handler_timeout(Duration::from_secs(1))
             .init_response_handler_timeout(Duration::from_secs(2))
             .init_response_timeout(Duration::from_secs(3))
@@ -199,6 +200,7 @@ mod tests {
             .on_close_handler_timeout(Duration::from_secs(5))
             .on_connect_handler_timeout(Duration::from_secs(6))
             .packet_codec(WsIoPacketCodec::Msgpack)
+            .websocket_config(WebSocketConfig::default().max_frame_size(Some(777)))
             .websocket_config_mut(|config| {
                 *config = config.max_frame_size(Some(888));
             });
@@ -206,6 +208,7 @@ mod tests {
         let config = &builder.config;
         assert_eq!(config.path, "/custom");
         assert_eq!(config.broadcast_concurrency_limit, 42);
+        assert_eq!(config.http_request_upgrade_timeout, Duration::from_millis(750));
         assert_eq!(config.init_request_handler_timeout, Duration::from_secs(1));
         assert_eq!(config.init_response_handler_timeout, Duration::from_secs(2));
         assert_eq!(config.init_response_timeout, Duration::from_secs(3));
@@ -214,6 +217,23 @@ mod tests {
         assert_eq!(config.on_connect_handler_timeout, Duration::from_secs(6));
         assert!(matches!(config.packet_codec, WsIoPacketCodec::Msgpack));
         assert_eq!(config.websocket_config.max_frame_size, Some(888));
+    }
+
+    #[tokio::test]
+    async fn test_namespace_builder_registers_lifecycle_handlers() {
+        let server = Arc::new(WsIoServer::builder().build());
+        let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
+            .on_connect(|_connection| async { Ok(()) })
+            .on_ready(|_connection| async { Ok(()) })
+            .with_middleware(|_connection| async { Ok(()) })
+            .with_init_request(|_connection| async { Ok(Some("request".to_string())) })
+            .with_init_response(|_connection, _data: Option<String>| async { Ok(()) });
+
+        assert!(builder.config.on_connect_handler.is_some());
+        assert!(builder.config.on_ready_handler.is_some());
+        assert!(builder.config.middleware.is_some());
+        assert!(builder.config.init_request_handler.is_some());
+        assert!(builder.config.init_response_handler.is_some());
     }
 
     #[test]

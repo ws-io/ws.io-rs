@@ -11,7 +11,10 @@ use tokio::{
     net::TcpListener,
     spawn,
     task::JoinHandle,
-    time::sleep,
+    time::{
+        sleep,
+        timeout,
+    },
 };
 use wsio_client::WsIoClient;
 use wsio_server::WsIoServer;
@@ -20,7 +23,10 @@ mod broadcast;
 mod ping_pong;
 mod reconnect;
 
- async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
+const CLIENT_STATE_TIMEOUT: Duration = Duration::from_secs(2);
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let local_addr = listener.local_addr().unwrap();
     let ws_url = format!("ws://{}/socket", local_addr);
@@ -44,30 +50,49 @@ mod reconnect;
 // ============================================================================
 
 /// Create and connect a client, waiting for session to be ready
- async fn create_connected_client(ws_url: &str) -> WsIoClient {
+async fn create_connected_client(ws_url: &str) -> WsIoClient {
     let client = WsIoClient::builder(ws_url).unwrap().build();
     client.connect().await;
-    while !client.is_session_ready() {
-        sleep(Duration::from_millis(10)).await;
-    }
+    wait_for_client_ready(&client).await;
     client
+}
+
+async fn wait_for_client_ready(client: &WsIoClient) {
+    timeout(CLIENT_STATE_TIMEOUT, async {
+        while !client.is_session_ready() {
+            sleep(POLL_INTERVAL).await;
+        }
+    })
+    .await
+    .expect("client session should become ready before timeout");
 }
 
 /// Wait for all given clients to have their sessions NOT ready (disconnected)
 /// Returns the number of clients confirmed disconnected
- async fn wait_for_clients_disconnected(clients: &[WsIoClient]) -> usize {
-    for _ in 0..100 {
+async fn wait_for_clients_disconnected(clients: &[WsIoClient]) -> usize {
+    if timeout(CLIENT_STATE_TIMEOUT, async {
         if clients.iter().all(|c| !c.is_session_ready()) {
-            return clients.len();
+            return;
         }
-        sleep(Duration::from_millis(10)).await;
-    }
 
-    0 // timeout
+        loop {
+            if clients.iter().all(|c| !c.is_session_ready()) {
+                break;
+            }
+            sleep(POLL_INTERVAL).await;
+        }
+    })
+    .await
+    .is_ok()
+    {
+        clients.len()
+    } else {
+        0
+    }
 }
 
 /// Disconnect all clients and abort server task
- async fn cleanup_e2e(clients: Vec<WsIoClient>, server_task: JoinHandle<()>) {
+async fn cleanup_e2e(clients: Vec<WsIoClient>, server_task: JoinHandle<()>) {
     for client in clients {
         client.disconnect().await;
     }

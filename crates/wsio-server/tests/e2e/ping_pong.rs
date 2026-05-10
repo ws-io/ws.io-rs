@@ -8,14 +8,14 @@ use tokio::{
         Mutex,
         oneshot::channel,
     },
-    time::{
-        sleep,
-        timeout,
-    },
+    time::timeout,
 };
 use wsio_client::WsIoClient;
 
-use super::setup_server;
+use super::{
+    setup_server,
+    wait_for_client_ready,
+};
 
 #[tokio::test]
 async fn test_e2e_ping_pong() {
@@ -57,12 +57,7 @@ async fn test_e2e_ping_pong() {
     // Connect Client
     client.connect().await;
 
-    // Wait until the client session is ready before emitting
-    // Realistically you might do this inside an `on_connect` hook for the client if available,
-    // or wait for a small delay/poll `is_session_ready()`.
-    while !client.is_session_ready() {
-        sleep(Duration::from_millis(10)).await;
-    }
+    wait_for_client_ready(&client).await;
 
     // Emit ping
     client.emit::<()>("ping", None).await.unwrap();

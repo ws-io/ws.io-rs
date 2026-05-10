@@ -12,7 +12,10 @@ use std::{
 use tokio::time::sleep;
 use wsio_client::WsIoClient;
 
-use super::setup_server;
+use super::{
+    setup_server,
+    wait_for_client_ready,
+};
 
 #[tokio::test]
 async fn test_e2e_client_reconnect() {
@@ -50,10 +53,7 @@ async fn test_e2e_client_reconnect() {
 
     client.connect().await;
 
-    // Phase 1: Wait until the client session is ready for the first time
-    while !client.is_session_ready() {
-        sleep(Duration::from_millis(10)).await;
-    }
+    wait_for_client_ready(&client).await;
 
     // Phase 2: Forced Disconnect
     // The server forcibly drops the tcp connection by calling close_all
@@ -75,11 +75,7 @@ async fn test_e2e_client_reconnect() {
     // The WsIoClientRuntime's underlying send_event_message_task should buffer this and block
     client.emit::<()>("survivor_msg", None).await.unwrap();
 
-    // Phase 4: Recovery
-    // Await the client's connection_loop_task to rebuild the session
-    while !client.is_session_ready() {
-        sleep(Duration::from_millis(10)).await;
-    }
+    wait_for_client_ready(&client).await;
 
     // Give the client event sender task a moment to flush the buffered event.
     sleep(Duration::from_millis(50)).await;

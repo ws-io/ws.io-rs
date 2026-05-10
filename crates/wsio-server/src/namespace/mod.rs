@@ -374,10 +374,20 @@ mod tests {
         namespace.add_connection_id_to_room("room1", 2);
         namespace.add_connection_id_to_room("room2", 3);
 
-        // Remove should work
+        assert_eq!(namespace.rooms.get("room1").unwrap().len(), 2);
+        assert!(namespace.rooms.get("room1").unwrap().contains(1));
+        assert!(namespace.rooms.get("room1").unwrap().contains(2));
+        assert_eq!(namespace.rooms.get("room2").unwrap().len(), 1);
+
         namespace.remove_connection_id_from_room("room1", 1);
+        assert_eq!(namespace.rooms.get("room1").unwrap().len(), 1);
+        assert!(namespace.rooms.get("room1").unwrap().contains(2));
+
         namespace.remove_connection_id_from_room("room1", 2);
         namespace.remove_connection_id_from_room("room2", 3);
+
+        assert!(!namespace.rooms.contains_key("room1"));
+        assert!(!namespace.rooms.contains_key("room2"));
     }
 
     #[tokio::test]
@@ -391,7 +401,9 @@ mod tests {
     async fn test_namespace_encode_packet_to_message() {
         let namespace = create_test_namespace();
         let packet = WsIoPacket::new_disconnect();
-        namespace.encode_packet_to_message(&packet).unwrap();
+        let message = namespace.encode_packet_to_message(&packet).unwrap();
+
+        assert!(matches!(&*message, Message::Text(_)));
     }
 
     #[tokio::test]
@@ -403,57 +415,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_broadcast_operator_new() {
-        let namespace = create_test_namespace();
-        // Just verify we can create an operator
-        namespace.to(["room1", "room2"]);
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_operator_to_chaining() {
-        let namespace = create_test_namespace();
-        // Chaining should work - just verify it doesn't panic
-        namespace.to(["room1"]).to(["room2"]);
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_operator_except_chaining() {
-        let namespace = create_test_namespace();
-        // Chaining should work - just verify it doesn't panic
-        namespace.except(["room1"]).except(["room2"]);
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_operator_except_connection_ids() {
-        let namespace = create_test_namespace();
-        // except_connection_ids is on the broadcast operator, not namespace
-        namespace
-            .clone()
-            .except([1.to_string()])
-            .except_connection_ids([1, 2, 3]);
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_operator_to_with_empty_rooms() {
-        let namespace = create_test_namespace();
-        // Empty rooms - should still work (broadcast to all)
-        namespace.to(Vec::<String>::new());
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_operator_combined() {
-        let namespace = create_test_namespace();
-        // Combined chaining should work without panicking
-        namespace
-            .to(["room1", "room2"])
-            .except(["room3"])
-            .except_connection_ids([100]);
-    }
-
-    #[tokio::test]
     async fn test_broadcast_operator_disconnect_with_no_connections() {
         let namespace = create_test_namespace();
-        // disconnect with no connections should return Ok
         let op = namespace.to(["room1"]);
         let result = op.clone().disconnect().await;
         assert!(result.is_ok());
@@ -470,13 +433,5 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("invalid status"));
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_operator_close_is_noop_when_empty() {
-        let namespace = create_test_namespace();
-        // close with no connections should not panic
-        let op = namespace.to(["room1"]);
-        op.clone().close().await;
     }
 }

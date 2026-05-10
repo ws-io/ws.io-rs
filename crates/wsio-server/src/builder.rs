@@ -114,6 +114,7 @@ mod tests {
     fn test_builder_configuration_chaining() {
         let server = WsIoServer::builder()
             .broadcast_concurrency_limit(1024)
+            .http_request_upgrade_timeout(Duration::from_millis(750))
             .init_request_handler_timeout(Duration::from_secs(1))
             .init_response_handler_timeout(Duration::from_secs(2))
             .init_response_timeout(Duration::from_secs(3))
@@ -130,6 +131,7 @@ mod tests {
         // Access internal config through the built runtime
         let config = &server.0.config;
         assert_eq!(config.broadcast_concurrency_limit, 1024);
+        assert_eq!(config.http_request_upgrade_timeout, Duration::from_millis(750));
         assert_eq!(config.init_request_handler_timeout, Duration::from_secs(1));
         assert_eq!(config.init_response_handler_timeout, Duration::from_secs(2));
         assert_eq!(config.init_response_timeout, Duration::from_secs(3));
