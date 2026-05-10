@@ -22,6 +22,17 @@ use crate::runtime::WsIoServerRuntime;
 
 // Functions
 #[inline]
+fn check_header_token<ReqBody>(request: &Request<ReqBody>, name: HeaderName, expected_token: &str) -> bool {
+    request.headers().get_all(name).iter().any(|value| {
+        value.to_str().is_ok_and(|value| {
+            value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case(expected_token))
+        })
+    })
+}
+
+#[inline]
 fn check_header_value<ReqBody>(request: &Request<ReqBody>, name: HeaderName, expected_value: &[u8]) -> bool {
     match request.headers().get(name) {
         Some(value) => value.as_bytes().eq_ignore_ascii_case(expected_value),
@@ -40,7 +51,7 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 
     // Check required headers
     if !check_header_value(&request, UPGRADE, b"websocket")
-        || !check_header_value(&request, CONNECTION, b"upgrade")
+        || !check_header_token(&request, CONNECTION, "upgrade")
         || !check_header_value(&request, SEC_WEBSOCKET_VERSION, b"13")
     {
         return respond(StatusCode::BAD_REQUEST);
@@ -90,4 +101,39 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 #[inline]
 fn respond<ResBody: Default, E: Send>(status: StatusCode) -> Result<Response<ResBody>, E> {
     Ok(Response::builder().status(status).body(ResBody::default()).unwrap())
+}
+
+#[cfg(test)]
+mod tests {
+    use http::header::CONNECTION;
+
+    use super::*;
+
+    #[test]
+    fn check_header_token_accepts_comma_separated_connection_values() {
+        let request = Request::builder()
+            .header(CONNECTION, "keep-alive, Upgrade")
+            .body(())
+            .unwrap();
+
+        assert!(check_header_token(&request, CONNECTION, "upgrade"));
+    }
+
+    #[test]
+    fn check_header_token_accepts_repeated_connection_headers() {
+        let request = Request::builder()
+            .header(CONNECTION, "keep-alive")
+            .header(CONNECTION, "Upgrade")
+            .body(())
+            .unwrap();
+
+        assert!(check_header_token(&request, CONNECTION, "upgrade"));
+    }
+
+    #[test]
+    fn check_header_token_rejects_partial_token_matches() {
+        let request = Request::builder().header(CONNECTION, "not-upgrade").body(()).unwrap();
+
+        assert!(!check_header_token(&request, CONNECTION, "upgrade"));
+    }
 }
