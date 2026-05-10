@@ -1,0 +1,31 @@
+[package]
+name = "wsio-adapter"
+version = "0.1.0"
+
+authors.workspace = true
+categories.workspace = true
+description = "Adapter extension crate for ws.io — reserved for future multi-node and custom broadcast adapter integrations."
+edition.workspace = true
+homepage.workspace = true
+include = [
+  "Cargo.toml",
+  "README.md",
+  "src/**/*",
+]
+
+keywords.workspace = true
+license.workspace = true
+readme = "./README.md"
+repository.workspace = true
+
+# Dependencies
+[dependencies]
+
+# Features
+[features]
+## Define features
+
+## Default and alias
+default = []
+all = []
+full = ["all"]
