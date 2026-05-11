@@ -1,4 +1,10 @@
+# Maybe you want to enable cranelift backend for faster builds in development mode
+# Reference: https://canmi.net/posts/development/rust-build-config-cranelift-profile-optimization
+# [profile.dev.package.xxx] or [profile.dev]
+# codegen-backend = "cranelift"
+
 [unstable]
+# codegen-backend = true
 profile-rustflags = true
 
 [alias]
