@@ -4,7 +4,8 @@
     "editor.tabSize": 2
   },
   "[toml]": {
-    "editor.formatOnSave": false
+    "editor.formatOnSave": false,
+    "editor.tabSize": 2
   },
   "editor.formatOnSave": true,
   "rust-analyzer.cargo.features": [

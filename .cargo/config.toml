@@ -1,3 +1,9 @@
+# Cargo config template.
+# Release target-specific rustflags should live in release scripts because Cargo
+# config cannot express "release AND this target" for rustflags.
+# If a script sets RUSTFLAGS/CARGO_ENCODED_RUSTFLAGS, it replaces target/build
+# rustflags instead of merging, so the script must provide the complete set.
+
 [unstable]
 profile-rustflags = true
 
@@ -12,29 +18,26 @@ lint-fix = "clippy --all-features --all-targets --fix -- -D warnings"
 [net]
 git-fetch-with-cli = true
 
+# Profiles
+
 [profile.dev]
 rustflags = [
-  "-C", "link-arg=-fuse-ld=mold",
   # "--cfg", "reqwest_unstable",
+  # "--cfg", "tokio_unstable",
 ]
 
 [profile.release]
 rustflags = [
-  "-C", "link-arg=-fuse-ld=mold",
-  "-C", "link-arg=-Wl,--icf=all",
-  "-C", "relro-level=full",
+  "-C", "force-frame-pointers=yes",
   # "-C", "target-cpu=native",
   # "--cfg", "reqwest_unstable",
+  # "--cfg", "tokio_unstable",
 ]
 
-# [target.'cfg(target_os = "linux")']
-# rustflags = [
-# ]
+# Targets
 
-# [target.'cfg(target_os = "macos")']
-# rustflags = [
-# ]
-
-# [target.'cfg(target_env = "msvc")']
-# rustflags = [
-# ]
+# Dev-safe target-wide examples only. Release-only target flags belong in scripts.
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=mold",
+]
