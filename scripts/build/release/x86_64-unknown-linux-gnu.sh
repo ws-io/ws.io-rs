@@ -2,12 +2,14 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/libs/common.sh
 . "${SCRIPT_DIR}/../../libs/common.sh"
 
 prepend_cargo_bin_to_path
 ensure_cargo_target x86_64-unknown-linux-gnu
 
+# shellcheck disable=SC2034 # Used indirectly by exec_with_encoded_rustflags.
 rustflags=(
     -C link-arg=-fuse-ld=mold
 
@@ -29,4 +31,4 @@ rustflags=(
     # -C link-arg=-Wl,--icf=all
 )
 
-exec_with_encoded_rustflags cargo b -r --target x86_64-unknown-linux-gnu "$@"
+exec_with_encoded_rustflags rustflags cargo b -r --target x86_64-unknown-linux-gnu "$@"
