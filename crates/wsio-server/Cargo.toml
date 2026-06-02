@@ -25,7 +25,7 @@ arc-swap = "1.9.1"
 futures-util = { version = "0.3.32", default-features = false }
 http = "1.4.0"
 http-body = "1.0.1"
-hyper = "1.9.0"
+hyper = "1.10.1"
 hyper-util = { version = "0.1.19", features = ["tokio"] }
 kikiutils = { version = "0.7.2", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
