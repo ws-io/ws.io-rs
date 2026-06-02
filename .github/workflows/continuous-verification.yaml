@@ -8,6 +8,10 @@ on:
       - wsio-server-v*
   workflow_dispatch: null
 
+concurrency:
+  group: ci-test-and-coverage
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Rust on ${{ matrix.os }}
