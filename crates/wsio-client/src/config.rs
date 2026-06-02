@@ -5,7 +5,10 @@ use std::{
 };
 
 use anyhow::Result;
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::{
+    http::Request,
+    protocol::WebSocketConfig,
+};
 
 use crate::{
     core::{
@@ -29,6 +32,9 @@ type InitHandler = Box<
         + Sync
         + 'static,
 >;
+
+type RequestModifier =
+    Box<dyn Fn(Request<()>) -> Pin<Box<dyn Future<Output = Result<Request<()>>> + Send>> + Send + Sync + 'static>;
 
 // Structs
 pub(crate) struct WsIoClientConfig {
@@ -55,6 +61,8 @@ pub(crate) struct WsIoClientConfig {
     pub(crate) ready_packet_timeout: Duration,
 
     pub(crate) reconnect_delay: Duration,
+
+    pub(crate) request_modifier: Option<RequestModifier>,
 
     pub(crate) websocket_config: WebSocketConfig,
 }

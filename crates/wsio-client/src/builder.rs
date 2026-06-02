@@ -11,7 +11,10 @@ use serde::{
     Serialize,
     de::DeserializeOwned,
 };
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::{
+    http::Request,
+    protocol::WebSocketConfig,
+};
 use url::Url;
 
 use crate::{
@@ -57,6 +60,7 @@ impl WsIoClientBuilder {
                 ping_interval: Duration::from_secs(25),
                 ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),
+                request_modifier: None,
                 websocket_config: WebSocketConfig::default()
                     .max_frame_size(Some(8 * 1024 * 1024))
                     .max_message_size(Some(16 * 1024 * 1024))
@@ -134,6 +138,15 @@ impl WsIoClientBuilder {
         self
     }
 
+    pub fn request_modifier<M, Fut>(mut self, modifier: M) -> Self
+    where
+        M: Fn(Request<()>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Request<()>>> + Send + 'static,
+    {
+        self.config.request_modifier = Some(Box::new(move |request| Box::pin(modifier(request))));
+        self
+    }
+
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
         self.connect_url
             .set_path(&Self::normalize_url_path(request_path.as_ref()));
@@ -175,6 +188,8 @@ impl WsIoClientBuilder {
 
 #[cfg(test)]
 mod tests {
+    use tokio_tungstenite::tungstenite::http::HeaderValue;
+
     use super::*;
 
     #[test]
@@ -279,6 +294,22 @@ mod tests {
         assert!(client.0.config.init_handler.is_some());
         assert!(client.0.config.on_session_ready_handler.is_some());
         assert!(client.0.config.on_session_close_handler.is_some());
+    }
+
+    #[test]
+    fn test_builder_request_modifier_registers_async_callback() {
+        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
+            .unwrap()
+            .request_modifier(|mut request| async move {
+                request
+                    .headers_mut()
+                    .insert("x-wsio-test", HeaderValue::from_static("enabled"));
+
+                Ok(request)
+            })
+            .build();
+
+        assert!(client.0.config.request_modifier.is_some());
     }
 
     #[test]

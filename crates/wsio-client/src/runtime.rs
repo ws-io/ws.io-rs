@@ -35,7 +35,10 @@ use tokio::{
 };
 use tokio_tungstenite::{
     connect_async_with_config,
-    tungstenite::Message,
+    tungstenite::{
+        Message,
+        client::IntoClientRequest,
+    },
 };
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -106,8 +109,12 @@ impl WsIoClientRuntime {
     // Private methods
     async fn run_connection(self: &Arc<Self>) -> Result<()> {
         // Connect to server
-        let (ws_stream, _) =
-            connect_async_with_config(self.connect_url.as_str(), Some(self.config.websocket_config), false).await?;
+        let mut request = self.connect_url.as_str().into_client_request()?;
+        if let Some(modifier) = &self.config.request_modifier {
+            request = modifier(request).await?;
+        }
+
+        let (ws_stream, _) = connect_async_with_config(request, Some(self.config.websocket_config), false).await?;
 
         // Create session and init
         let (session, mut message_rx) = WsIoClientSession::new(self.clone());
