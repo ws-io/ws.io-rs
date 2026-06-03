@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.6 - 2026-06-03 04:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.5...wsio-core-v0.12.6)
+
+### ✅ Tests
+
+- organize tests and benchmarks ([6be6cc3](https://github.com/ws-io/ws.io-rs/commit/6be6cc3))
+- expand benchmark coverage for realtime paths ([7665ff5](https://github.com/ws-io/ws.io-rs/commit/7665ff5))
+- tiny up test units and add more units ([d0c4949](https://github.com/ws-io/ws.io-rs/commit/d0c4949))
+
+### 🏡 Chore
+
+- organize and unify `Cargo.toml` ([3616d52](https://github.com/ws-io/ws.io-rs/commit/3616d52))
+- upgrade deps ([4106075](https://github.com/ws-io/ws.io-rs/commit/4106075))
+- upgrade deps ([51c9ef3](https://github.com/ws-io/ws.io-rs/commit/51c9ef3))
+
 ## 0.12.5 - 2026-05-03 13:42
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.4...wsio-core-v0.12.5)

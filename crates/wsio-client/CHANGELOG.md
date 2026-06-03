@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.6 - 2026-06-03 04:01
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.5...wsio-client-v0.8.6)
+
+### ✅ Tests
+
+- organize tests and benchmarks ([6be6cc3](https://github.com/ws-io/ws.io-rs/commit/6be6cc3))
+- tiny up test units and add more units ([d0c4949](https://github.com/ws-io/ws.io-rs/commit/d0c4949))
+
+### 🏡 Chore
+
+- organize and unify `Cargo.toml` ([3616d52](https://github.com/ws-io/ws.io-rs/commit/3616d52))
+- upgrade deps ([51c9ef3](https://github.com/ws-io/ws.io-rs/commit/51c9ef3))
+
+### 📖 Documentation
+
+- *(config)* document client and server configuration ([2b49c13](https://github.com/ws-io/ws.io-rs/commit/2b49c13))
+
+### 🚀 Enhancements
+
+- *(client)* add async request modifier ([6fc8e07](https://github.com/ws-io/ws.io-rs/commit/6fc8e07))
+
+### 🩹 Fixes
+
+- *(client)* avoid missed wakeup while flushing buffered emits ([74572c4](https://github.com/ws-io/ws.io-rs/commit/74572c4))
+
 ## 0.8.5 - 2026-05-03 13:42
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.4...wsio-client-v0.8.5)
