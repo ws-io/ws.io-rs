@@ -14,7 +14,7 @@ categories = [
   "web-programming::websocket",
 ]
 
-description = "A lightweight, async WebSocket framework inspired by Socket.IO — composed of ws-io-core, ws-io-client, and ws-io-server crates."
+description = "An async, event-driven WebSocket framework inspired by Socket.IO."
 edition = "2024"
 homepage = "https://github.com/ws-io/ws.io-rs"
 keywords = [

@@ -4,7 +4,7 @@ version = "0.8.5"
 
 authors.workspace = true
 categories.workspace = true
-description = "Lightweight async WebSocket client for ws.io — provides event-based real-time messaging with a Socket.IO-inspired API."
+description = "Event-driven WebSocket client for ws.io."
 edition.workspace = true
 homepage.workspace = true
 include = [
@@ -17,6 +17,45 @@ keywords.workspace = true
 license.workspace = true
 readme = "./README.md"
 repository.workspace = true
+
+# Optional package metadata
+# rust-version.workspace = true
+# documentation = "https://docs.rs/crate-name"
+# exclude = []
+# publish = true
+# build = "build.rs"
+# links = "native-library-name"
+
+# Optional cargo metadata
+# [package.metadata]
+
+# Optional lint configuration
+# [lints]
+# workspace = true
+
+# Features
+[features]
+## Default, aliases, and feature groups
+default = []
+all = [
+  "packet-codec-cbor",
+  "packet-codec-msgpack",
+  "packet-codec-postcard",
+  "packet-codec-sonic-rs",
+  "tls-rustls-webpki",
+]
+
+full = ["all"]
+
+## Feature flags
+packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
+packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
+packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
+packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
+tls-native = ["tokio-tungstenite/native-tls"]
+tls-rustls-native = ["tokio-tungstenite/rustls-tls-native-roots"]
+tls-rustls-webpki = ["tokio-tungstenite/rustls-tls-webpki-roots"]
+tracing = ["dep:tracing"]
 
 # Dependencies
 [dependencies]
@@ -33,26 +72,67 @@ tracing = { version = "0.1.44", optional = true }
 url = "2.5.8"
 wsio-core = { path = "../wsio-core", version = "0.12.5" }
 
-# Features
-[features]
-## Define features
-packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
-packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
-packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
-packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
-tls-native = ["tokio-tungstenite/native-tls"]
-tls-rustls-native = ["tokio-tungstenite/rustls-tls-native-roots"]
-tls-rustls-webpki = ["tokio-tungstenite/rustls-tls-webpki-roots"]
-tracing = ["dep:tracing"]
+# Target-specific dependencies
+# [target.'cfg(unix)'.dependencies]
+#
+# [target.'cfg(windows)'.dependencies]
+#
+# [target.'cfg(target_arch = "wasm32")'.dependencies]
 
-## Default and alias
-default = []
-all = [
-  "packet-codec-cbor",
-  "packet-codec-msgpack",
-  "packet-codec-postcard",
-  "packet-codec-sonic-rs",
-  "tls-rustls-webpki",
-]
+# Build dependencies
+# [build-dependencies]
 
-full = ["all"]
+# Target-specific build dependencies
+# [target.'cfg(unix)'.build-dependencies]
+
+# Development dependencies
+# [dev-dependencies]
+
+# Target-specific development dependencies
+# [target.'cfg(unix)'.dev-dependencies]
+
+# Library target
+# [lib]
+# name = "crate_name"
+# path = "src/lib.rs"
+# crate-type = ["lib"]
+# doctest = true
+
+# Binary targets
+# [[bin]]
+# name = "crate-name"
+# path = "src/main.rs"
+# required-features = []
+
+# Example targets
+# [[example]]
+# name = "example-name"
+# path = "examples/example-name.rs"
+# required-features = []
+
+# Test targets
+# [[test]]
+# name = "integration"
+# path = "tests/integration.rs"
+# required-features = []
+
+# Benchmark targets
+# [[bench]]
+# name = "benchmark-name"
+# path = "benches/benchmark-name.rs"
+# harness = false
+# required-features = []
+
+# Optional build profiles. Prefer defining profiles at the workspace root.
+# [profile.dev]
+#
+# [profile.release]
+#
+# [profile.test]
+#
+# [profile.bench]
+
+# Optional dependency overrides. Prefer defining patches at the workspace root.
+# [patch.crates-io]
+#
+# [replace]

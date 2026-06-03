@@ -4,7 +4,7 @@ version = "0.12.5"
 
 authors.workspace = true
 categories.workspace = true
-description = "Shared core library for ws.io — provides common types, traits, and abstractions for WebSocket-based communication."
+description = "Shared packet, event, and task primitives for ws.io."
 edition.workspace = true
 homepage.workspace = true
 include = [
@@ -17,6 +17,40 @@ keywords.workspace = true
 license.workspace = true
 readme = "./README.md"
 repository.workspace = true
+
+# Optional package metadata
+# rust-version.workspace = true
+# documentation = "https://docs.rs/crate-name"
+# exclude = []
+# publish = true
+# build = "build.rs"
+# links = "native-library-name"
+
+# Optional cargo metadata
+# [package.metadata]
+
+# Optional lint configuration
+# [lints]
+# workspace = true
+
+# Features
+[features]
+## Default, aliases, and feature groups
+default = []
+all = [
+  "packet-codec-cbor",
+  "packet-codec-msgpack",
+  "packet-codec-postcard",
+  "packet-codec-sonic-rs",
+]
+
+full = ["all"]
+
+## Feature flags
+packet-codec-cbor = ["dep:ciborium"]
+packet-codec-msgpack = ["dep:rmp-serde"]
+packet-codec-postcard = ["dep:postcard"]
+packet-codec-sonic-rs = ["dep:sonic-rs"]
 
 # Dependencies
 [dependencies]
@@ -34,33 +68,74 @@ tokio = { version = "1.52.3", features = ["macros", "rt", "sync"] }
 tokio-util = "0.7.18"
 tungstenite = { version = "0.29.0", default-features = false }
 
+# Target-specific dependencies
+# [target.'cfg(unix)'.dependencies]
+#
+# [target.'cfg(windows)'.dependencies]
+#
+# [target.'cfg(target_arch = "wasm32")'.dependencies]
+
+# Build dependencies
+# [build-dependencies]
+
+# Target-specific build dependencies
+# [target.'cfg(unix)'.build-dependencies]
+
+# Development dependencies
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["async_tokio"] }
 
-# Features
-[features]
-## Define features
-packet-codec-cbor = ["dep:ciborium"]
-packet-codec-msgpack = ["dep:rmp-serde"]
-packet-codec-postcard = ["dep:postcard"]
-packet-codec-sonic-rs = ["dep:sonic-rs"]
+# Target-specific development dependencies
+# [target.'cfg(unix)'.dev-dependencies]
 
-## Default and alias
-default = []
-all = [
-  "packet-codec-cbor",
-  "packet-codec-msgpack",
-  "packet-codec-postcard",
-  "packet-codec-sonic-rs",
-]
+# Library target
+# [lib]
+# name = "crate_name"
+# path = "src/lib.rs"
+# crate-type = ["lib"]
+# doctest = true
 
-full = ["all"]
+# Binary targets
+# [[bin]]
+# name = "crate-name"
+# path = "src/main.rs"
+# required-features = []
 
-# Benchmarks
+# Example targets
+# [[example]]
+# name = "example-name"
+# path = "examples/example-name.rs"
+# required-features = []
+
+# Test targets
+# [[test]]
+# name = "integration"
+# path = "tests/integration.rs"
+# required-features = []
+
+# Benchmark targets
 [[bench]]
 name = "event_registry"
+path = "benches/event_registry.rs"
 harness = false
+required-features = []
 
 [[bench]]
 name = "packet_codecs"
+path = "benches/packet_codecs.rs"
 harness = false
+required-features = []
+
+# Optional build profiles. Prefer defining profiles at the workspace root.
+# [profile.dev]
+#
+# [profile.release]
+#
+# [profile.test]
+#
+# [profile.bench]
+
+# Optional dependency overrides. Prefer defining patches at the workspace root.
+# [patch.crates-io]
+#
+# [replace]
