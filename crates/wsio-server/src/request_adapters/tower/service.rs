@@ -65,3 +65,59 @@ where
         self.inner.poll_ready(ctx)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        convert::Infallible,
+        future::{
+            Ready,
+            ready,
+        },
+    };
+
+    use axum::body::Body as AxumBody;
+    use http::StatusCode;
+
+    use super::*;
+    use crate::WsIoServer;
+
+    #[derive(Clone)]
+    struct DummyService {
+        status: StatusCode,
+    }
+
+    impl TowerService<Request<AxumBody>> for DummyService {
+        type Error = Infallible;
+        type Future = Ready<Result<Self::Response, Self::Error>>;
+        type Response = Response<AxumBody>;
+
+        fn call(&mut self, _request: Request<AxumBody>) -> Self::Future {
+            ready(Ok(Response::builder()
+                .status(self.status)
+                .body(AxumBody::empty())
+                .unwrap()))
+        }
+
+        fn poll_ready(&mut self, _ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    #[tokio::test]
+    async fn request_path_mismatch_delegates_to_inner_service() {
+        let server = WsIoServer::builder().request_path("/ws.io").build();
+        let mut service = WsIoServerService::new(
+            DummyService {
+                status: StatusCode::IM_A_TEAPOT,
+            },
+            server.0,
+        );
+
+        let request = Request::builder().uri("/not-ws.io").body(AxumBody::empty()).unwrap();
+
+        let response = service.call(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::IM_A_TEAPOT);
+    }
+}

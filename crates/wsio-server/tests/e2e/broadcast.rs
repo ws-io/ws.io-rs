@@ -10,19 +10,34 @@ use std::{
 };
 
 use tokio::time::sleep;
+use wsio_client::WsIoClient;
 
 use super::{
+    TEST_NAMESPACE,
     cleanup_e2e,
+    cleanup_server_task,
     create_connected_client,
+    register_test_namespace,
     setup_server,
     wait_for_clients_disconnected,
+    wait_for_condition,
 };
+
+fn register_unit_counter(client: &WsIoClient, event: &str, counter: Arc<AtomicUsize>) {
+    client.on(event, move |_ctx, _data: Arc<()>| {
+        let counter = counter.clone();
+        async move {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    });
+}
 
 #[tokio::test]
 async fn test_e2e_disconnect_all() {
     let (server_task, server, ws_url) = setup_server().await;
 
-    server.new_namespace_builder("/socket").register().unwrap();
+    register_test_namespace(&server);
 
     let client_a = create_connected_client(&ws_url).await;
     let client_b = create_connected_client(&ws_url).await;
@@ -48,8 +63,7 @@ async fn test_e2e_multiple_namespaces() {
 
     assert_eq!(server.namespace_count(), 2);
 
-    server_task.abort();
-    let _ = server_task.await;
+    cleanup_server_task(server_task).await;
 }
 
 #[tokio::test]
@@ -57,7 +71,7 @@ async fn test_e2e_broadcast_and_rooms() {
     let (server_task, server, ws_url) = setup_server().await;
 
     let server_namespace = server
-        .new_namespace_builder("/socket")
+        .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(|ctx| async move {
             ctx.on("join_room", |event_ctx, room: Arc<String>| async move {
                 event_ctx.join([room.as_str()]);
@@ -83,67 +97,12 @@ async fn test_e2e_broadcast_and_rooms() {
     let c_received_room = Arc::new(AtomicUsize::new(0));
 
     // Register handlers
-    client_a.on("broadcast_msg", {
-        let c = a_received_broadcast.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
-    client_b.on("broadcast_msg", {
-        let c = b_received_broadcast.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
-    client_c.on("broadcast_msg", {
-        let c = c_received_broadcast.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
-
-    client_a.on("room_msg", {
-        let c = a_received_room.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
-    client_b.on("room_msg", {
-        let c = b_received_room.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
-    client_c.on("room_msg", {
-        let c = c_received_room.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
+    register_unit_counter(&client_a, "broadcast_msg", a_received_broadcast.clone());
+    register_unit_counter(&client_b, "broadcast_msg", b_received_broadcast.clone());
+    register_unit_counter(&client_c, "broadcast_msg", c_received_broadcast.clone());
+    register_unit_counter(&client_a, "room_msg", a_received_room.clone());
+    register_unit_counter(&client_b, "room_msg", b_received_room.clone());
+    register_unit_counter(&client_c, "room_msg", c_received_room.clone());
 
     client_a.on("joined", |_ctx, _data: Arc<()>| async { Ok(()) });
     client_b.on("joined", |_ctx, _data: Arc<()>| async { Ok(()) });
@@ -195,7 +154,7 @@ async fn test_e2e_broadcast_and_rooms() {
 async fn test_e2e_emit_with_data() {
     let (server_task, server, ws_url) = setup_server().await;
 
-    let server_namespace = server.new_namespace_builder("/socket").register().unwrap();
+    let server_namespace = register_test_namespace(&server);
 
     #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
     struct Payload {
@@ -238,7 +197,7 @@ async fn test_e2e_emit_with_data() {
 async fn test_e2e_close_all() {
     let (server_task, server, ws_url) = setup_server().await;
 
-    server.new_namespace_builder("/socket").register().unwrap();
+    register_test_namespace(&server);
 
     let client_a = create_connected_client(&ws_url).await;
     let client_b = create_connected_client(&ws_url).await;
@@ -266,15 +225,14 @@ async fn test_e2e_remove_namespace() {
     assert_eq!(server.namespace_count(), 0);
     assert!(server.of("/test").is_none());
 
-    server_task.abort();
-    let _ = server_task.await;
+    cleanup_server_task(server_task).await;
 }
 
 #[tokio::test]
 async fn test_e2e_client_disconnect() {
     let (server_task, server, ws_url) = setup_server().await;
 
-    server.new_namespace_builder("/socket").register().unwrap();
+    register_test_namespace(&server);
 
     let client = create_connected_client(&ws_url).await;
 
@@ -283,25 +241,18 @@ async fn test_e2e_client_disconnect() {
     client.disconnect().await;
 
     // Wait for connection to be cleaned up
-    let mut cleaned = false;
-    for _ in 0..100 {
-        if server.connection_count() == 0 {
-            cleaned = true;
-            break;
-        }
-        sleep(Duration::from_millis(10)).await;
-    }
-    assert!(cleaned, "Connection should be cleaned up after client disconnect");
+    wait_for_condition(|| server.connection_count() == 0)
+        .await
+        .expect("connection should be cleaned up after client disconnect");
 
-    server_task.abort();
-    let _ = server_task.await;
+    cleanup_server_task(server_task).await;
 }
 
 #[tokio::test]
 async fn test_e2e_broadcast_chaining() {
     let (server_task, server, ws_url) = setup_server().await;
 
-    server.new_namespace_builder("/socket").register().unwrap();
+    register_test_namespace(&server);
 
     let client_a = create_connected_client(&ws_url).await;
     let client_b = create_connected_client(&ws_url).await;
@@ -309,26 +260,8 @@ async fn test_e2e_broadcast_chaining() {
     let a_received = Arc::new(AtomicUsize::new(0));
     let b_received = Arc::new(AtomicUsize::new(0));
 
-    client_a.on("msg", {
-        let c = a_received.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
-    client_b.on("msg", {
-        let c = b_received.clone();
-        move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-    });
+    register_unit_counter(&client_a, "msg", a_received.clone());
+    register_unit_counter(&client_b, "msg", b_received.clone());
 
     // Test chaining: .to().emit()
     server
@@ -354,7 +287,7 @@ async fn test_e2e_on_ready_handler() {
     let ready_called = Arc::new(AtomicUsize::new(0));
     let ready_called_clone = ready_called.clone();
 
-    let mut namespace_builder = server.new_namespace_builder("/socket");
+    let mut namespace_builder = server.new_namespace_builder(TEST_NAMESPACE);
     namespace_builder = namespace_builder.on_ready(move |_ctx| {
         let c = ready_called_clone.clone();
         async move {
@@ -380,7 +313,7 @@ async fn test_e2e_on_close_handler() {
     let close_called = Arc::new(AtomicUsize::new(0));
     let close_called_clone = close_called.clone();
 
-    let mut namespace_builder = server.new_namespace_builder("/socket");
+    let mut namespace_builder = server.new_namespace_builder(TEST_NAMESPACE);
     namespace_builder = namespace_builder.on_connect(move |ctx| {
         let c = close_called_clone.clone();
         async move {
@@ -402,18 +335,11 @@ async fn test_e2e_on_close_handler() {
     client.disconnect().await;
 
     // Wait for close handler to be called
-    let mut called = false;
-    for _ in 0..100 {
-        if close_called.load(Ordering::SeqCst) == 1 {
-            called = true;
-            break;
-        }
-        sleep(Duration::from_millis(10)).await;
-    }
-    assert!(called, "on_close handler should be called");
+    wait_for_condition(|| close_called.load(Ordering::SeqCst) == 1)
+        .await
+        .expect("on_close handler should be called");
 
-    server_task.abort();
-    let _ = server_task.await;
+    cleanup_server_task(server_task).await;
 }
 
 #[tokio::test]
@@ -421,7 +347,7 @@ async fn test_e2e_except_room_broadcast() {
     let (server_task, server, ws_url) = setup_server().await;
 
     let server_namespace = server
-        .new_namespace_builder("/socket")
+        .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(|ctx| async move {
             ctx.on("join", |event_ctx, room: Arc<String>| async move {
                 event_ctx.join([room.as_str()]);
@@ -445,14 +371,7 @@ async fn test_e2e_except_room_broadcast() {
         (&client_b, b_received.clone()),
         (&client_c, c_received.clone()),
     ] {
-        let c = count.clone();
-        client.on("msg", move |_ctx, _data: Arc<()>| {
-            let c = c.clone();
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        });
+        register_unit_counter(client, "msg", count);
     }
 
     // A and B join room1, C joins room2
@@ -482,7 +401,7 @@ async fn test_e2e_except_room_broadcast() {
 async fn test_e2e_namespace_connection_count() {
     let (server_task, server, ws_url) = setup_server().await;
 
-    server.new_namespace_builder("/socket").register().unwrap();
+    register_test_namespace(&server);
 
     assert_eq!(server.connection_count(), 0);
 
@@ -498,7 +417,7 @@ async fn test_e2e_server_connection_count() {
     let (server_task, server, ws_url) = setup_server().await;
 
     // Register /socket namespace so clients can connect
-    server.new_namespace_builder("/socket").register().unwrap();
+    register_test_namespace(&server);
 
     let client1 = create_connected_client(&ws_url).await;
     let client2 = create_connected_client(&ws_url).await;

@@ -18,6 +18,13 @@ use wsio_core::{
     traits::task::spawner::TaskSpawner,
 };
 
+// Constants/Statics
+const EVENT_NAME: &str = "chat";
+const HANDLER_COUNTS: [usize; 4] = [0, 1, 10, 100];
+
+// Structs
+struct DummyConnection;
+
 struct DummySpawner {
     cancel_token: Arc<CancellationToken>,
 }
@@ -33,8 +40,7 @@ impl TaskSpawner for DummySpawner {
     }
 }
 
-struct DummyConnection;
-
+// Functions
 fn spawner() -> Arc<DummySpawner> {
     Arc::new(DummySpawner {
         cancel_token: Arc::new(CancellationToken::new()),
@@ -44,12 +50,16 @@ fn spawner() -> Arc<DummySpawner> {
 fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnection, DummySpawner> {
     let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
     for _ in 0..handler_count {
-        registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
-            Ok(())
-        });
+        register_handler(&registry);
     }
 
     registry
+}
+
+fn register_handler(registry: &WsIoEventRegistry<DummyConnection, DummySpawner>) -> u32 {
+    registry.on(EVENT_NAME, |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
+        Ok(())
+    })
 }
 
 fn bench_event_dispatch(criterion: &mut Criterion) {
@@ -59,7 +69,7 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
     let packet_codec = WsIoPacketCodec::SerdeJson;
     let packet_data = packet_codec.encode_data(&"Hello world benchmark").unwrap();
 
-    for handler_count in [0, 1, 10, 100] {
+    for handler_count in HANDLER_COUNTS {
         let registry = Arc::new(registry_with_handlers(handler_count));
         group.throughput(Throughput::Elements(handler_count.max(1) as u64));
         group.bench_with_input(
@@ -69,7 +79,7 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
                 bencher.iter(|| {
                     registry.dispatch_event_packet(
                         black_box(ctx.clone()),
-                        black_box("chat"),
+                        black_box(EVENT_NAME),
                         black_box(&packet_codec),
                         black_box(Some(packet_data.clone())),
                         black_box(&spawner),
@@ -89,11 +99,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
         bencher.iter_batched(
             WsIoEventRegistry::<DummyConnection, DummySpawner>::new,
             |registry| {
-                black_box(
-                    registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
-                        Ok(())
-                    }),
-                );
+                black_box(register_handler(&registry));
             },
             BatchSize::SmallInput,
         )
@@ -103,11 +109,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
         bencher.iter_batched(
             || registry_with_handlers(1),
             |registry| {
-                black_box(
-                    registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
-                        Ok(())
-                    }),
-                );
+                black_box(register_handler(&registry));
             },
             BatchSize::SmallInput,
         )
@@ -117,12 +119,10 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
         bencher.iter_batched(
             || {
                 let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
-                let handler_id = registry.on("chat", |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
-                    Ok(())
-                });
+                let handler_id = register_handler(&registry);
                 (registry, handler_id)
             },
-            |(registry, handler_id)| registry.off_by_handler_id(black_box("chat"), black_box(handler_id)),
+            |(registry, handler_id)| registry.off_by_handler_id(black_box(EVENT_NAME), black_box(handler_id)),
             BatchSize::SmallInput,
         )
     });

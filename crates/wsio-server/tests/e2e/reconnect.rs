@@ -13,8 +13,11 @@ use tokio::time::sleep;
 use wsio_client::WsIoClient;
 
 use super::{
+    TEST_NAMESPACE,
+    cleanup_e2e,
     setup_server,
     wait_for_client_ready,
+    wait_for_condition,
 };
 
 #[tokio::test]
@@ -22,8 +25,8 @@ async fn test_e2e_client_reconnect() {
     // 1. Setup Server
     let (server_task, server, ws_url) = setup_server().await;
 
-    // Register a default namespace "/socket"
-    let namespace_builder = server.new_namespace_builder("/socket");
+    // Register the default test namespace.
+    let namespace_builder = server.new_namespace_builder(TEST_NAMESPACE);
     let survivor_msg_count = Arc::new(AtomicUsize::new(0));
     let survivor_msg_count_clone = survivor_msg_count.clone();
     namespace_builder
@@ -59,19 +62,12 @@ async fn test_e2e_client_reconnect() {
     // The server forcibly drops the tcp connection by calling close_all
     server.close_all().await;
 
-    // Give it a moment for the client's internal sockets to detect closure
-    // We loop and wait until it is definitively offline. Timeout if it takes too long.
-    let mut off_loops = 0;
-    while client.is_session_ready() {
-        sleep(Duration::from_millis(10)).await;
-        off_loops += 1;
-        if off_loops > 100 {
-            panic!("Client did not disconnect as expected after server drop.");
-        }
-    }
+    wait_for_condition(|| !client.is_session_ready())
+        .await
+        .expect("client should disconnect after server close_all");
 
     // Phase 3: Buffering
-    // Immedately emit an event while the client is still offline and trying to reconnect
+    // Immediately emit an event while the client is still offline and trying to reconnect.
     // The WsIoClientRuntime's underlying send_event_message_task should buffer this and block
     client.emit::<()>("survivor_msg", None).await.unwrap();
 
@@ -88,8 +84,5 @@ async fn test_e2e_client_reconnect() {
         "Server should receive the buffered 'survivor_msg' after client reconnects"
     );
 
-    // Cleanup
-    client.disconnect().await;
-    server_task.abort();
-    let _ = server_task.await;
+    cleanup_e2e(vec![client], server_task).await;
 }

@@ -17,6 +17,7 @@ use axum::{
 use criterion::{
     BenchmarkId,
     Criterion,
+    Throughput,
     criterion_group,
     criterion_main,
 };
@@ -41,9 +42,17 @@ use wsio_server::{
     namespace::WsIoServerNamespace,
 };
 
+// Constants/Statics
+const ACK_EVENTS: [&str; 2] = ["joined", "left"];
+const CLIENT_COUNTS: [usize; 3] = [1, 10, 50];
 const CLIENT_READY_TIMEOUT: Duration = Duration::from_secs(3);
+const LARGE_PAYLOAD_CLIENT_COUNT: usize = 10;
+const LARGE_PAYLOAD_SIZES: [usize; 2] = [1024, 16 * 1024];
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
+const ROOM_A: &str = "room-a";
+const TEST_NAMESPACE: &str = "/socket";
 
+// Structs
 struct BenchServer {
     ack_count: Arc<AtomicUsize>,
     clients: Vec<WsIoClient>,
@@ -62,24 +71,42 @@ impl BenchServer {
     }
 }
 
-async fn wait_for_client_ready(client: &WsIoClient) {
+// Functions
+async fn wait_for_condition(mut condition: impl FnMut() -> bool, failure: &str) {
     timeout(CLIENT_READY_TIMEOUT, async {
-        while !client.is_session_ready() {
+        while !condition() {
             sleep(POLL_INTERVAL).await;
         }
     })
     .await
-    .expect("benchmark client should become ready");
+    .expect(failure);
+}
+
+async fn wait_for_client_ready(client: &WsIoClient) {
+    wait_for_condition(|| client.is_session_ready(), "benchmark client should become ready").await;
+}
+
+fn register_ack_counter(client: &WsIoClient, ack_count: &Arc<AtomicUsize>) {
+    for event in ACK_EVENTS {
+        let ack_count = ack_count.clone();
+        client.on(event, move |_session, _data: Arc<()>| {
+            let ack_count = ack_count.clone();
+            async move {
+                ack_count.fetch_add(1, Ordering::Relaxed);
+                Ok(())
+            }
+        });
+    }
 }
 
 async fn setup_room_server(client_count: usize, joined_room_count: usize) -> BenchServer {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let local_addr = listener.local_addr().unwrap();
-    let ws_url = format!("ws://{local_addr}/socket");
+    let ws_url = format!("ws://{local_addr}{TEST_NAMESPACE}");
 
     let server = Arc::new(WsIoServer::builder().build());
     let namespace = server
-        .new_namespace_builder("/socket")
+        .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(|connection| async move {
             connection.on("join", |connection, room: Arc<String>| async move {
                 connection.join([room.as_str()]);
@@ -107,22 +134,13 @@ async fn setup_room_server(client_count: usize, joined_room_count: usize) -> Ben
     let ack_count = Arc::new(AtomicUsize::new(0));
     for index in 0..client_count {
         let client = WsIoClient::builder(ws_url.as_str()).unwrap().build();
-        for event in ["joined", "left"] {
-            let ack_count = ack_count.clone();
-            client.on(event, move |_session, _data: Arc<()>| {
-                let ack_count = ack_count.clone();
-                async move {
-                    ack_count.fetch_add(1, Ordering::Relaxed);
-                    Ok(())
-                }
-            });
-        }
+        register_ack_counter(&client, &ack_count);
 
         client.connect().await;
         wait_for_client_ready(&client).await;
 
         if index < joined_room_count {
-            client.emit("join", Some(&"room-a")).await.unwrap();
+            client.emit("join", Some(&ROOM_A)).await.unwrap();
         }
 
         clients.push(client);
@@ -152,13 +170,17 @@ fn runtime() -> Runtime {
     Builder::new_current_thread().enable_all().build().unwrap()
 }
 
+fn payload(bytes: usize) -> Vec<u8> {
+    vec![0; bytes]
+}
+
 fn bench_broadcast_emit(criterion: &mut Criterion) {
     let runtime = runtime();
     let mut group = criterion.benchmark_group("server/broadcast_emit");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(3));
 
-    for client_count in [1, 10, 50] {
+    for client_count in CLIENT_COUNTS {
         let server = runtime.block_on(setup_room_server(client_count, client_count));
 
         group.bench_with_input(
@@ -177,7 +199,7 @@ fn bench_broadcast_emit(criterion: &mut Criterion) {
             |bencher, namespace| {
                 bencher.to_async(&runtime).iter(|| async {
                     namespace
-                        .to([black_box("room-a")])
+                        .to([black_box(ROOM_A)])
                         .emit::<()>(black_box("bench"), None)
                         .await
                         .unwrap();
@@ -191,13 +213,59 @@ fn bench_broadcast_emit(criterion: &mut Criterion) {
     group.finish();
 }
 
+fn bench_broadcast_payload(criterion: &mut Criterion) {
+    let runtime = runtime();
+    let mut group = criterion.benchmark_group("server/broadcast_payload");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(3));
+
+    for payload_size in LARGE_PAYLOAD_SIZES {
+        let payload = payload(payload_size);
+        let server = runtime.block_on(setup_room_server(
+            LARGE_PAYLOAD_CLIENT_COUNT,
+            LARGE_PAYLOAD_CLIENT_COUNT,
+        ));
+
+        group.throughput(Throughput::Bytes(payload_size as u64));
+        group.bench_with_input(
+            BenchmarkId::new("global", payload_size),
+            &payload,
+            |bencher, payload| {
+                bencher.to_async(&runtime).iter(|| async {
+                    server
+                        .namespace
+                        .emit(black_box("bench_payload"), Some(black_box(payload)))
+                        .await
+                        .unwrap();
+                });
+            },
+        );
+
+        group.throughput(Throughput::Bytes(payload_size as u64));
+        group.bench_with_input(BenchmarkId::new("room", payload_size), &payload, |bencher, payload| {
+            bencher.to_async(&runtime).iter(|| async {
+                server
+                    .namespace
+                    .to([black_box(ROOM_A)])
+                    .emit(black_box("bench_payload"), Some(black_box(payload)))
+                    .await
+                    .unwrap();
+            });
+        });
+
+        runtime.block_on(server.shutdown());
+    }
+
+    group.finish();
+}
+
 fn bench_room_churn(criterion: &mut Criterion) {
     let runtime = runtime();
     let mut group = criterion.benchmark_group("server/room_churn");
     group.sample_size(10);
     group.measurement_time(Duration::from_secs(3));
 
-    for client_count in [1, 10, 50] {
+    for client_count in CLIENT_COUNTS {
         let server = runtime.block_on(setup_room_server(client_count, 0));
         let mut room_index = 0usize;
 
@@ -231,5 +299,5 @@ fn bench_room_churn(criterion: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_broadcast_emit, bench_room_churn);
+criterion_group!(benches, bench_broadcast_emit, bench_broadcast_payload, bench_room_churn);
 criterion_main!(benches);

@@ -105,9 +105,31 @@ fn respond<ResBody: Default, E: Send>(status: StatusCode) -> Result<Response<Res
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
     use http::header::CONNECTION;
 
     use super::*;
+    use crate::WsIoServer;
+
+    fn valid_upgrade_request(uri: &str) -> Request<()> {
+        Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .header(UPGRADE, "websocket")
+            .header(CONNECTION, "Upgrade")
+            .header(SEC_WEBSOCKET_VERSION, "13")
+            .header(SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==")
+            .body(())
+            .unwrap()
+    }
+
+    async fn dispatch_status(request: Request<()>, server: &WsIoServer) -> StatusCode {
+        dispatch_request::<_, (), Infallible>(request, server.0.clone())
+            .await
+            .unwrap()
+            .status()
+    }
 
     #[test]
     fn check_header_token_accepts_comma_separated_connection_values() {
@@ -135,5 +157,82 @@ mod tests {
         let request = Request::builder().header(CONNECTION, "not-upgrade").body(()).unwrap();
 
         assert!(!check_header_token(&request, CONNECTION, "upgrade"));
+    }
+
+    #[test]
+    fn check_header_value_rejects_missing_header() {
+        let request = Request::builder().body(()).unwrap();
+
+        assert!(!check_header_value(&request, UPGRADE, b"websocket"));
+    }
+
+    #[tokio::test]
+    async fn dispatch_request_rejects_non_get_method() {
+        let server = WsIoServer::builder().build();
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/ws.io?namespace=/socket")
+            .body(())
+            .unwrap();
+
+        assert_eq!(dispatch_status(request, &server).await, StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn dispatch_request_rejects_missing_upgrade_headers() {
+        let server = WsIoServer::builder().build();
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("/ws.io?namespace=/socket")
+            .body(())
+            .unwrap();
+
+        assert_eq!(dispatch_status(request, &server).await, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn dispatch_request_rejects_missing_sec_websocket_key() {
+        let server = WsIoServer::builder().build();
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("/ws.io?namespace=/socket")
+            .header(UPGRADE, "websocket")
+            .header(CONNECTION, "Upgrade")
+            .header(SEC_WEBSOCKET_VERSION, "13")
+            .body(())
+            .unwrap();
+
+        assert_eq!(dispatch_status(request, &server).await, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn dispatch_request_rejects_missing_namespace_query() {
+        let server = WsIoServer::builder().build();
+
+        assert_eq!(
+            dispatch_status(valid_upgrade_request("/ws.io"), &server).await,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_request_rejects_unknown_namespace() {
+        let server = WsIoServer::builder().build();
+
+        assert_eq!(
+            dispatch_status(valid_upgrade_request("/ws.io?namespace=/missing"), &server).await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_request_requires_hyper_on_upgrade_extension() {
+        let server = WsIoServer::builder().build();
+        server.new_namespace_builder("/socket").register().unwrap();
+
+        assert_eq!(
+            dispatch_status(valid_upgrade_request("/ws.io?namespace=/socket"), &server).await,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 }

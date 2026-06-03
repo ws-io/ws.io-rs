@@ -13,6 +13,8 @@ use tokio::{
 use wsio_client::WsIoClient;
 
 use super::{
+    TEST_NAMESPACE,
+    cleanup_e2e,
     setup_server,
     wait_for_client_ready,
 };
@@ -22,8 +24,8 @@ async fn test_e2e_ping_pong() {
     // 1. Setup Server
     let (server_task, server, ws_url) = setup_server().await;
 
-    // Register a default namespace "/socket"
-    let namespace_builder = server.new_namespace_builder("/socket");
+    // Register the default test namespace.
+    let namespace_builder = server.new_namespace_builder(TEST_NAMESPACE);
     namespace_builder
         .on_connect(|ctx| async move {
             ctx.on("ping", |event_ctx, _data: Arc<()>| async move {
@@ -69,8 +71,5 @@ async fn test_e2e_ping_pong() {
         .expect("Test timed out waiting for pong")
         .expect("Channel closed");
 
-    // Cleanup
-    client.disconnect().await;
-    server_task.abort();
-    let _ = server_task.await;
+    cleanup_e2e(vec![client], server_task).await;
 }

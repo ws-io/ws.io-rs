@@ -256,9 +256,15 @@ mod tests {
 
     use super::*;
 
+    const TEST_URL: &str = "ws://localhost:8080/socket";
+
+    fn test_builder() -> WsIoClientBuilder {
+        WsIoClientBuilder::new(Url::parse(TEST_URL).unwrap()).unwrap()
+    }
+
     #[test]
     fn test_builder_new_valid_ws_url_sets_default_request_path_and_namespace_query() {
-        let builder = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap()).unwrap();
+        let builder = test_builder();
 
         assert_eq!(builder.connect_url.path(), "/ws.io");
         assert_eq!(
@@ -289,8 +295,7 @@ mod tests {
 
     #[test]
     fn test_builder_configuration_chaining_updates_runtime_config() {
-        let builder = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
+        let builder = test_builder()
             .init_handler_timeout(Duration::from_secs(10))
             .init_packet_timeout(Duration::from_secs(15))
             .on_session_close_handler_timeout(Duration::from_secs(5))
@@ -316,17 +321,14 @@ mod tests {
 
     #[test]
     fn test_builder_request_path_normalizes() {
-        let builder = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
-            .request_path("/multiple//slashes///path/");
+        let builder = test_builder().request_path("/multiple//slashes///path/");
 
         assert_eq!(builder.connect_url.path(), "/multiple/slashes/path");
     }
 
     #[test]
     fn test_builder_websocket_config_override() {
-        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
+        let client = test_builder()
             .websocket_config_mut(|config| {
                 *config = config.max_frame_size(Some(1024 * 1024));
             })
@@ -338,18 +340,14 @@ mod tests {
     #[test]
     fn test_builder_websocket_config_replaces_defaults() {
         let config = WebSocketConfig::default().max_frame_size(Some(42));
-        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
-            .websocket_config(config)
-            .build();
+        let client = test_builder().websocket_config(config).build();
 
         assert_eq!(client.0.config.websocket_config.max_frame_size, Some(42));
     }
 
     #[test]
     fn test_builder_with_init_and_session_handlers_registers_callbacks() {
-        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
+        let client = test_builder()
             .with_init_handler(|_session, _data: Option<String>| async { Ok(Some("response".to_string())) })
             .on_session_ready(|_session| async { Ok(()) })
             .on_session_close(|_session| async { Ok(()) })
@@ -362,8 +360,7 @@ mod tests {
 
     #[test]
     fn test_builder_request_modifier_registers_async_callback() {
-        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
+        let client = test_builder()
             .request_modifier(|mut request| async move {
                 request
                     .headers_mut()
@@ -378,8 +375,7 @@ mod tests {
 
     #[test]
     fn test_builder_all_timeout_configurations() {
-        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
+        let client = test_builder()
             .init_handler_timeout(Duration::from_secs(1))
             .init_packet_timeout(Duration::from_secs(2))
             .on_session_close_handler_timeout(Duration::from_secs(3))
@@ -394,10 +390,7 @@ mod tests {
 
     #[test]
     fn test_builder_reconnect_delay_configuration() {
-        let client = WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket").unwrap())
-            .unwrap()
-            .reconnect_delay(Duration::from_millis(500))
-            .build();
+        let client = test_builder().reconnect_delay(Duration::from_millis(500)).build();
 
         assert_eq!(client.0.config.reconnect_delay, Duration::from_millis(500));
     }
