@@ -64,11 +64,11 @@ tower = [
 anyhow = "1.0.102"
 arc-swap = "1.9.1"
 futures-util = { version = "0.3.32", default-features = false }
-http = "1.4.0"
+http = "1.4.2"
 http-body = "1.0.1"
 hyper = "1.10.1"
-hyper-util = { version = "0.1.19", features = ["tokio"] }
-kikiutils = { version = "0.7.2", features = ["atomic-enum-cell", "fx-collections"] }
+hyper-util = { version = "0.1.20", features = ["tokio"] }
+kikiutils = { version = "0.7.3", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
 parking_lot = "0.12.5"
 roaring = "0.11.4"
