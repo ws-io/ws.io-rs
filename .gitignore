@@ -21,5 +21,10 @@ Cargo.lock
 
 ### Other ###
 
+# OMX
+.omx/
+
 # Test-related files
 coverage/
+
+### Custom ###
