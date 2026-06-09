@@ -1,6 +1,6 @@
 [package]
 name = "wsio-client"
-version = "0.8.7"
+version = "0.8.8"
 
 authors.workspace = true
 categories.workspace = true
@@ -70,7 +70,7 @@ tokio-tungstenite = "0.29.0"
 tokio-util = "0.7.18"
 tracing = { version = "0.1.44", optional = true }
 url = "2.5.8"
-wsio-core = { path = "../wsio-core", version = "0.12.6" }
+wsio-core = { path = "../wsio-core", version = "0.12.7" }
 
 # Target-specific dependencies
 # [target.'cfg(unix)'.dependencies]

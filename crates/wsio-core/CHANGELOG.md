@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.7 - 2026-06-09 16:37
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.6...wsio-core-v0.12.7)
+
+### 🏡 Chore
+
+- upgrade deps ([1b3e642](https://github.com/ws-io/ws.io-rs/commit/1b3e642))
+
 ## 0.12.6 - 2026-06-03 04:01
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.5...wsio-core-v0.12.6)
