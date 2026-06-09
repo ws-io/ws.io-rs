@@ -1,6 +1,6 @@
 [package]
 name = "wsio-client"
-version = "0.8.6"
+version = "0.8.7"
 
 authors.workspace = true
 categories.workspace = true

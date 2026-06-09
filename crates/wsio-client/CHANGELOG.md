@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.7 - 2026-06-09 07:05
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.6...wsio-client-v0.8.7)
+
+### 🩹 Fixes
+
+- *(client)* bound disconnect graceful shutdown ([f2582df](https://github.com/ws-io/ws.io-rs/commit/f2582df))
+
 ## 0.8.6 - 2026-06-03 04:01
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.5...wsio-client-v0.8.6)
