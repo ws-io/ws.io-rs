@@ -38,6 +38,13 @@ type RequestModifier =
 
 // Structs
 pub(crate) struct WsIoClientConfig {
+    /// Maximum duration to wait for graceful WebSocket shutdown after
+    /// `disconnect` is requested.
+    ///
+    /// If the read/write tasks do not finish before this timeout, they are
+    /// aborted so `disconnect().await` can complete.
+    pub(crate) disconnect_timeout: Duration,
+
     /// Optional client-side init handler used during the server handshake.
     ///
     /// When the server sends an init packet, this handler receives the optional

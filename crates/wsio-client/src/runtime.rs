@@ -31,7 +31,10 @@ use tokio::{
         },
     },
     task::JoinHandle,
-    time::sleep,
+    time::{
+        sleep,
+        timeout,
+    },
 };
 use tokio_tungstenite::{
     connect_async_with_config,
@@ -161,14 +164,24 @@ impl WsIoClientRuntime {
         select! {
             _ = cancel_token.cancelled() => {
                 session.close();
-                select! {
-                    _ = &mut read_ws_stream_task => {
-                        write_ws_stream_task.abort();
-                    },
-                    _ = &mut write_ws_stream_task => {
-                        read_ws_stream_task.abort();
-                    },
+                let graceful_shutdown = async {
+                    select! {
+                        _ = &mut read_ws_stream_task => {
+                            write_ws_stream_task.abort();
+                        },
+                        _ = &mut write_ws_stream_task => {
+                            read_ws_stream_task.abort();
+                        },
+                    }
+                };
+
+                if timeout(self.config.disconnect_timeout, graceful_shutdown).await.is_err() {
+                    read_ws_stream_task.abort();
+                    write_ws_stream_task.abort();
                 }
+
+                let _ = read_ws_stream_task.await;
+                let _ = write_ws_stream_task.await;
             }
             _ = &mut read_ws_stream_task => {
                 write_ws_stream_task.abort();

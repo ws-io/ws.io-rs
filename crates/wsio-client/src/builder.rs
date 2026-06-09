@@ -55,6 +55,7 @@ impl WsIoClientBuilder {
         url.set_path("ws.io");
         Ok(Self {
             config: WsIoClientConfig {
+                disconnect_timeout: Duration::from_secs(5),
                 init_handler: None,
                 init_handler_timeout: Duration::from_secs(3),
                 init_packet_timeout: Duration::from_secs(5),
@@ -90,6 +91,13 @@ impl WsIoClientBuilder {
     /// Builds a [`WsIoClient`] with the accumulated configuration.
     pub fn build(self) -> WsIoClient {
         WsIoClient(WsIoClientRuntime::new(self.config, self.connect_url))
+    }
+
+    /// Sets how long `disconnect().await` waits for graceful WebSocket
+    /// shutdown before aborting the connection read/write tasks.
+    pub fn disconnect_timeout(mut self, duration: Duration) -> Self {
+        self.config.disconnect_timeout = duration;
+        self
     }
 
     /// Sets the maximum duration allowed for the init handler to run.
@@ -296,6 +304,7 @@ mod tests {
     #[test]
     fn test_builder_configuration_chaining_updates_runtime_config() {
         let builder = test_builder()
+            .disconnect_timeout(Duration::from_secs(20))
             .init_handler_timeout(Duration::from_secs(10))
             .init_packet_timeout(Duration::from_secs(15))
             .on_session_close_handler_timeout(Duration::from_secs(5))
@@ -310,6 +319,7 @@ mod tests {
         let client = builder.build();
 
         let config = &client.0.config;
+        assert_eq!(config.disconnect_timeout, Duration::from_secs(20));
         assert_eq!(config.init_handler_timeout, Duration::from_secs(10));
         assert_eq!(config.init_packet_timeout, Duration::from_secs(15));
         assert_eq!(config.on_session_close_handler_timeout, Duration::from_secs(5));
@@ -376,12 +386,14 @@ mod tests {
     #[test]
     fn test_builder_all_timeout_configurations() {
         let client = test_builder()
+            .disconnect_timeout(Duration::from_millis(500))
             .init_handler_timeout(Duration::from_secs(1))
             .init_packet_timeout(Duration::from_secs(2))
             .on_session_close_handler_timeout(Duration::from_secs(3))
             .ready_packet_timeout(Duration::from_secs(4))
             .build();
 
+        assert_eq!(client.0.config.disconnect_timeout, Duration::from_millis(500));
         assert_eq!(client.0.config.init_handler_timeout, Duration::from_secs(1));
         assert_eq!(client.0.config.init_packet_timeout, Duration::from_secs(2));
         assert_eq!(client.0.config.on_session_close_handler_timeout, Duration::from_secs(3));
