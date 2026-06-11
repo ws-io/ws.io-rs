@@ -7,5 +7,5 @@ cd "${SCRIPTS_DIR}"
 
 [[ " $@ " =~ ' -c ' ]] && rm -rf ./Cargo.lock ./target
 
-cargo upgrade
+cargo upgrade -i allow
 cargo update
