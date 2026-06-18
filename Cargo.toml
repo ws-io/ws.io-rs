@@ -15,6 +15,49 @@ keywords = []
 license = "MIT"
 repository = ""
 
+[workspace.dependencies]
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+cargo = { level = "warn", priority = -1 }
+cast_ptr_alignment = "warn"
+dbg_macro = "deny"
+expect_used = "warn"
+fn_to_numeric_cast_any = "deny"
+large_futures = "warn"
+large_stack_arrays = "warn"
+large_types_passed_by_value = "warn"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_safety_doc = "allow"
+multiple_crate_versions = "allow"
+mutex_atomic = "warn"
+needless_pass_by_value = "warn"
+panic = "warn"
+pedantic = { level = "warn", priority = -1 }
+print_stderr = "warn"
+print_stdout = "warn"
+rc_mutex = "warn"
+todo = "warn"
+transmute_ptr_to_ptr = "deny"
+trivially_copy_pass_by_ref = "warn"
+undocumented_unsafe_blocks = "warn"
+unwrap_used = "warn"
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+missing_docs = "allow"
+unreachable_pub = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "allow"
+missing_crate_level_docs = "allow"
+private_intra_doc_links = "allow"
+
 # Profiles
 [profile.release]
 codegen-units = 1

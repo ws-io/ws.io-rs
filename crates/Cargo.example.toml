@@ -30,8 +30,8 @@ repository.workspace = true
 # [package.metadata]
 
 # Optional lint configuration
-# [lints]
-# workspace = true
+[lints]
+workspace = true
 
 # Features
 [features]
