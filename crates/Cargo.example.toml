@@ -29,7 +29,7 @@ repository.workspace = true
 # Optional cargo metadata
 # [package.metadata]
 
-# Optional lint configuration
+# Lint configuration
 [lints]
 workspace = true
 
