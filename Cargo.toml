@@ -6,16 +6,21 @@ members = [
 resolver = "3"
 
 [workspace.package]
-authors = []
-categories = []
-description = ""
 edition = "2024"
-homepage = ""
-keywords = []
+# homepage = ""
 license = "MIT"
 repository = ""
 
-[workspace.dependencies]
+categories = []
+keywords = []
+
+# Optional cargo/tool metadata.
+# [package.metadata]
+
+
+# =============================================================================
+# Lints
+# =============================================================================
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -32,10 +37,6 @@ large_stack_arrays = "warn"
 large_types_passed_by_value = "warn"
 manual_let_else = "warn"
 match_same_arms = "warn"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-missing_safety_doc = "allow"
-multiple_crate_versions = "allow"
 mutex_atomic = "warn"
 needless_for_each = "warn"
 print_stderr = "warn"
@@ -52,6 +53,14 @@ unused_async = "deny"
 unused_self = "warn"
 unwrap_used = "deny"
 
+# Usually too noisy for many crates; enable when you want stricter docs.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+missing_safety_doc = "allow"
+
+# Commonly triggered by dependency trees; usually not actionable per crate.
+multiple_crate_versions = "allow"
+
 [workspace.lints.rust]
 missing_debug_implementations = "warn"
 missing_docs = "allow"
@@ -60,11 +69,29 @@ unsafe_op_in_unsafe_fn = "deny"
 unused_must_use = "deny"
 
 [workspace.lints.rustdoc]
-broken_intra_doc_links = "allow"
+broken_intra_doc_links = "warn"
 missing_crate_level_docs = "allow"
-private_intra_doc_links = "allow"
+private_intra_doc_links = "warn"
 
+# =============================================================================
+# Dependencies
+# =============================================================================
+
+[workspace.dependencies]
+
+
+# =============================================================================
 # Profiles
+# =============================================================================
+# Prefer defining profiles at the workspace root.
+# Profiles in dependency crates are ignored by Cargo.
+
+# [profile.dev]
+# opt-level = 0
+# debug = true
+# incremental = true
+# overflow-checks = true
+
 [profile.release]
 codegen-units = 1
 debug = false
@@ -74,3 +101,33 @@ opt-level = 3
 overflow-checks = true
 panic = "abort"
 strip = "symbols"
+
+# Faster release build, slightly less optimized than full LTO.
+# [profile.release-fast]
+# inherits = "release"
+# lto = "thin"
+# codegen-units = 16
+
+# Smaller binary profile.
+# [profile.release-small]
+# inherits = "release"
+# opt-level = "z"
+# lto = true
+# codegen-units = 1
+# panic = "abort"
+# strip = "symbols"
+
+# [profile.test]
+# opt-level = 0
+# debug = true
+
+# [profile.bench]
+# inherits = "release"
+# debug = true
+
+# =============================================================================
+# Dependency overrides
+# =============================================================================
+
+# [patch.crates-io]
+# crate-name = { git = "https://github.com/owner/crate-name", branch = "main" }
