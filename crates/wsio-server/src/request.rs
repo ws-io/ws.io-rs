@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use http::{
     HeaderName,
+    HeaderValue,
     Method,
     Request,
     Response,
@@ -80,27 +81,37 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
     let ws_accept_key = derive_accept_key(ws_sec_key.as_bytes());
 
     // Upgrade
-    let on_upgrade = match request.extensions_mut().remove::<OnUpgrade>() {
-        Some(upgrade) => upgrade,
-        None => return respond(StatusCode::INTERNAL_SERVER_ERROR),
+    let Some(on_upgrade) = request.extensions_mut().remove::<OnUpgrade>() else {
+        return respond(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
     namespace
         .handle_on_upgrade_request(request.headers().clone(), on_upgrade, request.uri().clone())
         .await;
 
-    Ok(Response::builder()
-        .status(StatusCode::SWITCHING_PROTOCOLS)
-        .header(CONNECTION, "Upgrade")
-        .header(SEC_WEBSOCKET_ACCEPT, ws_accept_key)
-        .header(UPGRADE, "websocket")
-        .body(ResBody::default())
-        .unwrap())
+    // Build websocket accept header
+    let Ok(ws_accept_header) = HeaderValue::from_str(&ws_accept_key) else {
+        return respond(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+
+    // Create response and set status code
+    let mut response = Response::new(ResBody::default());
+    *response.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
+
+    // Set headers
+    let headers = response.headers_mut();
+    headers.insert(CONNECTION, HeaderValue::from_static("Upgrade"));
+    headers.insert(SEC_WEBSOCKET_ACCEPT, ws_accept_header);
+    headers.insert(UPGRADE, HeaderValue::from_static("websocket"));
+
+    Ok(response)
 }
 
 #[inline]
 fn respond<ResBody: Default, E: Send>(status: StatusCode) -> Result<Response<ResBody>, E> {
-    Ok(Response::builder().status(status).body(ResBody::default()).unwrap())
+    let mut response = Response::new(ResBody::default());
+    *response.status_mut() = status;
+    Ok(response)
 }
 
 #[cfg(test)]

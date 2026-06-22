@@ -61,6 +61,7 @@ enum SessionState {
 }
 
 // Structs
+#[derive(Debug)]
 pub struct WsIoClientSession {
     cancel_token: ArcSwap<CancellationToken>,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
@@ -249,7 +250,7 @@ impl WsIoClientSession {
                 }
 
                 Ok(())
-            }
+            },
             WsIoPacketType::Init => self.handle_init_packet(packet.data.as_deref()).await,
             WsIoPacketType::Ready => self.handle_ready_packet().await,
         }

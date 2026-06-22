@@ -31,6 +31,7 @@ use crate::{
 ///
 /// The URL passed to the client constructor selects the namespace from its path,
 /// while the actual WebSocket request path defaults to `/ws.io`.
+#[derive(Debug)]
 pub struct WsIoClientBuilder {
     config: WsIoClientConfig,
     connect_url: Url,

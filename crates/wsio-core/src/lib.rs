@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
+
 use tungstenite::protocol::WebSocketConfig;
 
 pub mod event;

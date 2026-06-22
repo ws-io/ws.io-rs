@@ -1,9 +1,16 @@
-use std::sync::{
-    Arc,
-    LazyLock,
-    atomic::{
-        AtomicU64,
-        Ordering,
+use std::{
+    fmt::{
+        Debug as FmtDebug,
+        Formatter,
+        Result as FmtResult,
+    },
+    sync::{
+        Arc,
+        LazyLock,
+        atomic::{
+            AtomicU64,
+            Ordering,
+        },
     },
 };
 
@@ -99,6 +106,51 @@ pub struct WsIoServerConnection {
     on_close_handler: Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
     request_uri: Uri,
     state: AtomicEnumCell<ConnectionState>,
+}
+
+impl FmtDebug for WsIoServerConnection {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let init_timeout_task = match self.init_timeout_task.try_lock() {
+            Ok(task) => {
+                if task.is_some() {
+                    "<task>"
+                } else {
+                    "<none>"
+                }
+            },
+            Err(_) => "<locked>",
+        };
+
+        let on_close_handler = match self.on_close_handler.try_lock() {
+            Ok(handler) => {
+                if handler.is_some() {
+                    "<handler>"
+                } else {
+                    "<none>"
+                }
+            },
+            Err(_) => "<locked>",
+        };
+
+        let mut debug = f.debug_struct("WsIoServerConnection");
+        debug
+            .field("id", &self.id)
+            .field("state", &self.state)
+            .field("request_uri", &self.request_uri)
+            .field("headers", &self.headers)
+            .field("joined_rooms_len", &self.joined_rooms.len())
+            .field("message_tx", &self.message_tx)
+            .field("cancel_token", &"<cancel_token>")
+            .field("namespace", &"<namespace>")
+            .field("event_registry", &self.event_registry)
+            .field("init_timeout_task", &init_timeout_task)
+            .field("on_close_handler", &on_close_handler);
+
+        #[cfg(feature = "connection-extensions")]
+        debug.field("extensions", &self.extensions);
+
+        debug.finish()
+    }
 }
 
 impl TaskSpawner for WsIoServerConnection {
@@ -291,7 +343,7 @@ impl WsIoServerConnection {
                 }
 
                 Ok(())
-            }
+            },
             WsIoPacketType::Init => self.handle_init_packet(packet.data.as_deref()).await,
             _ => Ok(()),
         }
@@ -464,7 +516,7 @@ mod tests {
 
     use super::*;
 
-    async fn create_test_connection() -> Arc<WsIoServerConnection> {
+    fn create_test_connection() -> Arc<WsIoServerConnection> {
         let server = Arc::new(WsIoServer::builder().build());
         let namespace = server.new_namespace_builder("/socket").register().unwrap();
         let (connection, _rx) =
@@ -475,7 +527,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_incoming_packet_decode_error() {
-        let connection = create_test_connection().await;
+        let connection = create_test_connection();
         let garbage_data = b"obviously not valid json or messagepack";
         // Should seamlessly return a Result::Err, not panic
         let result = connection.handle_incoming_packet(garbage_data).await;
@@ -484,7 +536,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_init_packet_in_invalid_state() {
-        let connection = create_test_connection().await;
+        let connection = create_test_connection();
         assert_eq!(connection.state.get(), ConnectionState::Created);
 
         // Sending an init packet when the connection is merely `Created` (not yet `AwaitingInit`) should throw an error
@@ -503,7 +555,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_event_packet_missing_key() {
-        let connection = create_test_connection().await;
+        let connection = create_test_connection();
 
         // Force the connection into the Ready state so it accepts Event packets
         connection.state.store(ConnectionState::Ready);
@@ -518,7 +570,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connection_close_state_transitions() {
-        let connection = create_test_connection().await;
+        let connection = create_test_connection();
         assert_eq!(connection.state.get(), ConnectionState::Created);
 
         connection.close();
@@ -531,7 +583,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connection_cleanup() {
-        let connection = create_test_connection().await;
+        let connection = create_test_connection();
         let namespace = connection.namespace();
 
         // Insert connection manually for test

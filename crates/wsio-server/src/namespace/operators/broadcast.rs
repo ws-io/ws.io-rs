@@ -22,7 +22,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WsIoServerNamespaceBroadcastOperator {
     exclude_connection_ids: HashSet<u64>,
     exclude_rooms: HashSet<String>,

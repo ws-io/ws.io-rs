@@ -6,7 +6,7 @@ use super::service::WsIoServerService;
 use crate::runtime::WsIoServerRuntime;
 
 // Structs
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WsIoServerLayer {
     runtime: Arc<WsIoServerRuntime>,
 }

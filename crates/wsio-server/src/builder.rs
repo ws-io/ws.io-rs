@@ -16,6 +16,7 @@ use crate::{
 /// Server-level settings become the defaults inherited by namespaces created
 /// from the server. Namespace builders may override most of these values per
 /// namespace.
+#[derive(Debug)]
 pub struct WsIoServerBuilder {
     config: WsIoServerConfig,
 }

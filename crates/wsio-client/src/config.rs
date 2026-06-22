@@ -1,4 +1,9 @@
 use std::{
+    fmt::{
+        Debug as FmtDebug,
+        Formatter,
+        Result as FmtResult,
+    },
     pin::Pin,
     sync::Arc,
     time::Duration,
@@ -108,4 +113,36 @@ pub(crate) struct WsIoClientConfig {
     /// This config is passed into the client connection and is also used to size
     /// internal session channels from the configured max-write/write-buffer ratio.
     pub(crate) websocket_config: WebSocketConfig,
+}
+
+impl FmtDebug for WsIoClientConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("WsIoClientConfig")
+            .field("disconnect_timeout", &self.disconnect_timeout)
+            .field("init_handler", &self.init_handler.as_ref().map(|_| "<handler>"))
+            .field("init_handler_timeout", &self.init_handler_timeout)
+            .field("init_packet_timeout", &self.init_packet_timeout)
+            .field(
+                "on_session_close_handler",
+                &self.on_session_close_handler.as_ref().map(|_| "<handler>"),
+            )
+            .field(
+                "on_session_close_handler_timeout",
+                &self.on_session_close_handler_timeout,
+            )
+            .field(
+                "on_session_ready_handler",
+                &self.on_session_ready_handler.as_ref().map(|_| "<handler>"),
+            )
+            .field("packet_codec", &self.packet_codec)
+            .field("ping_interval", &self.ping_interval)
+            .field("ready_packet_timeout", &self.ready_packet_timeout)
+            .field("reconnect_delay", &self.reconnect_delay)
+            .field(
+                "request_modifier",
+                &self.request_modifier.as_ref().map(|_| "<modifier>"),
+            )
+            .field("websocket_config", &self.websocket_config)
+            .finish()
+    }
 }

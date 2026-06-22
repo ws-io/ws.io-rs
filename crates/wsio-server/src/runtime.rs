@@ -36,6 +36,7 @@ pub(crate) enum WsIoServerRuntimeStatus {
 }
 
 // Structs
+#[derive(Debug)]
 pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_ids: ArcSwap<RoaringTreemap>,

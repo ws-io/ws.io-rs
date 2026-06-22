@@ -152,15 +152,15 @@ async fn test_e2e_broadcast_and_rooms() {
 
 #[tokio::test]
 async fn test_e2e_emit_with_data() {
-    let (server_task, server, ws_url) = setup_server().await;
-
-    let server_namespace = register_test_namespace(&server);
-
     #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
     struct Payload {
         message: String,
         count: u32,
     }
+
+    let (server_task, server, ws_url) = setup_server().await;
+
+    let server_namespace = register_test_namespace(&server);
 
     let received = Arc::new(AtomicUsize::new(0));
     let received_clone = received.clone();

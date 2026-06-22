@@ -69,6 +69,7 @@ enum NamespaceStatus {
 }
 
 // Structs
+#[derive(Debug)]
 pub struct WsIoServerNamespace {
     pub(crate) config: WsIoServerNamespaceConfig,
     connection_ids: ArcSwap<RoaringTreemap>,
@@ -130,10 +131,9 @@ impl WsIoServerNamespace {
                         }
 
                         connection_clone.handle_incoming_packet(&bytes).await
-                    }
-                    Ok(Message::Close(_)) => break,
+                    },
+                    Ok(Message::Close(_)) | Err(_) => break,
                     Ok(Message::Text(text)) => connection_clone.handle_incoming_packet(text.as_bytes()).await,
-                    Err(_) => break,
                     _ => Ok(()),
                 }
                 .is_err()
@@ -170,13 +170,13 @@ impl WsIoServerNamespace {
                         read_ws_stream_task.abort();
                     },
                 }
-            }
+            },
             Err(_) => {
                 // Close connection
                 read_ws_stream_task.abort();
                 connection.close();
                 let _ = join!(read_ws_stream_task, write_ws_stream_task);
-            }
+            },
         }
 
         // Cleanup connection
@@ -194,6 +194,7 @@ impl WsIoServerNamespace {
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
         Ok(Arc::new(match self.config.packet_codec.is_text() {
+            // SAFETY: text packet codecs only produce valid UTF-8 payloads.
             true => Message::Text(unsafe { String::from_utf8_unchecked(bytes).into() }),
             false => Message::Binary(bytes.into()),
         }))

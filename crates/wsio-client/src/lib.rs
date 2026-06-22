@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
+
 use std::{
     fmt::Display,
     sync::Arc,
@@ -28,7 +30,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WsIoClient(Arc<WsIoClientRuntime>);
 
 impl WsIoClient {

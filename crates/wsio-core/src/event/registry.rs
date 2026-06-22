@@ -4,6 +4,11 @@ use std::{
         TypeId,
     },
     collections::hash_map::Entry,
+    fmt::{
+        Debug as FmtDebug,
+        Formatter,
+        Result as FmtResult,
+    },
     marker::PhantomData,
     pin::Pin,
     sync::{
@@ -27,13 +32,16 @@ use crate::{
 };
 
 // Types
-type DataDecoder = fn(&[u8], &WsIoPacketCodec) -> Result<Arc<dyn Any + Send + Sync>>;
+type DataDecoder = fn(&[u8], WsIoPacketCodec) -> Result<Arc<dyn Any + Send + Sync>>;
 type Handler<C> = Arc<
     dyn Fn(Arc<C>, Arc<dyn Any + Send + Sync>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>
         + Send
         + Sync
         + 'static,
 >;
+
+// Constants/Statics
+static EMPTY_EVENT_DATA_ANY_ARC: LazyLock<Arc<dyn Any + Send + Sync>> = LazyLock::new(|| Arc::new(()));
 
 // Structs
 struct EventEntry<C> {
@@ -42,6 +50,27 @@ struct EventEntry<C> {
     handlers: RwLock<FxHashMap<u32, Handler<C>>>,
 }
 
+impl<C> FmtDebug for EventEntry<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let mut debug = f.debug_struct("EventEntry");
+        debug
+            .field("data_decoder", &self.data_decoder)
+            .field("data_type_id", &self.data_type_id);
+
+        match self.handlers.try_read() {
+            Some(handlers) => {
+                debug.field("handlers_len", &handlers.len());
+            },
+            None => {
+                debug.field("handlers", &"<locked>");
+            },
+        }
+
+        debug.finish()
+    }
+}
+
+#[derive(Debug)]
 pub struct WsIoEventRegistry<C: Send + Sync + 'static, S: TaskSpawner> {
     _task_spawner: PhantomData<S>,
     event_entries: RwLock<FxHashMap<String, Arc<EventEntry<C>>>>,
@@ -82,7 +111,7 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
         let task_spawner_clone = task_spawner.clone();
         task_spawner.spawn_task(async move {
             let data = match packet_data {
-                Some(bytes) => match (event_entry.data_decoder)(&bytes, &packet_codec) {
+                Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
                     Ok(data) => data,
                     Err(_) => return Ok(()),
                 },
@@ -141,7 +170,7 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
                 );
 
                 event_entry
-            }
+            },
             Entry::Vacant(vacant) => vacant.insert(Arc::new(EventEntry {
                 data_decoder: decode_data_as_any_arc::<D>,
                 data_type_id,
@@ -157,7 +186,12 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
                     return Box::pin(async { Ok(()) });
                 }
 
-                Box::pin(handler(connection, data.downcast().unwrap()))
+                Box::pin(handler(
+                    connection,
+                    #[allow(clippy::expect_used)]
+                    data.downcast()
+                        .expect("data type id matched handler registration but Arc::downcast failed"),
+                ))
             }),
         );
 
@@ -165,14 +199,11 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
     }
 }
 
-// Constants/Statics
-static EMPTY_EVENT_DATA_ANY_ARC: LazyLock<Arc<dyn Any + Send + Sync>> = LazyLock::new(|| Arc::new(()));
-
 // Functions
 #[inline]
 fn decode_data_as_any_arc<D: DeserializeOwned + Send + Sync + 'static>(
     bytes: &[u8],
-    packet_codec: &WsIoPacketCodec,
+    packet_codec: WsIoPacketCodec,
 ) -> Result<Arc<dyn Any + Send + Sync>> {
     Ok(Arc::new(packet_codec.decode_data::<D>(bytes)?))
 }

@@ -9,6 +9,7 @@ use std::{
 use kikiutils::types::fx_collections::FxDashMap;
 
 // Structs
+#[derive(Debug)]
 pub struct ConnectionExtensions {
     inner: FxDashMap<TypeId, Arc<dyn Any + Send + Sync>>,
 }

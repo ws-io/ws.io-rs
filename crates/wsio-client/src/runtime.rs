@@ -67,6 +67,7 @@ enum RuntimeStatus {
 }
 
 // Structs
+#[derive(Debug)]
 pub(crate) struct WsIoClientRuntime {
     cancel_token: ArcSwap<CancellationToken>,
     pub(crate) config: WsIoClientConfig,
@@ -130,9 +131,8 @@ impl WsIoClientRuntime {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
                     Ok(Message::Binary(bytes)) => session_clone.handle_incoming_packet(&bytes).await,
-                    Ok(Message::Close(_)) => break,
+                    Ok(Message::Close(_)) | Err(_) => break,
                     Ok(Message::Text(text)) => session_clone.handle_incoming_packet(text.as_bytes()).await,
-                    Err(_) => break,
                     _ => Ok(()),
                 }
                 .is_err()
@@ -308,6 +308,7 @@ impl WsIoClientRuntime {
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
         Ok(Arc::new(match self.config.packet_codec.is_text() {
+            // SAFETY: text packet codecs only produce valid UTF-8 payloads.
             true => Message::Text(unsafe { String::from_utf8_unchecked(bytes).into() }),
             false => Message::Binary(bytes.into()),
         }))

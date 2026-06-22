@@ -26,6 +26,7 @@ use crate::{
 ///
 /// Namespace builders inherit server-level defaults when they are created. The
 /// methods on this builder override those values for this namespace only.
+#[derive(Debug)]
 pub struct WsIoServerNamespaceBuilder {
     config: WsIoServerNamespaceConfig,
     runtime: Arc<WsIoServerRuntime>,
@@ -330,7 +331,7 @@ mod tests {
         match register2_result {
             Err(e) => {
                 assert!(e.to_string().contains("already exists"));
-            }
+            },
             Ok(_) => panic!("Should have failed"),
         }
     }

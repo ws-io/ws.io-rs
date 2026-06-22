@@ -1,4 +1,9 @@
 use std::{
+    fmt::{
+        Debug as FmtDebug,
+        Formatter,
+        Result as FmtResult,
+    },
     pin::Pin,
     sync::Arc,
     time::Duration,
@@ -116,4 +121,36 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// internal connection channels from the configured max-write/write-buffer
     /// ratio.
     pub(crate) websocket_config: WebSocketConfig,
+}
+
+impl FmtDebug for WsIoServerNamespaceConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("WsIoServerNamespaceConfig")
+            .field("path", &self.path)
+            .field("broadcast_concurrency_limit", &self.broadcast_concurrency_limit)
+            .field("http_request_upgrade_timeout", &self.http_request_upgrade_timeout)
+            .field(
+                "init_request_handler",
+                &self.init_request_handler.as_ref().map(|_| "<handler>"),
+            )
+            .field("init_request_handler_timeout", &self.init_request_handler_timeout)
+            .field(
+                "init_response_handler",
+                &self.init_response_handler.as_ref().map(|_| "<handler>"),
+            )
+            .field("init_response_handler_timeout", &self.init_response_handler_timeout)
+            .field("init_response_timeout", &self.init_response_timeout)
+            .field("middleware", &self.middleware.as_ref().map(|_| "<handler>"))
+            .field("middleware_execution_timeout", &self.middleware_execution_timeout)
+            .field("on_close_handler_timeout", &self.on_close_handler_timeout)
+            .field(
+                "on_connect_handler",
+                &self.on_connect_handler.as_ref().map(|_| "<handler>"),
+            )
+            .field("on_connect_handler_timeout", &self.on_connect_handler_timeout)
+            .field("on_ready_handler", &self.on_ready_handler.as_ref().map(|_| "<handler>"))
+            .field("packet_codec", &self.packet_codec)
+            .field("websocket_config", &self.websocket_config)
+            .finish()
+    }
 }

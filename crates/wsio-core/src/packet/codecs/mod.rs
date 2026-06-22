@@ -52,18 +52,18 @@ impl WsIoPacketCodec {
     pub fn decode(&self, bytes: &[u8]) -> Result<WsIoPacket> {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
-            Self::Cbor => WsIoPacketCborCodec.decode(bytes),
+            Self::Cbor => WsIoPacketCborCodec::decode(bytes),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::Msgpack => WsIoPacketMsgpackCodec.decode(bytes),
+            Self::Msgpack => WsIoPacketMsgpackCodec::decode(bytes),
 
             #[cfg(feature = "packet-codec-postcard")]
-            Self::Postcard => WsIoPacketPostcardCodec.decode(bytes),
+            Self::Postcard => WsIoPacketPostcardCodec::decode(bytes),
 
-            Self::SerdeJson => WsIoPacketSerdeJsonCodec.decode(bytes),
+            Self::SerdeJson => WsIoPacketSerdeJsonCodec::decode(bytes),
 
             #[cfg(feature = "packet-codec-sonic-rs")]
-            Self::SonicRs => WsIoPacketSonicRsCodec.decode(bytes),
+            Self::SonicRs => WsIoPacketSonicRsCodec::decode(bytes),
         }
     }
 
@@ -71,18 +71,18 @@ impl WsIoPacketCodec {
     pub fn decode_data<D: DeserializeOwned>(&self, bytes: &[u8]) -> Result<D> {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
-            Self::Cbor => WsIoPacketCborCodec.decode_data(bytes),
+            Self::Cbor => WsIoPacketCborCodec::decode_data(bytes),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::Msgpack => WsIoPacketMsgpackCodec.decode_data(bytes),
+            Self::Msgpack => WsIoPacketMsgpackCodec::decode_data(bytes),
 
             #[cfg(feature = "packet-codec-postcard")]
-            Self::Postcard => WsIoPacketPostcardCodec.decode_data(bytes),
+            Self::Postcard => WsIoPacketPostcardCodec::decode_data(bytes),
 
-            Self::SerdeJson => WsIoPacketSerdeJsonCodec.decode_data(bytes),
+            Self::SerdeJson => WsIoPacketSerdeJsonCodec::decode_data(bytes),
 
             #[cfg(feature = "packet-codec-sonic-rs")]
-            Self::SonicRs => WsIoPacketSonicRsCodec.decode_data(bytes),
+            Self::SonicRs => WsIoPacketSonicRsCodec::decode_data(bytes),
         }
     }
 
@@ -90,18 +90,18 @@ impl WsIoPacketCodec {
     pub fn encode(&self, packet: &WsIoPacket) -> Result<Vec<u8>> {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
-            Self::Cbor => WsIoPacketCborCodec.encode(packet),
+            Self::Cbor => WsIoPacketCborCodec::encode(packet),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::Msgpack => WsIoPacketMsgpackCodec.encode(packet),
+            Self::Msgpack => WsIoPacketMsgpackCodec::encode(packet),
 
             #[cfg(feature = "packet-codec-postcard")]
-            Self::Postcard => WsIoPacketPostcardCodec.encode(packet),
+            Self::Postcard => WsIoPacketPostcardCodec::encode(packet),
 
-            Self::SerdeJson => WsIoPacketSerdeJsonCodec.encode(packet),
+            Self::SerdeJson => WsIoPacketSerdeJsonCodec::encode(packet),
 
             #[cfg(feature = "packet-codec-sonic-rs")]
-            Self::SonicRs => WsIoPacketSonicRsCodec.encode(packet),
+            Self::SonicRs => WsIoPacketSonicRsCodec::encode(packet),
         }
     }
 
@@ -109,18 +109,18 @@ impl WsIoPacketCodec {
     pub fn encode_data<D: Serialize>(&self, data: &D) -> Result<Vec<u8>> {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
-            Self::Cbor => WsIoPacketCborCodec.encode_data(data),
+            Self::Cbor => WsIoPacketCborCodec::encode_data(data),
 
             #[cfg(feature = "packet-codec-msgpack")]
-            Self::Msgpack => WsIoPacketMsgpackCodec.encode_data(data),
+            Self::Msgpack => WsIoPacketMsgpackCodec::encode_data(data),
 
             #[cfg(feature = "packet-codec-postcard")]
-            Self::Postcard => WsIoPacketPostcardCodec.encode_data(data),
+            Self::Postcard => WsIoPacketPostcardCodec::encode_data(data),
 
-            Self::SerdeJson => WsIoPacketSerdeJsonCodec.encode_data(data),
+            Self::SerdeJson => WsIoPacketSerdeJsonCodec::encode_data(data),
 
             #[cfg(feature = "packet-codec-sonic-rs")]
-            Self::SonicRs => WsIoPacketSonicRsCodec.encode_data(data),
+            Self::SonicRs => WsIoPacketSonicRsCodec::encode_data(data),
         }
     }
 

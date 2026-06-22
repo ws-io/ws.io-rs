@@ -1,3 +1,5 @@
+#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
+
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -24,7 +26,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WsIoServer(Arc<WsIoServerRuntime>);
 
 impl WsIoServer {
