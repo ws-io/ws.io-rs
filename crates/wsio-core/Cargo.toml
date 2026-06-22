@@ -1,6 +1,6 @@
 [package]
 name = "wsio-core"
-version = "0.12.7"
+version = "0.12.8"
 edition.workspace = true
 
 description = "Shared packet, event, and task primitives for ws.io."

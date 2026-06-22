@@ -102,7 +102,7 @@ tokio-util = "0.7.18"
 tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
 url = "2.5.8"
-wsio-core = { workspace = true, version = "0.12.7" }
+wsio-core.workspace = true
 
 # -----------------------------------------------------------------------------
 # OS / family-specific dependencies

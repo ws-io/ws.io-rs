@@ -93,7 +93,7 @@ tokio-tungstenite = "0.29.0"
 tokio-util = "0.7.18"
 tracing = { version = "0.1.44", optional = true }
 url = "2.5.8"
-wsio-core = { workspace = true, version = "0.12.7" }
+wsio-core.workspace = true
 
 # -----------------------------------------------------------------------------
 # OS / family-specific dependencies
