@@ -90,9 +90,9 @@ private_intra_doc_links = "warn"
 # =============================================================================
 
 [workspace.dependencies]
-wsio-client = { path = "./crates/wsio-client", version = "0.8.8" }
-wsio-core = { path = "./crates/wsio-core", version = "0.12.8" }
-wsio-server = { path = "./crates/wsio-server", version = "0.12.5" }
+wsio-client = { path = "./crates/wsio-client", version = "0.8.9" }
+wsio-core = { path = "./crates/wsio-core", version = "0.12.9" }
+wsio-server = { path = "./crates/wsio-server", version = "0.12.6" }
 
 # =============================================================================
 # Profiles

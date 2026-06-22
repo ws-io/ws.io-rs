@@ -1,6 +1,6 @@
 [package]
 name = "wsio-adapter"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 
 description = "Adapter extension point for ws.io broadcast and multi-node integrations."

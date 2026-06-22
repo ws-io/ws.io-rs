@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.9 - 2026-06-22 04:09
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.7...wsio-core-v0.12.9)
+
+### 🏡 Chore
+
+- format and lint code ([aa05f01](https://github.com/ws-io/ws.io-rs/commit/aa05f01))
+- sync all `Cargo.toml` form template ([89c1c2e](https://github.com/ws-io/ws.io-rs/commit/89c1c2e))
+
 ## 0.12.7 - 2026-06-09 16:37
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.6...wsio-core-v0.12.7)

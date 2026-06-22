@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.9 - 2026-06-22 04:09
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.8...wsio-client-v0.8.9)
+
+### 🏡 Chore
+
+- format and lint code ([aa05f01](https://github.com/ws-io/ws.io-rs/commit/aa05f01))
+- sync all `Cargo.toml` form template ([89c1c2e](https://github.com/ws-io/ws.io-rs/commit/89c1c2e))
+
+### 🩹 Fixes
+
+- bump `adapter` version to `0.1.1` and `core` version to `0.12.8` to resolve skipped git commit and versions ([1109f89](https://github.com/ws-io/ws.io-rs/commit/1109f89))
+
 ## 0.8.8 - 2026-06-09 16:37
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.7...wsio-client-v0.8.8)
