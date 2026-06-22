@@ -1,42 +1,57 @@
 [package]
 name = "wsio-client"
 version = "0.8.8"
-
-authors.workspace = true
-categories.workspace = true
-description = "Event-driven WebSocket client for ws.io."
 edition.workspace = true
-homepage.workspace = true
-include = [
-  "Cargo.toml",
-  "README.md",
-  "src/**/*",
-]
 
-keywords.workspace = true
+description = "Event-driven WebSocket client for ws.io."
+# documentation = "https://docs.rs/crate-name"
+# homepage.workspace = true
 license.workspace = true
 readme = "./README.md"
 repository.workspace = true
 
-# Optional package metadata
-# rust-version.workspace = true
-# documentation = "https://docs.rs/crate-name"
-# exclude = []
-# publish = true
-# build = "build.rs"
+categories.workspace = true
+keywords.workspace = true
+
+include = [
+  "Cargo.toml",
+  "LICENSE*",
+  "README.md",
+  "benches/**",
+  "examples/**",
+  "src/**",
+  "tests/**",
+]
+
+# Prevent accidental publishing for private/internal crates.
+# publish = false
+
+# Only needed when using native linking / sys crates.
 # links = "native-library-name"
 
-# Optional cargo metadata
+# Cargo auto-detects build.rs by default.
+# Use `build = false` to disable auto-detection, or a custom path if needed.
+# build = "build.rs"
+
+# Optional cargo/tool metadata.
 # [package.metadata]
 
-# Optional lint configuration
-# [lints]
-# workspace = true
 
+# =============================================================================
+# Lints
+# =============================================================================
+
+[lints]
+workspace = true
+
+# =============================================================================
 # Features
+# =============================================================================
+
 [features]
-## Default, aliases, and feature groups
 default = []
+
+# Convenience aliases.
 all = [
   "packet-codec-cbor",
   "packet-codec-msgpack",
@@ -47,7 +62,12 @@ all = [
 
 full = ["all"]
 
-## Feature flags
+# Example:
+# serde = ["dep:serde"]
+# cli = ["dep:clap"]
+# async = ["dep:tokio"]
+
+# Define features here.
 packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
 packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
@@ -57,12 +77,15 @@ tls-rustls-native = ["tokio-tungstenite/rustls-tls-native-roots"]
 tls-rustls-webpki = ["tokio-tungstenite/rustls-tls-webpki-roots"]
 tracing = ["dep:tracing"]
 
+# =============================================================================
 # Dependencies
+# =============================================================================
+
 [dependencies]
 anyhow = "1.0.102"
 arc-swap = "1.9.1"
 futures-util = { version = "0.3.32", default-features = false }
-kikiutils = { version = "0.8.0", features = ["atomic-enum-cell"] }
+kikiutils = { version = "0.11.2", features = ["atomic-enum-cell"] }
 num_enum = "0.7.6"
 serde = "1.0.228"
 tokio = { version = "1.52.3", features = ["macros", "rt", "sync", "time"] }
@@ -70,69 +93,201 @@ tokio-tungstenite = "0.29.0"
 tokio-util = "0.7.18"
 tracing = { version = "0.1.44", optional = true }
 url = "2.5.8"
-wsio-core = { path = "../wsio-core", version = "0.12.7" }
+wsio-core = { workspace = true, version = "0.12.7" }
 
-# Target-specific dependencies
-# [target.'cfg(unix)'.dependencies]
-#
-# [target.'cfg(windows)'.dependencies]
-#
-# [target.'cfg(target_arch = "wasm32")'.dependencies]
+# -----------------------------------------------------------------------------
+# OS / family-specific dependencies
+# -----------------------------------------------------------------------------
 
+# Applies to Linux, macOS, BSD, Android, iOS, etc.
+[target.'cfg(unix)'.dependencies]
+
+
+[target.'cfg(windows)'.dependencies]
+
+
+# Linux-only deps.
+[target.'cfg(target_os = "linux")'.dependencies]
+
+
+# macOS-only deps.
+[target.'cfg(target_os = "macos")'.dependencies]
+
+
+# Windows-only deps. Usually same as cfg(windows), but kept explicit for template clarity.
+[target.'cfg(target_os = "windows")'.dependencies]
+
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+
+# -----------------------------------------------------------------------------
+# Target cfg / ABI-specific dependencies
+# -----------------------------------------------------------------------------
+
+# Linux GNU / glibc only.
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+
+
+# Linux musl only.
+[target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]
+
+
+# Windows MSVC only.
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))'.dependencies]
+
+
+# Windows GNU only.
+[target.'cfg(all(target_os = "windows", target_env = "gnu"))'.dependencies]
+
+
+# macOS Intel only.
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
+
+
+# macOS Apple Silicon only.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+
+
+# Custom sections for exact target triples or custom target cfgs.
+# Examples:
+# [target.'aarch64-unknown-linux-musl'.dependencies]
+# [target.'aarch64-apple-ios'.dependencies]
+# [target.'aarch64-linux-android'.dependencies]
+# [target.'wasm32-unknown-unknown'.dependencies]
+# [target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]
+# [target.'cfg(all(target_vendor = "apple", target_arch = "aarch64"))'.dependencies]
+
+# =============================================================================
 # Build dependencies
-# [build-dependencies]
+# =============================================================================
 
+# Build-script-only dependencies.
+[build-dependencies]
+
+
+# -----------------------------------------------------------------------------
 # Target-specific build dependencies
-# [target.'cfg(unix)'.build-dependencies]
+# -----------------------------------------------------------------------------
 
+# Unix build-script deps.
+[target.'cfg(unix)'.build-dependencies]
+
+
+# Windows build-script deps.
+[target.'cfg(windows)'.build-dependencies]
+
+
+# Linux build-script deps.
+[target.'cfg(target_os = "linux")'.build-dependencies]
+
+
+# macOS build-script deps.
+[target.'cfg(target_os = "macos")'.build-dependencies]
+
+
+# Windows build-script deps.
+[target.'cfg(target_os = "windows")'.build-dependencies]
+
+
+# WASM build-script deps.
+[target.'cfg(target_family = "wasm")'.build-dependencies]
+
+
+# wasm32 build-script deps.
+[target.'cfg(target_arch = "wasm32")'.build-dependencies]
+
+
+# Custom sections for exact target triples or custom target cfgs.
+# Examples:
+# [target.'aarch64-unknown-linux-musl'.build-dependencies]
+# [target.'aarch64-apple-ios'.build-dependencies]
+# [target.'aarch64-linux-android'.build-dependencies]
+# [target.'wasm32-unknown-unknown'.build-dependencies]
+# [target.'cfg(all(target_os = "linux", target_env = "musl"))'.build-dependencies]
+# [target.'cfg(all(target_vendor = "apple", target_arch = "aarch64"))'.build-dependencies]
+
+# =============================================================================
 # Development dependencies
-# [dev-dependencies]
+# =============================================================================
 
+# Test/example/bench-only dependencies.
+[dev-dependencies]
+
+
+# -----------------------------------------------------------------------------
 # Target-specific development dependencies
-# [target.'cfg(unix)'.dev-dependencies]
+# -----------------------------------------------------------------------------
 
-# Library target
+# Unix-only test deps.
+[target.'cfg(unix)'.dev-dependencies]
+
+
+# Windows-only test deps.
+[target.'cfg(windows)'.dev-dependencies]
+
+
+# Linux-only test deps.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+
+
+# macOS-only test deps.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+
+
+# Windows-only test deps.
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+
+
+# WASM-only test deps.
+[target.'cfg(target_family = "wasm")'.dev-dependencies]
+
+
+# wasm32-only test deps.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+
+
+# Custom sections for exact target triples or custom target cfgs.
+# Examples:
+# [target.'aarch64-unknown-linux-musl'.dev-dependencies]
+# [target.'aarch64-apple-ios'.dev-dependencies]
+# [target.'aarch64-linux-android'.dev-dependencies]
+# [target.'wasm32-unknown-unknown'.dev-dependencies]
+# [target.'cfg(all(target_os = "linux", target_env = "musl"))'.dev-dependencies]
+# [target.'cfg(all(target_vendor = "apple", target_arch = "aarch64"))'.dev-dependencies]
+
+# =============================================================================
+# Library / binary / examples / tests / benches
+# =============================================================================
+
+# Usually not needed if using the default `src/lib.rs`.
 # [lib]
 # name = "crate_name"
 # path = "src/lib.rs"
 # crate-type = ["lib"]
 # doctest = true
 
-# Binary targets
+# Usually not needed if using the default `src/main.rs`.
 # [[bin]]
 # name = "crate-name"
 # path = "src/main.rs"
 # required-features = []
 
-# Example targets
 # [[example]]
 # name = "example-name"
 # path = "examples/example-name.rs"
 # required-features = []
 
-# Test targets
+# Usually auto-discovered from `tests/*.rs`.
 # [[test]]
 # name = "integration"
 # path = "tests/integration.rs"
 # required-features = []
 
-# Benchmark targets
 # [[bench]]
 # name = "benchmark-name"
 # path = "benches/benchmark-name.rs"
 # harness = false
 # required-features = []
-
-# Optional build profiles. Prefer defining profiles at the workspace root.
-# [profile.dev]
-#
-# [profile.release]
-#
-# [profile.test]
-#
-# [profile.bench]
-
-# Optional dependency overrides. Prefer defining patches at the workspace root.
-# [patch.crates-io]
-#
-# [replace]
