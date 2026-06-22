@@ -227,7 +227,6 @@ wsio-core.workspace = true
 axum = { version = "0.8.9", features = ["ws"] }
 criterion = { version = "0.8.2", features = ["async_tokio"] }
 wsio-client = { workspace = true, features = ["full"] }
-wsio-server = { workspace = true, features = ["full"] }
 
 # -----------------------------------------------------------------------------
 # Target-specific development dependencies
