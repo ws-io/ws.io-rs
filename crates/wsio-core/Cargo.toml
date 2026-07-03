@@ -77,7 +77,7 @@ packet-codec-sonic-rs = ["dep:sonic-rs"]
 # =============================================================================
 
 [dependencies]
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 ciborium = { version = "0.2.2", optional = true }
 kikiutils = { version = "0.11.2", features = ["fx-collections"] }
 parking_lot = "0.12.5"
