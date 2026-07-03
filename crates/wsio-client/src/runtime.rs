@@ -118,7 +118,12 @@ impl WsIoClientRuntime {
             request = modifier(request).await?;
         }
 
-        let (ws_stream, _) = connect_async_with_config(request, Some(self.config.websocket_config), false).await?;
+        let connect = connect_async_with_config(request, Some(self.config.websocket_config), false);
+        let (ws_stream, _) = if let Some(connect_timeout) = self.config.connect_timeout {
+            timeout(connect_timeout, connect).await??
+        } else {
+            connect.await?
+        };
 
         // Create session and init
         let (session, mut message_rx) = WsIoClientSession::new(self.clone());

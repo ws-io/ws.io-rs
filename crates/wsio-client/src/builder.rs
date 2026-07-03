@@ -56,6 +56,7 @@ impl WsIoClientBuilder {
         url.set_path("ws.io");
         Ok(Self {
             config: WsIoClientConfig {
+                connect_timeout: Some(Duration::from_secs(10)),
                 disconnect_timeout: Duration::from_secs(5),
                 init_handler: None,
                 init_handler_timeout: Duration::from_secs(3),
@@ -92,6 +93,18 @@ impl WsIoClientBuilder {
     /// Builds a [`WsIoClient`] with the accumulated configuration.
     pub fn build(self) -> WsIoClient {
         WsIoClient(WsIoClientRuntime::new(self.config, self.connect_url))
+    }
+
+    /// Sets how long the client waits for the WebSocket connection attempt.
+    ///
+    /// This timeout covers the transport connection and WebSocket HTTP upgrade
+    /// handshake. It does not cover ws.io protocol initialization after the
+    /// WebSocket connection is established; use [`Self::init_packet_timeout`]
+    /// and [`Self::ready_packet_timeout`] for that phase. Pass `None` to disable
+    /// the connection-attempt timeout.
+    pub fn connect_timeout(mut self, duration: impl Into<Option<Duration>>) -> Self {
+        self.config.connect_timeout = duration.into();
+        self
     }
 
     /// Sets how long `disconnect().await` waits for graceful WebSocket

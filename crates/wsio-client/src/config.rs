@@ -43,6 +43,13 @@ type RequestModifier =
 
 // Structs
 pub(crate) struct WsIoClientConfig {
+    /// Maximum duration to wait for the WebSocket connection attempt.
+    ///
+    /// This timeout covers the transport connection and WebSocket HTTP upgrade
+    /// handshake performed by `connect_async_with_config`. When unset, the
+    /// connection attempt is allowed to wait indefinitely.
+    pub(crate) connect_timeout: Option<Duration>,
+
     /// Maximum duration to wait for graceful WebSocket shutdown after
     /// `disconnect` is requested.
     ///
@@ -118,6 +125,7 @@ pub(crate) struct WsIoClientConfig {
 impl FmtDebug for WsIoClientConfig {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("WsIoClientConfig")
+            .field("connect_timeout", &self.connect_timeout)
             .field("disconnect_timeout", &self.disconnect_timeout)
             .field("init_handler", &self.init_handler.as_ref().map(|_| "<handler>"))
             .field("init_handler_timeout", &self.init_handler_timeout)
