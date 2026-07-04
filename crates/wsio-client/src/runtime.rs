@@ -113,17 +113,44 @@ impl WsIoClientRuntime {
     // Private methods
     async fn run_connection(self: &Arc<Self>) -> Result<()> {
         // Connect to server
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            scheme = self.connect_url.scheme(),
+            host = self.connect_url.host_str(),
+            port = self.connect_url.port(),
+            path = self.connect_url.path(),
+            connect_timeout_ms = self.config.connect_timeout.map(|duration| duration.as_millis() as u64),
+            "starting WebSocket connection"
+        );
+
         let mut request = self.connect_url.as_str().into_client_request()?;
         if let Some(modifier) = &self.config.request_modifier {
+            #[cfg(feature = "tracing")]
+            tracing::trace!("applying WebSocket request modifier");
             request = modifier(request).await?;
         }
 
         let connect = connect_async_with_config(request, Some(self.config.websocket_config), false);
         let (ws_stream, _) = if let Some(connect_timeout) = self.config.connect_timeout {
-            timeout(connect_timeout, connect).await??
+            match timeout(connect_timeout, connect).await {
+                Ok(result) => result?,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        error = %err,
+                        timeout_ms = connect_timeout.as_millis() as u64,
+                        "WebSocket connection timed out"
+                    );
+
+                    return Err(err.into());
+                },
+            }
         } else {
             connect.await?
         };
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("WebSocket connection established");
 
         // Create session and init
         let (session, mut message_rx) = WsIoClientSession::new(self.clone());
@@ -136,12 +163,23 @@ impl WsIoClientRuntime {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
                     Ok(Message::Binary(bytes)) => session_clone.handle_incoming_packet(&bytes).await,
-                    Ok(Message::Close(_)) | Err(_) => break,
+                    Ok(Message::Close(_)) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!("WebSocket read task received close frame");
+                        break;
+                    },
+                    Err(_err) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(error = %_err, "WebSocket read task failed");
+                        break;
+                    },
                     Ok(Message::Text(text)) => session_clone.handle_incoming_packet(text.as_bytes()).await,
                     _ => Ok(()),
                 }
                 .is_err()
                 {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!("WebSocket read task stopped after packet handling error");
                     break;
                 }
             }
@@ -152,10 +190,14 @@ impl WsIoClientRuntime {
                 let message = (*message).clone();
                 let is_close = matches!(message, Message::Close(_));
                 if ws_stream_writer.send(message).await.is_err() {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!("WebSocket write task failed to send message");
                     break;
                 }
 
                 if is_close {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!("WebSocket write task sent close frame");
                     let _ = ws_stream_writer.close().await;
                     break;
                 }
@@ -168,6 +210,8 @@ impl WsIoClientRuntime {
         let cancel_token = self.cancel_token();
         select! {
             _ = cancel_token.cancelled() => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!("client connection cancellation requested");
                 session.close();
                 let graceful_shutdown = async {
                     select! {
@@ -181,6 +225,12 @@ impl WsIoClientRuntime {
                 };
 
                 if timeout(self.config.disconnect_timeout, graceful_shutdown).await.is_err() {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        timeout_ms = self.config.disconnect_timeout.as_millis() as u64,
+                        "graceful WebSocket shutdown timed out; aborting tasks"
+                    );
+
                     read_ws_stream_task.abort();
                     write_ws_stream_task.abort();
                 }
@@ -189,15 +239,22 @@ impl WsIoClientRuntime {
                 let _ = write_ws_stream_task.await;
             }
             _ = &mut read_ws_stream_task => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!("client read task finished; aborting write task");
                 write_ws_stream_task.abort();
             },
             _ = &mut write_ws_stream_task => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!("client write task finished; aborting read task");
                 read_ws_stream_task.abort();
             },
         }
 
         self.session.store(None);
         session.cleanup().await;
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("client connection stopped");
         Ok(())
     }
 
@@ -207,8 +264,16 @@ impl WsIoClientRuntime {
         let _lock = self.operate_lock.lock().await;
 
         match self.status.get() {
-            RuntimeStatus::Running => return,
-            RuntimeStatus::Stopped => self.status.store(RuntimeStatus::Running),
+            RuntimeStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("connect request ignored because client is already running");
+                return;
+            },
+            RuntimeStatus::Stopped => {
+                #[cfg(feature = "tracing")]
+                tracing::info!("starting client runtime");
+                self.status.store(RuntimeStatus::Running)
+            },
             _ => unreachable!(),
         }
 
@@ -219,15 +284,19 @@ impl WsIoClientRuntime {
         let runtime = self.clone();
         *self.connection_loop_task.lock().await = Some(spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
-                #[cfg(feature = "tracing")]
-                if let Err(err) = runtime.run_connection().await {
-                    tracing::error!("Failed to run connection: {err:#?}");
+                if let Err(_err) = runtime.run_connection().await {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(error = %_err, "client connection attempt failed");
                 }
 
-                #[cfg(not(feature = "tracing"))]
-                let _ = runtime.run_connection().await;
                 if runtime.status.is(RuntimeStatus::Running) {
                     let cancel_token = runtime.cancel_token();
+                    #[cfg(feature = "tracing")]
+                    tracing::trace!(
+                        reconnect_delay_ms = runtime.config.reconnect_delay.as_millis() as u64,
+                        "waiting before reconnect"
+                    );
+
                     select! {
                         _ = cancel_token.cancelled() => {},
                         _ = sleep(runtime.config.reconnect_delay) => {},
@@ -241,6 +310,8 @@ impl WsIoClientRuntime {
         *self.send_event_message_task.lock().await = Some(spawn(async move {
             let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
             while let Some(message) = send_event_message_rx.recv().await {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("dequeued client event message for delivery");
                 loop {
                     if let Some(session) = runtime.session.load().as_ref()
                         && session.emit_event_message(message.clone()).await.is_ok()
@@ -266,8 +337,16 @@ impl WsIoClientRuntime {
         let _lock = self.operate_lock.lock().await;
 
         match self.status.get() {
-            RuntimeStatus::Stopped => return,
-            RuntimeStatus::Running => self.status.store(RuntimeStatus::Stopping),
+            RuntimeStatus::Stopped => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("disconnect request ignored because client is already stopped");
+                return;
+            },
+            RuntimeStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!("stopping client runtime");
+                self.status.store(RuntimeStatus::Stopping)
+            },
             _ => unreachable!(),
         }
 
@@ -289,6 +368,9 @@ impl WsIoClientRuntime {
         }
 
         self.status.store(RuntimeStatus::Stopped);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!("client runtime stopped");
     }
 
     pub(crate) async fn emit<D: Serialize>(&self, event: &str, data: Option<&D>) -> Result<()> {
@@ -306,6 +388,8 @@ impl WsIoClientRuntime {
             )
             .await?;
 
+        #[cfg(feature = "tracing")]
+        tracing::trace!(event, has_data = data.is_some(), "queued client event message");
         Ok(())
     }
 

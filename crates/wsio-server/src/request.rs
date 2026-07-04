@@ -47,6 +47,13 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 ) -> Result<Response<ResBody>, E> {
     // Check method
     if request.method() != Method::GET {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            method = %request.method(),
+            path = request.uri().path(),
+            "rejecting WebSocket request with unsupported method"
+        );
+
         return respond(StatusCode::METHOD_NOT_ALLOWED);
     }
 
@@ -55,11 +62,23 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
         || !check_header_token(&request, CONNECTION, "upgrade")
         || !check_header_value(&request, SEC_WEBSOCKET_VERSION, b"13")
     {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            path = request.uri().path(),
+            "rejecting invalid WebSocket upgrade headers"
+        );
+
         return respond(StatusCode::BAD_REQUEST);
     }
 
     // Get websocket sec key
     let Some(ws_sec_key) = request.headers().get(SEC_WEBSOCKET_KEY).and_then(|v| v.to_str().ok()) else {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            path = request.uri().path(),
+            "rejecting WebSocket request without sec key"
+        );
+
         return respond(StatusCode::BAD_REQUEST);
     };
 
@@ -69,11 +88,20 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
         .query()
         .and_then(|q| form_urlencoded::parse(q.as_bytes()).find(|(k, _)| k == "namespace"))
     else {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            path = request.uri().path(),
+            "rejecting WebSocket request without namespace"
+        );
+
         return respond(StatusCode::BAD_REQUEST);
     };
+    let namespace_path = namespace_path.into_owned();
 
     // Get namespace
     let Some(namespace) = runtime.get_namespace(&namespace_path) else {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(namespace = %namespace_path, "rejecting WebSocket request for unknown namespace");
         return respond(StatusCode::NOT_FOUND);
     };
 
@@ -82,6 +110,8 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 
     // Upgrade
     let Some(on_upgrade) = request.extensions_mut().remove::<OnUpgrade>() else {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(namespace = %namespace_path, "rejecting WebSocket request without upgrade extension");
         return respond(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
@@ -91,6 +121,8 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 
     // Build websocket accept header
     let Ok(ws_accept_header) = HeaderValue::from_str(&ws_accept_key) else {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(namespace = %namespace_path, "failed to build WebSocket accept header");
         return respond(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
@@ -104,6 +136,8 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
     headers.insert(SEC_WEBSOCKET_ACCEPT, ws_accept_header);
     headers.insert(UPGRADE, HeaderValue::from_static("websocket"));
 
+    #[cfg(feature = "tracing")]
+    tracing::debug!(namespace = %namespace_path, "accepted WebSocket upgrade request");
     Ok(response)
 }
 

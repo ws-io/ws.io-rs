@@ -67,6 +67,12 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn close_all(&self) {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            namespace_count = self.namespace_count(),
+            "closing all server connections"
+        );
+
         join_all(self.clone_namespaces().iter().map(|namespace| namespace.close_all())).await;
     }
 
@@ -74,6 +80,13 @@ impl WsIoServerRuntime {
         self.status.ensure(WsIoServerRuntimeStatus::Running, |status| {
             format!("Cannot emit in invalid status: {status:?}",)
         })?;
+
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            event,
+            namespace_count = self.namespace_count(),
+            "broadcasting server event"
+        );
 
         join_all(
             self.clone_namespaces()
@@ -86,6 +99,12 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn disconnect_all(&self) {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            namespace_count = self.namespace_count(),
+            "disconnecting all server connections"
+        );
+
         join_all(
             self.clone_namespaces()
                 .iter()
@@ -111,9 +130,17 @@ impl WsIoServerRuntime {
     #[inline]
     pub(crate) fn insert_namespace(&self, namespace: Arc<WsIoServerNamespace>) -> Result<()> {
         if self.namespaces.read().contains_key(namespace.path()) {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                namespace = namespace.path(),
+                "refusing duplicate namespace registration"
+            );
+
             bail!("Namespace {} already exists", namespace.path());
         }
 
+        #[cfg(feature = "tracing")]
+        tracing::info!(namespace = namespace.path(), "registered namespace");
         self.namespaces.write().insert(namespace.path().into(), namespace);
         Ok(())
     }
@@ -139,21 +166,40 @@ impl WsIoServerRuntime {
 
     pub(crate) async fn remove_namespace(&self, path: &str) {
         let Some(namespace) = self.namespaces.write().remove(path) else {
+            #[cfg(feature = "tracing")]
+            tracing::trace!(
+                namespace = path,
+                "remove namespace ignored because namespace is not registered"
+            );
+
             return;
         };
 
+        #[cfg(feature = "tracing")]
+        tracing::info!(namespace = path, "removing namespace");
         namespace.shutdown().await;
     }
 
     pub(crate) async fn shutdown(&self) {
         match self.status.get() {
-            WsIoServerRuntimeStatus::Stopped => return,
-            WsIoServerRuntimeStatus::Running => self.status.store(WsIoServerRuntimeStatus::Stopping),
+            WsIoServerRuntimeStatus::Stopped => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("server shutdown ignored because runtime is already stopped");
+                return;
+            },
+            WsIoServerRuntimeStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::info!(namespace_count = self.namespace_count(), "shutting down server runtime");
+                self.status.store(WsIoServerRuntimeStatus::Stopping)
+            },
             _ => unreachable!(),
         }
 
         join_all(self.clone_namespaces().iter().map(|namespace| namespace.shutdown())).await;
         self.status.store(WsIoServerRuntimeStatus::Stopped);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!("server runtime stopped");
     }
 }
 

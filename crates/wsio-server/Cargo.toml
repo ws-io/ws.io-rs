@@ -78,6 +78,10 @@ tower = [
   "dep:tower-layer",
   "dep:tower-service",
 ]
+tracing = [
+  "dep:tracing",
+  "wsio-core/tracing"
+]
 
 # =============================================================================
 # Dependencies
@@ -101,6 +105,7 @@ tokio-tungstenite = { version = "0.29.0", default-features = false, features = [
 tokio-util = "0.7.18"
 tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
+tracing = { version = "0.1.44", optional = true }
 url = "2.5.8"
 wsio-core.workspace = true
 

@@ -73,6 +73,16 @@ impl WsIoServerNamespaceBroadcastOperator {
             target_connection_ids.remove(*exclude_connection_id);
         }
 
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            namespace = self.namespace.path(),
+            target_count = target_connection_ids.len(),
+            include_room_count = self.include_rooms.len(),
+            exclude_room_count = self.exclude_rooms.len(),
+            exclude_connection_count = self.exclude_connection_ids.len(),
+            "resolved broadcast targets"
+        );
+
         if target_connection_ids.is_empty() {
             return;
         }
@@ -94,6 +104,12 @@ impl WsIoServerNamespaceBroadcastOperator {
 
     // Public methods
     pub async fn close(self) {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            namespace = self.namespace.path(),
+            "broadcasting close to namespace targets"
+        );
+
         self.for_each_target_connections(|connection| async move {
             connection.close();
             Ok(())
@@ -102,6 +118,12 @@ impl WsIoServerNamespaceBroadcastOperator {
     }
 
     pub async fn disconnect(self) -> Result<()> {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            namespace = self.namespace.path(),
+            "broadcasting disconnect to namespace targets"
+        );
+
         let message = self.namespace.encode_packet_to_message(&WsIoPacket::new_disconnect())?;
         self.for_each_target_connections(move |connection| {
             let message = message.clone();
@@ -116,9 +138,18 @@ impl WsIoServerNamespaceBroadcastOperator {
         self.namespace.status.ensure(NamespaceStatus::Running, |status| {
             format!("Cannot emit in invalid status: {status:?}")
         })?;
+        let event = event.as_ref();
+
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            namespace = self.namespace.path(),
+            event,
+            has_data = data.is_some(),
+            "broadcasting event to namespace targets"
+        );
 
         let message = self.namespace.encode_packet_to_message(&WsIoPacket::new_event(
-            event.as_ref(),
+            event,
             data.map(|data| self.namespace.config.packet_codec.encode_data(data))
                 .transpose()?,
         ))?;

@@ -101,6 +101,8 @@ impl WsIoClientSession {
     // Private methods
     #[inline]
     fn handle_disconnect_packet(&self) -> Result<()> {
+        #[cfg(feature = "tracing")]
+        tracing::debug!("received server disconnect packet");
         let runtime = self.runtime.clone();
         spawn(async move { runtime.disconnect().await });
         Ok(())
@@ -108,6 +110,8 @@ impl WsIoClientSession {
 
     #[inline]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(event, has_data = packet_data.is_some(), "received server event packet");
         self.runtime.event_registry.dispatch_event_packet(
             self.clone(),
             event,
@@ -124,19 +128,34 @@ impl WsIoClientSession {
         let state = self.state.get();
         match state {
             SessionState::AwaitingInit => self.state.try_transition(state, SessionState::Initiating)?,
-            _ => bail!("Received init packet in invalid state: {state:?}"),
+            _ => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(?state, "received init packet in invalid client session state");
+                bail!("Received init packet in invalid state: {state:?}");
+            },
         }
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("received server init packet");
 
         // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
 
         // Invoke init_handler with timeout protection if configured
         let response_data = if let Some(init_handler) = &self.runtime.config.init_handler {
-            timeout(
+            match timeout(
                 self.runtime.config.init_handler_timeout,
                 init_handler(self.clone(), packet_data, &self.runtime.config.packet_codec),
             )
-            .await??
+            .await
+            {
+                Ok(result) => result?,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(error = %err, "client init handler timed out");
+                    return Err(err.into());
+                },
+            }
         } else {
             None
         };
@@ -150,6 +169,8 @@ impl WsIoClientSession {
         *self.ready_timeout_task.lock().await = Some(spawn(async move {
             sleep(session.runtime.config.ready_packet_timeout).await;
             if session.state.is(SessionState::AwaitingReady) {
+                #[cfg(feature = "tracing")]
+                tracing::warn!("timed out waiting for server ready packet");
                 session.close();
             }
         }));
@@ -163,8 +184,15 @@ impl WsIoClientSession {
         let state = self.state.get();
         match state {
             SessionState::AwaitingReady => self.state.try_transition(state, SessionState::Ready)?,
-            _ => bail!("Received ready packet in invalid state: {state:?}"),
+            _ => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(?state, "received ready packet in invalid client session state");
+                bail!("Received ready packet in invalid state: {state:?}");
+            },
         }
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("client session is ready");
 
         // Abort ready-timeout task
         abort_locked_task(&self.ready_timeout_task).await;
@@ -191,6 +219,8 @@ impl WsIoClientSession {
 
     // Protected methods
     pub(crate) async fn cleanup(self: &Arc<Self>) {
+        #[cfg(feature = "tracing")]
+        tracing::debug!("cleaning up client session");
         // Set state to Closing
         self.state.store(SessionState::Closing);
 
@@ -203,16 +233,22 @@ impl WsIoClientSession {
         self.cancel_token.load().cancel();
 
         // Invoke on_session_close_handler with timeout protection if configured
-        if let Some(on_session_close_handler) = &self.runtime.config.on_session_close_handler {
-            let _ = timeout(
+        if let Some(on_session_close_handler) = &self.runtime.config.on_session_close_handler
+            && let Err(_err) = timeout(
                 self.runtime.config.on_session_close_handler_timeout,
                 on_session_close_handler(self.clone()),
             )
-            .await;
+            .await
+        {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(error = %_err, "client session close handler timed out");
         }
 
         // Set state to Closed
         self.state.store(SessionState::Closed);
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!("client session closed");
     }
 
     #[inline]
@@ -220,7 +256,11 @@ impl WsIoClientSession {
         // Skip if session is already Closing or Closed, otherwise set state to Closing
         match self.state.get() {
             SessionState::Closed | SessionState::Closing => return,
-            _ => self.state.store(SessionState::Closing),
+            _state => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(state = ?_state, "closing client session");
+                self.state.store(SessionState::Closing)
+            },
         }
 
         // Send websocket close frame to initiate graceful shutdown
@@ -237,7 +277,14 @@ impl WsIoClientSession {
 
     pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
         // TODO: lazy load
-        let packet = self.runtime.config.packet_codec.decode(encoded_packet)?;
+        let packet = match self.runtime.config.packet_codec.decode(encoded_packet) {
+            Ok(packet) => packet,
+            Err(err) => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(error = %err, "failed to decode server packet");
+                return Err(err);
+            },
+        };
         match packet.r#type {
             WsIoPacketType::Disconnect => self.handle_disconnect_packet(),
             WsIoPacketType::Event => {
@@ -258,12 +305,16 @@ impl WsIoClientSession {
 
     pub(crate) async fn init(self: &Arc<Self>) {
         self.state.store(SessionState::AwaitingInit);
+        #[cfg(feature = "tracing")]
+        tracing::debug!("client session awaiting server init packet");
         let session = self.clone();
 
         // Create init-timeout watchdog to close session if init not received in time
         *self.init_timeout_task.lock().await = Some(spawn(async move {
             sleep(session.runtime.config.init_packet_timeout).await;
             if session.state.is(SessionState::AwaitingInit) {
+                #[cfg(feature = "tracing")]
+                tracing::warn!("timed out waiting for server init packet");
                 session.close();
             }
         }));
@@ -274,6 +325,8 @@ impl WsIoClientSession {
             loop {
                 sleep(session.runtime.config.ping_interval).await;
                 if session.send_message(PING_MESSAGE.clone()).await.is_err() {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!("failed to send client heartbeat; closing session");
                     session.close();
                 }
             }

@@ -104,21 +104,39 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
         task_spawner: &Arc<S>,
     ) {
         let Some(event_entry) = self.event_entries.read().get(event).cloned() else {
+            #[cfg(feature = "tracing")]
+            tracing::trace!(event, "dropping event packet without registered handlers");
             return;
         };
 
+        #[cfg(feature = "tracing")]
+        tracing::trace!(event, has_data = packet_data.is_some(), "dispatching event packet");
+
         let packet_codec = *packet_codec;
         let task_spawner_clone = task_spawner.clone();
+        let _event_name = event.to_owned();
         task_spawner.spawn_task(async move {
             let data = match packet_data {
                 Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
                     Ok(data) => data,
-                    Err(_) => return Ok(()),
+                    Err(_err) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(event = %_event_name, error = %_err, "failed to decode event packet data");
+                        return Ok(());
+                    },
                 },
                 None => EMPTY_EVENT_DATA_ANY_ARC.clone(),
             };
 
             let handlers = event_entry.handlers.read().values().cloned().collect::<Vec<_>>();
+
+            #[cfg(feature = "tracing")]
+            tracing::trace!(
+                event = %_event_name,
+                handler_count = handlers.len(),
+                "spawning event handlers"
+            );
+
             for handler in handlers {
                 let ctx = ctx.clone();
                 let data = data.clone();
@@ -131,13 +149,18 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
 
     #[inline]
     pub fn off(&self, event: &str) {
-        self.event_entries.write().remove(event);
+        let _removed = self.event_entries.write().remove(event).is_some();
+        #[cfg(feature = "tracing")]
+        tracing::trace!(event, removed = _removed, "removed event handlers");
     }
 
     #[inline]
     pub fn off_by_handler_id(&self, event: &str, handler_id: u32) {
         if let Some(event_entry) = self.event_entries.read().get(event) {
-            event_entry.handlers.write().remove(&handler_id);
+            let _removed = event_entry.handlers.write().remove(&handler_id).is_some();
+
+            #[cfg(feature = "tracing")]
+            tracing::trace!(event, handler_id, removed = _removed, "removed event handler by id");
             if !event_entry.handlers.read().is_empty() {
                 return;
             }
@@ -179,6 +202,9 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
         };
 
         let handler_id = self.next_handler_id.fetch_add(1, Ordering::Relaxed);
+
+        #[cfg(feature = "tracing")]
+        tracing::trace!(event, handler_id, "registered event handler");
         event_entry.handlers.write().insert(
             handler_id,
             Arc::new(move |connection, data| {

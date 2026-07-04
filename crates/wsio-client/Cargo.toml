@@ -75,7 +75,10 @@ packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
 tls-native = ["tokio-tungstenite/native-tls"]
 tls-rustls-native = ["tokio-tungstenite/rustls-tls-native-roots"]
 tls-rustls-webpki = ["tokio-tungstenite/rustls-tls-webpki-roots"]
-tracing = ["dep:tracing"]
+tracing = [
+  "dep:tracing",
+  "wsio-core/tracing"
+]
 
 # =============================================================================
 # Dependencies

@@ -100,6 +100,13 @@ impl WsIoServerNamespace {
         request_uri: Uri,
         upgraded: Upgraded,
     ) -> Result<()> {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            namespace = self.config.path,
+            request_path = request_uri.path(),
+            "handling upgraded WebSocket request"
+        );
+
         // Create ws stream
         let mut ws_stream =
             WebSocketStream::from_raw_socket(TokioIo::new(upgraded), Role::Server, Some(self.config.websocket_config))
@@ -107,6 +114,14 @@ impl WsIoServerNamespace {
 
         // Check runtime and namespace status
         if !self.runtime.status.is(WsIoServerRuntimeStatus::Running) || !self.status.is(NamespaceStatus::Running) {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                namespace = self.config.path,
+                runtime_status = ?self.runtime.status.get(),
+                namespace_status = ?self.status.get(),
+                "rejecting upgraded request because server or namespace is not running"
+            );
+
             ws_stream
                 .send((*self.encode_packet_to_message(&WsIoPacket::new_disconnect())?).clone())
                 .await?;
@@ -117,6 +132,13 @@ impl WsIoServerNamespace {
 
         // Create connection
         let (connection, mut message_rx) = WsIoServerConnection::new(headers, self.clone(), request_uri);
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            namespace = self.config.path,
+            connection_id = connection.id(),
+            "accepted WebSocket connection"
+        );
 
         // Split ws stream and spawn read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
@@ -132,12 +154,27 @@ impl WsIoServerNamespace {
 
                         connection_clone.handle_incoming_packet(&bytes).await
                     },
-                    Ok(Message::Close(_)) | Err(_) => break,
+                    Ok(Message::Close(_)) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(connection_id = connection_clone.id(), "server read task received close frame");
+                        break;
+                    },
+                    Err(_err) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(connection_id = connection_clone.id(), error = %_err, "server read task failed");
+                        break;
+                    },
                     Ok(Message::Text(text)) => connection_clone.handle_incoming_packet(text.as_bytes()).await,
                     _ => Ok(()),
                 }
                 .is_err()
                 {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(
+                        connection_id = connection_clone.id(),
+                        "server read task stopped after packet handling error"
+                    );
+
                     break;
                 }
             }
@@ -148,10 +185,14 @@ impl WsIoServerNamespace {
                 let message = (*message).clone();
                 let is_close = matches!(message, Message::Close(_));
                 if ws_stream_writer.send(message).await.is_err() {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!("server write task failed to send message");
                     break;
                 }
 
                 if is_close {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!("server write task sent close frame");
                     let _ = ws_stream_writer.close().await;
                     break;
                 }
@@ -161,17 +202,25 @@ impl WsIoServerNamespace {
         // Try to init connection
         match connection.init().await {
             Ok(_) => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = connection.id(), "server connection initialized");
                 // Wait for either read or write task to finish
                 select! {
                     _ = &mut read_ws_stream_task => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(connection_id = connection.id(), "server read task finished; aborting write task");
                         write_ws_stream_task.abort();
                     },
                     _ = &mut write_ws_stream_task => {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(connection_id = connection.id(), "server write task finished; aborting read task");
                         read_ws_stream_task.abort();
                     },
                 }
             },
-            Err(_) => {
+            Err(_err) => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = connection.id(), error = %_err, "server connection initialization failed");
                 // Close connection
                 read_ws_stream_task.abort();
                 connection.close();
@@ -181,6 +230,9 @@ impl WsIoServerNamespace {
 
         // Cleanup connection
         connection.cleanup().await;
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = connection.id(), "server connection stopped");
         Ok(())
     }
 
@@ -206,10 +258,35 @@ impl WsIoServerNamespace {
         on_upgrade: OnUpgrade,
         request_uri: Uri,
     ) {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            namespace = self.config.path,
+            request_path = request_uri.path(),
+            "spawning WebSocket upgrade task"
+        );
+
         let namespace = self.clone();
         self.connection_task_set.lock().await.spawn(async move {
-            if let Ok(Ok(upgraded)) = timeout(namespace.config.http_request_upgrade_timeout, on_upgrade).await {
-                let _ = namespace.handle_upgraded_request(headers, request_uri, upgraded).await;
+            match timeout(namespace.config.http_request_upgrade_timeout, on_upgrade).await {
+                Ok(Ok(upgraded)) => {
+                    if let Err(_err) = namespace.handle_upgraded_request(headers, request_uri, upgraded).await {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(namespace = namespace.config.path, error = %_err, "upgraded request handling failed");
+                    }
+                },
+                Ok(Err(_err)) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(namespace = namespace.config.path, error = %_err, "HTTP upgrade failed");
+                },
+                Err(_err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        namespace = namespace.config.path,
+                        error = %_err,
+                        timeout_ms = namespace.config.http_request_upgrade_timeout.as_millis() as u64,
+                        "HTTP upgrade timed out"
+                    );
+                },
             }
         });
     }
@@ -288,7 +365,11 @@ impl WsIoServerNamespace {
     pub async fn shutdown(self: &Arc<Self>) {
         match self.status.get() {
             NamespaceStatus::Stopped => return,
-            NamespaceStatus::Running => self.status.store(NamespaceStatus::Stopping),
+            NamespaceStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::info!(namespace = self.config.path, "shutting down namespace");
+                self.status.store(NamespaceStatus::Stopping)
+            },
             _ => unreachable!(),
         }
 
@@ -297,6 +378,9 @@ impl WsIoServerNamespace {
         while connection_task_set.join_next().await.is_some() {}
 
         self.status.store(NamespaceStatus::Stopped);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(namespace = self.config.path, "namespace stopped");
     }
 
     #[inline]

@@ -169,6 +169,16 @@ impl WsIoServerConnection {
     ) -> (Arc<Self>, Receiver<Arc<Message>>) {
         let channel_capacity = channel_capacity_from_websocket_config(&namespace.config.websocket_config);
         let (message_tx, message_rx) = channel(channel_capacity);
+        let id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(
+            connection_id = id,
+            namespace = %namespace.path(),
+            request_path = request_uri.path(),
+            "creating server connection"
+        );
+
         (
             Arc::new(Self {
                 cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
@@ -176,7 +186,7 @@ impl WsIoServerConnection {
                 #[cfg(feature = "connection-extensions")]
                 extensions: ConnectionExtensions::new(),
                 headers,
-                id: NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed),
+                id,
                 init_timeout_task: Mutex::new(None),
                 joined_rooms: FxDashSet::default(),
                 message_tx,
@@ -192,6 +202,14 @@ impl WsIoServerConnection {
     // Private methods
     #[inline]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            connection_id = self.id,
+            event,
+            has_data = packet_data.is_some(),
+            "received client event packet"
+        );
+
         self.event_registry.dispatch_event_packet(
             self.clone(),
             event,
@@ -208,19 +226,44 @@ impl WsIoServerConnection {
         let state = self.state.get();
         match state {
             ConnectionState::AwaitingInit => self.state.try_transition(state, ConnectionState::Initiating)?,
-            _ => bail!("Received init packet in invalid state: {state:?}"),
+            _ => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    connection_id = self.id,
+                    ?state,
+                    "received init packet in invalid server connection state"
+                );
+
+                bail!("Received init packet in invalid state: {state:?}");
+            },
         }
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = self.id, "received client init packet");
 
         // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
 
         // Invoke init_response_handler with timeout protection if configured
         if let Some(init_response_handler) = &self.namespace.config.init_response_handler {
-            timeout(
+            match timeout(
                 self.namespace.config.init_response_handler_timeout,
                 init_response_handler(self.clone(), packet_data, &self.namespace.config.packet_codec),
             )
-            .await??
+            .await
+            {
+                Ok(result) => result?,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        connection_id = self.id,
+                        error = %err,
+                        "server init response handler timed out"
+                    );
+
+                    return Err(err.into());
+                },
+            }
         }
 
         // Activate connection
@@ -229,11 +272,19 @@ impl WsIoServerConnection {
 
         // Invoke middleware with timeout protection if configured
         if let Some(middleware) = &self.namespace.config.middleware {
-            timeout(
+            match timeout(
                 self.namespace.config.middleware_execution_timeout,
                 middleware(self.clone()),
             )
-            .await??;
+            .await
+            {
+                Ok(result) => result?,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(connection_id = self.id, error = %err, "server middleware timed out");
+                    return Err(err.into());
+                },
+            }
 
             // Ensure connection is still in Activating state
             self.state.ensure(ConnectionState::Activating, |state| {
@@ -243,11 +294,19 @@ impl WsIoServerConnection {
 
         // Invoke on_connect_handler with timeout protection if configured
         if let Some(on_connect_handler) = &self.namespace.config.on_connect_handler {
-            timeout(
+            match timeout(
                 self.namespace.config.on_connect_handler_timeout,
                 on_connect_handler(self.clone()),
             )
-            .await??;
+            .await
+            {
+                Ok(result) => result?,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(connection_id = self.id, error = %err, "server on-connect handler timed out");
+                    return Err(err.into());
+                },
+            }
         }
 
         // Transition state to Ready
@@ -256,6 +315,9 @@ impl WsIoServerConnection {
 
         // Insert connection into namespace
         self.namespace.insert_connection(self.clone());
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = self.id, "server connection is ready");
 
         // Send ready packet
         self.send_packet(&WsIoPacket::new_ready()).await?;
@@ -276,6 +338,8 @@ impl WsIoServerConnection {
 
     // Protected methods
     pub(crate) async fn cleanup(self: &Arc<Self>) {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = self.id, "cleaning up server connection");
         // Set connection state to Closing
         self.state.store(ConnectionState::Closing);
 
@@ -297,16 +361,22 @@ impl WsIoServerConnection {
         self.cancel_token.load().cancel();
 
         // Invoke on_close_handler with timeout protection if configured
-        if let Some(on_close_handler) = self.on_close_handler.lock().await.take() {
-            let _ = timeout(
+        if let Some(on_close_handler) = self.on_close_handler.lock().await.take()
+            && let Err(_err) = timeout(
                 self.namespace.config.on_close_handler_timeout,
                 on_close_handler(self.clone()),
             )
-            .await;
+            .await
+        {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(connection_id = self.id, error = %_err, "server close handler timed out");
         }
 
         // Set connection state to Closed
         self.state.store(ConnectionState::Closed);
+
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = self.id, "server connection closed");
     }
 
     #[inline]
@@ -314,7 +384,11 @@ impl WsIoServerConnection {
         // Skip if connection is already Closing or Closed, otherwise set connection state to Closing
         match self.state.get() {
             ConnectionState::Closed | ConnectionState::Closing => return,
-            _ => self.state.store(ConnectionState::Closing),
+            _state => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = self.id, state = ?_state, "closing server connection");
+                self.state.store(ConnectionState::Closing)
+            },
         }
 
         // Send websocket close frame to initiate graceful shutdown
@@ -331,7 +405,15 @@ impl WsIoServerConnection {
 
     pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
         // TODO: lazy load
-        let packet = self.namespace.config.packet_codec.decode(encoded_packet)?;
+        let packet = match self.namespace.config.packet_codec.decode(encoded_packet) {
+            Ok(packet) => packet,
+            Err(err) => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = self.id, error = %err, "failed to decode client packet");
+                return Err(err);
+            },
+        };
+
         match packet.r#type {
             WsIoPacketType::Event => {
                 if self.is_ready() {
@@ -355,13 +437,29 @@ impl WsIoServerConnection {
             format!("Cannot init connection in invalid state: {state:?}")
         })?;
 
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = self.id, "initializing server connection");
+
         // Generate init request data if init request handler is configured
         let init_request_data = if let Some(init_request_handler) = &self.namespace.config.init_request_handler {
-            timeout(
+            match timeout(
                 self.namespace.config.init_request_handler_timeout,
                 init_request_handler(self.clone(), &self.namespace.config.packet_codec),
             )
-            .await??
+            .await
+            {
+                Ok(result) => result?,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        connection_id = self.id,
+                        error = %err,
+                        "server init request handler timed out"
+                    );
+
+                    return Err(err.into());
+                },
+            }
         } else {
             None
         };
@@ -375,6 +473,12 @@ impl WsIoServerConnection {
         *self.init_timeout_task.lock().await = Some(spawn(async move {
             sleep(connection.namespace.config.init_response_timeout).await;
             if connection.state.is(ConnectionState::AwaitingInit) {
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    connection_id = connection.id,
+                    "timed out waiting for client init response packet"
+                );
+
                 connection.close();
             }
         }));
@@ -389,6 +493,8 @@ impl WsIoServerConnection {
 
     // Public methods
     pub async fn disconnect(&self) {
+        #[cfg(feature = "tracing")]
+        tracing::debug!(connection_id = self.id, "disconnecting server connection");
         let _ = self.send_packet(&WsIoPacket::new_disconnect()).await;
         self.close()
     }
@@ -438,6 +544,9 @@ impl WsIoServerConnection {
         for room_name in room_names {
             let room_name = room_name.into();
             self.namespace.add_connection_id_to_room(&room_name, self.id);
+
+            #[cfg(feature = "tracing")]
+            tracing::trace!(connection_id = self.id, room = %room_name, "connection joined room");
             self.joined_rooms.insert(room_name);
         }
     }
@@ -449,6 +558,9 @@ impl WsIoServerConnection {
             self.namespace.remove_connection_id_from_room(room_name, self.id);
 
             self.joined_rooms.remove(room_name);
+
+            #[cfg(feature = "tracing")]
+            tracing::trace!(connection_id = self.id, room = %room_name, "connection left room");
         }
     }
 
