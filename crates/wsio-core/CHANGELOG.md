@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.10 - 2026-07-04 04:48
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.9...wsio-core-v0.12.10)
+
+### 🏡 Chore
+
+- upgrade deps ([8e3125e](https://github.com/ws-io/ws.io-rs/commit/8e3125e))
+
+### 🚀 Enhancements
+
+- add feature-gated tracing ([09e4ef5](https://github.com/ws-io/ws.io-rs/commit/09e4ef5))
+
 ## 0.12.9 - 2026-06-22 04:09
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.7...wsio-core-v0.12.9)

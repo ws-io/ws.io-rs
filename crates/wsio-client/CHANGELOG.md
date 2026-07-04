@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.10 - 2026-07-04 04:48
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.9...wsio-client-v0.8.10)
+
+### 🏡 Chore
+
+- upgrade deps ([8e3125e](https://github.com/ws-io/ws.io-rs/commit/8e3125e))
+
+### 🚀 Enhancements
+
+- add feature-gated tracing ([09e4ef5](https://github.com/ws-io/ws.io-rs/commit/09e4ef5))
+- *(client)* add WebSocket connect timeout ([f075b5f](https://github.com/ws-io/ws.io-rs/commit/f075b5f))
+
 ## 0.8.9 - 2026-06-22 04:09
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.8.8...wsio-client-v0.8.9)
