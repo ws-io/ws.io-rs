@@ -4,11 +4,11 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034,SC2154,SC2317
 
-if [[ -n "${LINUX_CONFIGS_LIBS_RUST_LOADED:-}" ]]; then
+if [[ -n "${SCRIPT_LIBS_RUST_LOADED:-}" ]]; then
     return 0 2>/dev/null || true
 fi
 
-LINUX_CONFIGS_LIBS_RUST_LOADED=1
+SCRIPT_LIBS_RUST_LOADED=1
 
 prepend_cargo_bin_to_path() {
     [[ -d "${HOME}/.cargo/bin" ]] || return 0

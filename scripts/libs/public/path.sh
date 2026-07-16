@@ -4,11 +4,11 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2317
 
-if [[ -n "${LINUX_CONFIGS_LIBS_PATH_LOADED:-}" ]]; then
+if [[ -n "${SCRIPT_LIBS_PATH_LOADED:-}" ]]; then
     return 0 2>/dev/null || true
 fi
 
-LINUX_CONFIGS_LIBS_PATH_LOADED=1
+SCRIPT_LIBS_PATH_LOADED=1
 
 absolute_path() {
     local path="$1"

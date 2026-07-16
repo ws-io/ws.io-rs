@@ -4,11 +4,11 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2317
 
-if [[ -n "${LINUX_CONFIGS_LIBS_COMMAND_LOADED:-}" ]]; then
+if [[ -n "${SCRIPT_LIBS_COMMAND_LOADED:-}" ]]; then
     return 0 2>/dev/null || true
 fi
 
-LINUX_CONFIGS_LIBS_COMMAND_LOADED=1
+SCRIPT_LIBS_COMMAND_LOADED=1
 
 command_exists() {
     (($# == 1)) || {

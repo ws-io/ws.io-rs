@@ -4,11 +4,11 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2317
 
-if [[ -n "${LINUX_CONFIGS_LIBS_LOG_LOADED:-}" ]]; then
+if [[ -n "${SCRIPT_LIBS_LOG_LOADED:-}" ]]; then
     return 0 2>/dev/null || true
 fi
 
-LINUX_CONFIGS_LIBS_LOG_LOADED=1
+SCRIPT_LIBS_LOG_LOADED=1
 
 LC_COLOR_RESET=''
 LC_COLOR_RED=''
