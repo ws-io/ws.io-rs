@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::Result;
 use arc_swap::{
@@ -58,6 +61,12 @@ use crate::{
 };
 
 // Enums
+enum CompletedWebSocketTask {
+    Read,
+    Write,
+}
+
+// Structs
 #[repr(u8)]
 #[derive(Debug, Eq, IntoPrimitive, PartialEq, TryFromPrimitive)]
 enum RuntimeStatus {
@@ -213,40 +222,24 @@ impl WsIoClientRuntime {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("client connection cancellation requested");
                 session.close();
-                let graceful_shutdown = async {
-                    select! {
-                        _ = &mut read_ws_stream_task => {
-                            write_ws_stream_task.abort();
-                        },
-                        _ = &mut write_ws_stream_task => {
-                            read_ws_stream_task.abort();
-                        },
-                    }
-                };
-
-                if timeout(self.config.disconnect_timeout, graceful_shutdown).await.is_err() {
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!(
-                        timeout_ms = self.config.disconnect_timeout.as_millis() as u64,
-                        "graceful WebSocket shutdown timed out; aborting tasks"
-                    );
-
-                    read_ws_stream_task.abort();
-                    write_ws_stream_task.abort();
-                }
-
-                let _ = read_ws_stream_task.await;
-                let _ = write_ws_stream_task.await;
+                shutdown_websocket_tasks(
+                    read_ws_stream_task,
+                    write_ws_stream_task,
+                    self.config.disconnect_timeout,
+                )
+                .await;
             }
             _ = &mut read_ws_stream_task => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("client read task finished; aborting write task");
                 write_ws_stream_task.abort();
+                let _ = write_ws_stream_task.await;
             },
             _ = &mut write_ws_stream_task => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("client write task finished; aborting read task");
                 read_ws_stream_task.abort();
+                let _ = read_ws_stream_task.await;
             },
         }
 
@@ -426,5 +419,65 @@ impl WsIoClientRuntime {
         D: DeserializeOwned + Send + Sync + 'static,
     {
         self.event_registry.on(event, handler)
+    }
+}
+
+// Functions
+async fn shutdown_websocket_tasks(
+    mut read_task: JoinHandle<()>,
+    mut write_task: JoinHandle<()>,
+    shutdown_timeout: Duration,
+) {
+    let graceful_shutdown = timeout(shutdown_timeout, async {
+        select! {
+            _ = &mut read_task => CompletedWebSocketTask::Read,
+            _ = &mut write_task => CompletedWebSocketTask::Write,
+        }
+    })
+    .await;
+
+    match graceful_shutdown {
+        Ok(CompletedWebSocketTask::Read) => {
+            write_task.abort();
+            let _ = write_task.await;
+        },
+        Ok(CompletedWebSocketTask::Write) => {
+            read_task.abort();
+            let _ = read_task.await;
+        },
+        Err(_) => {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                timeout_ms = shutdown_timeout.as_millis() as u64,
+                "graceful WebSocket shutdown timed out; aborting tasks"
+            );
+
+            read_task.abort();
+            write_task.abort();
+            let _ = read_task.await;
+            let _ = write_task.await;
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::pending;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn shutdown_websocket_tasks_handles_read_completion() {
+        shutdown_websocket_tasks(spawn(async {}), spawn(pending()), Duration::from_secs(1)).await;
+    }
+
+    #[tokio::test]
+    async fn shutdown_websocket_tasks_handles_write_completion() {
+        shutdown_websocket_tasks(spawn(pending()), spawn(async {}), Duration::from_secs(1)).await;
+    }
+
+    #[tokio::test]
+    async fn shutdown_websocket_tasks_aborts_both_on_timeout() {
+        shutdown_websocket_tasks(spawn(pending()), spawn(pending()), Duration::ZERO).await;
     }
 }
