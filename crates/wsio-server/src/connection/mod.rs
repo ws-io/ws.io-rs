@@ -554,10 +554,10 @@ impl WsIoServerConnection {
     #[inline]
     pub fn leave(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl Into<String>>) {
         for room_name in room_names {
-            let room_name = &room_name.into();
-            self.namespace.remove_connection_id_from_room(room_name, self.id);
+            let room_name = room_name.into();
+            self.namespace.remove_connection_id_from_room(&room_name, self.id);
 
-            self.joined_rooms.remove(room_name);
+            self.joined_rooms.remove(&room_name);
 
             #[cfg(feature = "tracing")]
             tracing::trace!(connection_id = self.id, room = %room_name, "connection left room");

@@ -34,7 +34,7 @@ impl WsIoServerBuilder {
                 on_close_handler_timeout: Duration::from_secs(2),
                 on_connect_handler_timeout: Duration::from_secs(3),
                 packet_codec: WsIoPacketCodec::SerdeJson,
-                request_path: "/ws.io".into(),
+                request_path: "/ws.io".to_owned(),
                 websocket_config: WebSocketConfig::default()
                     .max_frame_size(Some(8 * 1024 * 1024))
                     .max_message_size(Some(16 * 1024 * 1024))
@@ -141,7 +141,7 @@ impl WsIoServerBuilder {
     /// wrapped service. Client namespace routing is carried separately in the
     /// `namespace` query parameter.
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
-        self.config.request_path = request_path.as_ref().into();
+        self.config.request_path = request_path.as_ref().to_owned();
         self
     }
 

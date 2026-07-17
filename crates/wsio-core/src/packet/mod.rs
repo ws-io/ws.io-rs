@@ -38,7 +38,7 @@ impl WsIoPacket {
     pub fn new(r#type: WsIoPacketType, key: Option<&str>, data: Option<Vec<u8>>) -> Self {
         Self {
             data,
-            key: key.map(|k| k.into()),
+            key: key.map(str::to_owned),
             r#type,
         }
     }
@@ -65,8 +65,12 @@ impl WsIoPacket {
     }
 
     #[inline]
-    pub fn new_event(event: &str, data: Option<Vec<u8>>) -> Self {
-        Self::new(WsIoPacketType::Event, Some(event), data)
+    pub fn new_event(event: impl Into<String>, data: Option<Vec<u8>>) -> Self {
+        Self {
+            data,
+            key: Some(event.into()),
+            r#type: WsIoPacketType::Event,
+        }
     }
 
     #[inline]

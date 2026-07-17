@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    collections::hash_map::Entry,
+    sync::Arc,
+};
 
 use anyhow::{
     Result,
@@ -129,19 +132,19 @@ impl WsIoServerRuntime {
 
     #[inline]
     pub(crate) fn insert_namespace(&self, namespace: Arc<WsIoServerNamespace>) -> Result<()> {
-        if self.namespaces.read().contains_key(namespace.path()) {
-            #[cfg(feature = "tracing")]
-            tracing::debug!(
-                namespace = namespace.path(),
-                "refusing duplicate namespace registration"
-            );
-
-            bail!("Namespace {} already exists", namespace.path());
+        match self.namespaces.write().entry(namespace.path().to_owned()) {
+            Entry::Occupied(entry) => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(namespace = entry.key(), "refusing duplicate namespace registration");
+                bail!("Namespace {} already exists", entry.key());
+            },
+            Entry::Vacant(entry) => {
+                #[cfg(feature = "tracing")]
+                tracing::info!(namespace = entry.key(), "registered namespace");
+                entry.insert(namespace);
+            },
         }
 
-        #[cfg(feature = "tracing")]
-        tracing::info!(namespace = namespace.path(), "registered namespace");
-        self.namespaces.write().insert(namespace.path().into(), namespace);
         Ok(())
     }
 

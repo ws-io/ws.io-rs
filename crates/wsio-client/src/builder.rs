@@ -250,7 +250,7 @@ impl WsIoClientBuilder {
     /// The handler receives the session and the optional server init payload
     /// decoded as `D`. Its optional return value is encoded as `R` and sent back
     /// to the server as the client init response.
-    pub fn with_init_handler<H, Fut, D, R>(mut self, handler: H) -> WsIoClientBuilder
+    pub fn with_init_handler<H, Fut, D, R>(mut self, handler: H) -> Self
     where
         H: Fn(Arc<WsIoClientSession>, Option<D>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Option<R>>> + Send + 'static,

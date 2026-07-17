@@ -239,7 +239,10 @@ impl WsIoServerNamespace {
     // Protected methods
     #[inline]
     pub(crate) fn add_connection_id_to_room(&self, room_name: &str, connection_id: u64) {
-        self.rooms.entry(room_name.into()).or_default().insert(connection_id);
+        self.rooms
+            .entry(room_name.to_owned())
+            .or_default()
+            .insert(connection_id);
     }
 
     #[inline]

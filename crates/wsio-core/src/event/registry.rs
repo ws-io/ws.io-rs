@@ -98,11 +98,12 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
     pub fn dispatch_event_packet(
         &self,
         ctx: Arc<C>,
-        event: &str,
+        event: impl AsRef<str>,
         packet_codec: &WsIoPacketCodec,
         packet_data: Option<Vec<u8>>,
         task_spawner: &Arc<S>,
     ) {
+        let event = event.as_ref();
         let Some(event_entry) = self.event_entries.read().get(event).cloned() else {
             #[cfg(feature = "tracing")]
             tracing::trace!(event, "dropping event packet without registered handlers");
@@ -150,14 +151,16 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
     }
 
     #[inline]
-    pub fn off(&self, event: &str) {
+    pub fn off(&self, event: impl AsRef<str>) {
+        let event = event.as_ref();
         let _removed = self.event_entries.write().remove(event).is_some();
         #[cfg(feature = "tracing")]
         tracing::trace!(event, removed = _removed, "removed event handlers");
     }
 
     #[inline]
-    pub fn off_by_handler_id(&self, event: &str, handler_id: u32) {
+    pub fn off_by_handler_id(&self, event: impl AsRef<str>, handler_id: u32) {
+        let event = event.as_ref();
         if let Some(event_entry) = self.event_entries.read().get(event) {
             let _removed = event_entry.handlers.write().remove(&handler_id).is_some();
 
@@ -168,7 +171,7 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
             }
         }
 
-        if let Entry::Occupied(entry) = self.event_entries.write().entry(event.into())
+        if let Entry::Occupied(entry) = self.event_entries.write().entry(event.to_owned())
             && entry.get().handlers.read().is_empty()
         {
             entry.remove();
@@ -176,16 +179,17 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
     }
 
     #[inline]
-    pub fn on<H, Fut, D>(&self, event: &str, handler: H) -> u32
+    pub fn on<H, Fut, D>(&self, event: impl AsRef<str>, handler: H) -> u32
     where
         H: Fn(Arc<C>, Arc<D>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<()>> + Send + 'static,
         D: DeserializeOwned + Send + Sync + 'static,
     {
+        let event = event.as_ref();
         let data_type_id = TypeId::of::<D>();
 
         let mut event_entries = self.event_entries.write();
-        let event_entry = match event_entries.entry(event.into()) {
+        let event_entry = match event_entries.entry(event.to_owned()) {
             Entry::Occupied(occupied) => {
                 let event_entry = occupied.into_mut();
                 assert_eq!(

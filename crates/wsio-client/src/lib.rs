@@ -1,12 +1,10 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
-use std::{
-    fmt::Display,
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use anyhow::{
     Result,
+    anyhow,
     bail,
 };
 use serde::{
@@ -35,15 +33,8 @@ pub struct WsIoClient(Arc<WsIoClientRuntime>);
 
 impl WsIoClient {
     // Public methods
-    pub fn builder<U>(url: U) -> Result<WsIoClientBuilder>
-    where
-        U: TryInto<Url>,
-        U::Error: Display,
-    {
-        let url = match url.try_into() {
-            Ok(url) => url,
-            Err(err) => bail!("Invalid URL: {err}"),
-        };
+    pub fn builder(url: impl AsRef<str>) -> Result<WsIoClientBuilder> {
+        let url = Url::parse(url.as_ref()).map_err(|err| anyhow!("Invalid URL: {err}"))?;
 
         if url.scheme() == "wss"
             && !cfg!(any(
@@ -107,7 +98,34 @@ impl WsIoClient {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
+
+    fn assert_builder_accepts(url: impl AsRef<str>) {
+        assert!(WsIoClient::builder(url).is_ok());
+    }
+
+    #[test]
+    #[allow(clippy::needless_borrows_for_generic_args)] // Explicitly verify borrowed input forms.
+    fn builder_accepts_common_url_input_types() {
+        const URL: &str = "ws://localhost:8080/chat";
+
+        let str_ref = URL;
+        assert_builder_accepts(str_ref);
+        assert_builder_accepts(&str_ref);
+
+        let string = URL.to_owned();
+        assert_builder_accepts(string.clone());
+        assert_builder_accepts(&string);
+
+        let url = Url::parse(URL).unwrap();
+        assert_builder_accepts(url.clone());
+        assert_builder_accepts(&url);
+
+        assert_builder_accepts(Cow::Borrowed(URL));
+        assert_builder_accepts(Cow::Owned(URL.to_owned()));
+    }
 
     #[test]
     fn builder_rejects_unparseable_url() {
