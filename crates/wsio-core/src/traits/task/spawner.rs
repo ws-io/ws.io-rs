@@ -24,14 +24,14 @@ pub trait TaskSpawner: Send + Sync + 'static {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{
-        AtomicBool,
-        Ordering,
+    use std::{
+        future::pending,
+        time::Duration,
     };
 
     use tokio::{
         sync::oneshot::channel,
-        task::yield_now,
+        time::timeout,
     };
 
     use super::*;
@@ -52,24 +52,17 @@ mod tests {
             cancel_token: Arc::new(CancellationToken::new()),
         };
 
-        let flag = Arc::new(AtomicBool::new(false));
-        let flag_clone = flag.clone();
-
-        let (tx, rx) = channel::<()>();
+        let (completed_tx, completed_rx) = channel();
 
         spawner.spawn_task(async move {
-            let _ = rx.await;
-            flag_clone.store(true, Ordering::Relaxed);
+            let _ = completed_tx.send(());
             Ok(())
         });
 
-        // Trigger the task to complete
-        let _ = tx.send(());
-
-        // Wait for the task to complete
-        yield_now().await;
-
-        assert!(flag.load(Ordering::Relaxed), "Task should have completed");
+        timeout(Duration::from_secs(1), completed_rx)
+            .await
+            .expect("task should complete before timeout")
+            .expect("task should run to completion");
     }
 
     #[tokio::test]
@@ -79,24 +72,26 @@ mod tests {
             cancel_token: cancel_token.clone(),
         };
 
-        let flag = Arc::new(AtomicBool::new(false));
-        let flag_clone = flag.clone();
-
-        // Cancel the token immediately
-        cancel_token.cancel();
+        let (started_tx, started_rx) = channel();
+        let (dropped_tx, dropped_rx) = channel::<()>();
 
         spawner.spawn_task(async move {
-            std::future::pending::<()>().await;
-            flag_clone.store(true, Ordering::Relaxed);
+            let _drop_signal = dropped_tx;
+            let _ = started_tx.send(());
+            pending::<()>().await;
             Ok(())
         });
 
-        // Wait a bit to ensure the task had time to be aborted or complete if it failed to abort
-        yield_now().await;
+        timeout(Duration::from_secs(1), started_rx)
+            .await
+            .expect("task should start before timeout")
+            .expect("task should start before cancellation");
 
-        assert!(
-            !flag.load(Ordering::Relaxed),
-            "Task should have been cancelled before completion"
-        );
+        cancel_token.cancel();
+
+        timeout(Duration::from_secs(1), dropped_rx)
+            .await
+            .expect("task should be dropped before timeout")
+            .expect_err("cancellation should drop the task future");
     }
 }

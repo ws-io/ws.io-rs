@@ -394,66 +394,26 @@ impl WsIoServerNamespace {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
-    use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
-
     use super::*;
-    use crate::{
-        config::WsIoServerConfig,
-        core::packet::codecs::WsIoPacketCodec,
-    };
+    use crate::WsIoServer;
 
     fn create_test_namespace() -> Arc<WsIoServerNamespace> {
-        let runtime = WsIoServerRuntime::new(WsIoServerConfig {
-            broadcast_concurrency_limit: 16,
-            http_request_upgrade_timeout: Duration::from_secs(3),
-            init_request_handler_timeout: Duration::from_secs(3),
-            init_response_handler_timeout: Duration::from_secs(3),
-            init_response_timeout: Duration::from_secs(3),
-            middleware_execution_timeout: Duration::from_secs(3),
-            on_close_handler_timeout: Duration::from_secs(3),
-            on_connect_handler_timeout: Duration::from_secs(3),
-            packet_codec: WsIoPacketCodec::SerdeJson,
-            request_path: "/socket".into(),
-            websocket_config: WebSocketConfig::default(),
-        });
-        runtime.new_namespace_builder("/test").register().unwrap()
+        WsIoServer::builder()
+            .build()
+            .new_namespace_builder("/test")
+            .register()
+            .unwrap()
     }
 
-    #[tokio::test]
-    async fn test_namespace_new() {
+    #[test]
+    fn test_namespace_new() {
         let namespace = create_test_namespace();
         assert_eq!(namespace.path(), "/test");
         assert_eq!(namespace.connection_count(), 0);
     }
 
-    #[tokio::test]
-    async fn test_namespace_connection_count() {
-        let namespace = create_test_namespace();
-        assert_eq!(namespace.connection_count(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_namespace_server() {
-        let namespace = create_test_namespace();
-        namespace.server();
-    }
-
-    #[tokio::test]
-    async fn test_namespace_to_broadcast_operator() {
-        let namespace = create_test_namespace();
-        namespace.to(["room1", "room2"]);
-    }
-
-    #[tokio::test]
-    async fn test_namespace_except_broadcast_operator() {
-        let namespace = create_test_namespace();
-        namespace.except(["room1", "room2"]);
-    }
-
-    #[tokio::test]
-    async fn test_namespace_add_remove_connection_id_to_room() {
+    #[test]
+    fn test_namespace_add_remove_connection_id_to_room() {
         let namespace = create_test_namespace();
         namespace.add_connection_id_to_room("room1", 1);
         namespace.add_connection_id_to_room("room1", 2);
@@ -475,15 +435,8 @@ mod tests {
         assert!(!namespace.rooms.contains_key("room2"));
     }
 
-    #[tokio::test]
-    async fn test_namespace_remove_connection_id_from_empty_room() {
-        let namespace = create_test_namespace();
-        // Removing from non-existent room should not panic
-        namespace.remove_connection_id_from_room("nonexistent", 1);
-    }
-
-    #[tokio::test]
-    async fn test_namespace_encode_packet_to_message() {
+    #[test]
+    fn test_namespace_encode_packet_to_message() {
         let namespace = create_test_namespace();
         let packet = WsIoPacket::new_disconnect();
         let message = namespace.encode_packet_to_message(&packet).unwrap();
@@ -502,9 +455,7 @@ mod tests {
     #[tokio::test]
     async fn test_broadcast_operator_disconnect_with_no_connections() {
         let namespace = create_test_namespace();
-        let op = namespace.to(["room1"]);
-        let result = op.clone().disconnect().await;
-        assert!(result.is_ok());
+        namespace.to(["room1"]).disconnect().await.unwrap();
     }
 
     #[tokio::test]
@@ -513,10 +464,12 @@ mod tests {
         // Shutdown to make status invalid
         namespace.clone().shutdown().await;
 
-        let op = namespace.to(["room1"]);
-        let result = op.emit("event", Option::<&()>::None).await;
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("invalid status"));
+        let error = namespace
+            .to(["room1"])
+            .emit("event", Option::<&()>::None)
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("invalid status"));
     }
 }

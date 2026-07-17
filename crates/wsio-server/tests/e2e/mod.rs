@@ -1,5 +1,11 @@
 use std::{
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
+    },
     time::Duration,
 };
 
@@ -27,6 +33,7 @@ mod ping_pong;
 mod reconnect;
 
 const CLIENT_STATE_TIMEOUT: Duration = Duration::from_secs(2);
+const EVENT_QUIET_PERIOD: Duration = Duration::from_millis(100);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const TEST_NAMESPACE: &str = "/socket";
 
@@ -35,8 +42,7 @@ async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
     let local_addr = listener.local_addr().unwrap();
     let ws_url = format!("ws://{}{}", local_addr, TEST_NAMESPACE);
 
-    let server_builder = WsIoServer::builder();
-    let server = Arc::new(server_builder.build());
+    let server = Arc::new(WsIoServer::builder().build());
 
     // Create Axum Router and attach the WsIoServer Layer
     let app = Router::new().layer(server.layer());
@@ -66,14 +72,32 @@ async fn wait_for_client_ready(client: &WsIoClient) {
         .expect("client session should become ready before timeout");
 }
 
-async fn wait_for_clients_disconnected(clients: &[WsIoClient]) -> usize {
-    if wait_for_condition(|| clients.iter().all(|client| !client.is_session_ready()))
+async fn wait_for_clients_disconnected(clients: &[WsIoClient]) {
+    wait_for_condition(|| clients.iter().all(|client| !client.is_session_ready()))
         .await
-        .is_ok()
-    {
-        clients.len()
-    } else {
-        0
+        .expect("clients should disconnect before timeout");
+}
+
+async fn wait_for_counter(counter: &AtomicUsize, expected: usize) {
+    wait_for_condition(|| counter.load(Ordering::SeqCst) >= expected)
+        .await
+        .expect("event counter should reach expected value before timeout");
+}
+
+async fn assert_counters_stay_at(counters: &[&AtomicUsize], expected: usize) {
+    timeout(EVENT_QUIET_PERIOD, async {
+        while counters
+            .iter()
+            .all(|counter| counter.load(Ordering::SeqCst) <= expected)
+        {
+            sleep(POLL_INTERVAL).await;
+        }
+    })
+    .await
+    .expect_err("event counters should not exceed expected value");
+
+    for counter in counters {
+        assert_eq!(counter.load(Ordering::SeqCst), expected);
     }
 }
 

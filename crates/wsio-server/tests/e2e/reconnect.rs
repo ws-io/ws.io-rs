@@ -9,15 +9,16 @@ use std::{
     time::Duration,
 };
 
-use tokio::time::sleep;
 use wsio_client::WsIoClient;
 
 use super::{
     TEST_NAMESPACE,
+    assert_counters_stay_at,
     cleanup_e2e,
     setup_server,
     wait_for_client_ready,
     wait_for_condition,
+    wait_for_counter,
 };
 
 #[tokio::test]
@@ -26,10 +27,10 @@ async fn test_e2e_client_reconnect() {
     let (server_task, server, ws_url) = setup_server().await;
 
     // Register the default test namespace.
-    let namespace_builder = server.new_namespace_builder(TEST_NAMESPACE);
     let survivor_msg_count = Arc::new(AtomicUsize::new(0));
     let survivor_msg_count_clone = survivor_msg_count.clone();
-    namespace_builder
+    server
+        .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(move |ctx| {
             let survivor_msg_count_clone = survivor_msg_count_clone.clone();
             async move {
@@ -73,16 +74,10 @@ async fn test_e2e_client_reconnect() {
 
     wait_for_client_ready(&client).await;
 
-    // Give the client event sender task a moment to flush the buffered event.
-    sleep(Duration::from_millis(50)).await;
-
     // Phase 5: Verification
-    // Verify that the server successfully received the buffered message AFTER the reconnect
-    assert_eq!(
-        survivor_msg_count.load(Ordering::SeqCst),
-        1,
-        "Server should receive the buffered 'survivor_msg' after client reconnects"
-    );
+    // The server received the buffered message exactly once after the reconnect.
+    wait_for_counter(&survivor_msg_count, 1).await;
+    assert_counters_stay_at(&[&survivor_msg_count], 1).await;
 
     cleanup_e2e(vec![client], server_task).await;
 }

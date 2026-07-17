@@ -289,35 +289,31 @@ mod tests {
         let builder = test_builder();
 
         assert_eq!(builder.connect_url.path(), "/ws.io");
-        assert_eq!(
-            builder
-                .connect_url
-                .query_pairs()
-                .find(|(key, _)| key == "namespace")
-                .map(|(_, value)| value.into_owned()),
-            Some("/socket".into())
-        );
+        let namespace = builder
+            .connect_url
+            .query_pairs()
+            .find(|(key, _)| key == "namespace")
+            .unwrap()
+            .1;
+
+        assert_eq!(namespace, "/socket");
     }
 
     #[test]
     fn test_builder_new_valid_wss_url() {
-        let result = WsIoClientBuilder::new(Url::parse("wss://localhost:8080/socket").unwrap());
-        assert!(result.is_ok());
+        WsIoClientBuilder::new(Url::parse("wss://localhost:8080/socket").unwrap()).unwrap();
     }
 
     #[test]
     fn test_builder_new_invalid_scheme() {
-        let result = WsIoClientBuilder::new(Url::parse("http://localhost:8080/socket").unwrap());
-        assert!(result.is_err());
-        if let Err(e) = result {
-            let err_msg = format!("{e}");
-            assert!(err_msg.contains("Invalid URL scheme"));
-        }
+        let error = WsIoClientBuilder::new(Url::parse("http://localhost:8080/socket").unwrap()).unwrap_err();
+        assert!(error.to_string().contains("Invalid URL scheme"));
     }
 
     #[test]
     fn test_builder_configuration_chaining_updates_runtime_config() {
         let builder = test_builder()
+            .connect_timeout(Duration::from_secs(25))
             .disconnect_timeout(Duration::from_secs(20))
             .init_handler_timeout(Duration::from_secs(10))
             .init_packet_timeout(Duration::from_secs(15))
@@ -333,6 +329,7 @@ mod tests {
         let client = builder.build();
 
         let config = &client.0.config;
+        assert_eq!(config.connect_timeout, Some(Duration::from_secs(25)));
         assert_eq!(config.disconnect_timeout, Duration::from_secs(20));
         assert_eq!(config.init_handler_timeout, Duration::from_secs(10));
         assert_eq!(config.init_packet_timeout, Duration::from_secs(15));
@@ -395,29 +392,5 @@ mod tests {
             .build();
 
         assert!(client.0.config.request_modifier.is_some());
-    }
-
-    #[test]
-    fn test_builder_all_timeout_configurations() {
-        let client = test_builder()
-            .disconnect_timeout(Duration::from_millis(500))
-            .init_handler_timeout(Duration::from_secs(1))
-            .init_packet_timeout(Duration::from_secs(2))
-            .on_session_close_handler_timeout(Duration::from_secs(3))
-            .ready_packet_timeout(Duration::from_secs(4))
-            .build();
-
-        assert_eq!(client.0.config.disconnect_timeout, Duration::from_millis(500));
-        assert_eq!(client.0.config.init_handler_timeout, Duration::from_secs(1));
-        assert_eq!(client.0.config.init_packet_timeout, Duration::from_secs(2));
-        assert_eq!(client.0.config.on_session_close_handler_timeout, Duration::from_secs(3));
-        assert_eq!(client.0.config.ready_packet_timeout, Duration::from_secs(4));
-    }
-
-    #[test]
-    fn test_builder_reconnect_delay_configuration() {
-        let client = test_builder().reconnect_delay(Duration::from_millis(500)).build();
-
-        assert_eq!(client.0.config.reconnect_delay, Duration::from_millis(500));
     }
 }

@@ -23,7 +23,7 @@ const EVENT_NAME: &str = "benchmark_event";
 const PAYLOAD_SIZES: [usize; 3] = [0, 256, 4096];
 
 // Structs
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[derive(Deserialize, Serialize)]
 struct BenchPayload {
     id: u32,
     message: String,
@@ -65,13 +65,13 @@ fn bench_codecs(criterion: &mut Criterion) {
             let packet = WsIoPacket::new_event(EVENT_NAME, Some(encoded_data.clone()));
             let encoded_packet = codec.encode(&packet).unwrap();
 
-            group.throughput(Throughput::Bytes(payload_size.max(1) as u64));
+            group.throughput(Throughput::Bytes(encoded_data.len() as u64));
             group.bench_with_input(
                 bench_id(name, "encode_data", payload_size),
                 &payload,
                 |bencher, payload| {
                     bencher.iter(|| {
-                        let _ = codec.encode_data(black_box(payload)).unwrap();
+                        black_box(codec.encode_data(black_box(payload)).unwrap());
                     })
                 },
             );
@@ -82,18 +82,18 @@ fn bench_codecs(criterion: &mut Criterion) {
                 &encoded_data,
                 |bencher, encoded_data| {
                     bencher.iter(|| {
-                        let _: BenchPayload = codec.decode_data(black_box(encoded_data)).unwrap();
+                        black_box(codec.decode_data::<BenchPayload>(black_box(encoded_data)).unwrap());
                     })
                 },
             );
 
-            group.throughput(Throughput::Bytes(encoded_data.len() as u64));
+            group.throughput(Throughput::Bytes(encoded_packet.len() as u64));
             group.bench_with_input(
                 bench_id(name, "encode_packet", payload_size),
                 &packet,
                 |bencher, packet| {
                     bencher.iter(|| {
-                        let _ = codec.encode(black_box(packet)).unwrap();
+                        black_box(codec.encode(black_box(packet)).unwrap());
                     })
                 },
             );
@@ -104,7 +104,7 @@ fn bench_codecs(criterion: &mut Criterion) {
                 &encoded_packet,
                 |bencher, encoded_packet| {
                     bencher.iter(|| {
-                        let _ = codec.decode(black_box(encoded_packet)).unwrap();
+                        black_box(codec.decode(black_box(encoded_packet)).unwrap());
                     })
                 },
             );

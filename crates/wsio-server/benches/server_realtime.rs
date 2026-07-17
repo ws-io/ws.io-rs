@@ -2,13 +2,7 @@
 
 use std::{
     hint::black_box,
-    sync::{
-        Arc,
-        atomic::{
-            AtomicUsize,
-            Ordering,
-        },
-    },
+    sync::Arc,
     time::Duration,
 };
 
@@ -29,10 +23,8 @@ use tokio::{
         Builder,
         Runtime,
     },
-    task::{
-        JoinHandle,
-        yield_now,
-    },
+    sync::Semaphore,
+    task::JoinHandle,
     time::{
         sleep,
         timeout,
@@ -56,7 +48,7 @@ const TEST_NAMESPACE: &str = "/socket";
 
 // Structs
 struct BenchServer {
-    ack_count: Arc<AtomicUsize>,
+    acks: Arc<Semaphore>,
     clients: Vec<WsIoClient>,
     namespace: Arc<WsIoServerNamespace>,
     server_task: JoinHandle<()>,
@@ -88,13 +80,13 @@ async fn wait_for_client_ready(client: &WsIoClient) {
     wait_for_condition(|| client.is_session_ready(), "benchmark client should become ready").await;
 }
 
-fn register_ack_counter(client: &WsIoClient, ack_count: &Arc<AtomicUsize>) {
+fn register_ack_counter(client: &WsIoClient, acks: &Arc<Semaphore>) {
     for event in ACK_EVENTS {
-        let ack_count = ack_count.clone();
+        let acks = acks.clone();
         client.on(event, move |_session, _data: Arc<()>| {
-            let ack_count = ack_count.clone();
+            let acks = acks.clone();
             async move {
-                ack_count.fetch_add(1, Ordering::Relaxed);
+                acks.add_permits(1);
                 Ok(())
             }
         });
@@ -133,10 +125,10 @@ async fn setup_room_server(client_count: usize, joined_room_count: usize) -> Ben
     });
 
     let mut clients = Vec::with_capacity(client_count);
-    let ack_count = Arc::new(AtomicUsize::new(0));
+    let acks = Arc::new(Semaphore::new(0));
     for index in 0..client_count {
         let client = WsIoClient::builder(ws_url.as_str()).unwrap().build();
-        register_ack_counter(&client, &ack_count);
+        register_ack_counter(&client, &acks);
 
         client.connect().await;
         wait_for_client_ready(&client).await;
@@ -148,32 +140,26 @@ async fn setup_room_server(client_count: usize, joined_room_count: usize) -> Ben
         clients.push(client);
     }
 
-    sleep(Duration::from_millis(25)).await;
+    wait_for_acks(&acks, joined_room_count).await;
 
     BenchServer {
-        ack_count,
+        acks,
         clients,
         namespace,
         server_task,
     }
 }
 
-async fn wait_for_ack_count(ack_count: &AtomicUsize, target: usize) {
-    timeout(CLIENT_READY_TIMEOUT, async {
-        while ack_count.load(Ordering::Relaxed) < target {
-            yield_now().await;
-        }
-    })
-    .await
-    .expect("room operation acknowledgements should arrive");
-}
-
 fn runtime() -> Runtime {
     Builder::new_current_thread().enable_all().build().unwrap()
 }
 
-fn payload(bytes: usize) -> Vec<u8> {
-    vec![0; bytes]
+async fn wait_for_acks(acks: &Semaphore, count: usize) {
+    timeout(CLIENT_READY_TIMEOUT, acks.acquire_many(count as u32))
+        .await
+        .expect("room operation acknowledgements should arrive")
+        .expect("ack semaphore should remain open")
+        .forget();
 }
 
 fn bench_broadcast_emit(criterion: &mut Criterion) {
@@ -222,13 +208,16 @@ fn bench_broadcast_payload(criterion: &mut Criterion) {
     group.measurement_time(Duration::from_secs(3));
 
     for payload_size in LARGE_PAYLOAD_SIZES {
-        let payload = payload(payload_size);
+        let payload = vec![0; payload_size];
+        let aggregate_payload_size = payload_size * LARGE_PAYLOAD_CLIENT_COUNT;
         let server = runtime.block_on(setup_room_server(
             LARGE_PAYLOAD_CLIENT_COUNT,
             LARGE_PAYLOAD_CLIENT_COUNT,
         ));
 
-        group.throughput(Throughput::Bytes(payload_size as u64));
+        // Report aggregate logical payload bytes delivered across recipients;
+        // protocol encoding and WebSocket framing are intentionally excluded.
+        group.throughput(Throughput::Bytes(aggregate_payload_size as u64));
         group.bench_with_input(
             BenchmarkId::new("global", payload_size),
             &payload,
@@ -243,7 +232,6 @@ fn bench_broadcast_payload(criterion: &mut Criterion) {
             },
         );
 
-        group.throughput(Throughput::Bytes(payload_size as u64));
         group.bench_with_input(BenchmarkId::new("room", payload_size), &payload, |bencher, payload| {
             bencher.to_async(&runtime).iter(|| async {
                 server
@@ -278,18 +266,18 @@ fn bench_room_churn(criterion: &mut Criterion) {
                 bencher.to_async(&runtime).iter(|| {
                     room_index += 1;
                     let room = format!("room-{room_index}");
-                    let target_acks = server.ack_count.load(Ordering::Relaxed) + (client_count * 2);
-
                     async move {
                         for client in &server.clients {
                             client.emit("join", Some(&room)).await.unwrap();
                         }
 
+                        wait_for_acks(&server.acks, client_count).await;
+
                         for client in &server.clients {
                             client.emit("leave", Some(&room)).await.unwrap();
                         }
 
-                        wait_for_ack_count(&server.ack_count, target_acks).await;
+                        wait_for_acks(&server.acks, client_count).await;
                     }
                 });
             },

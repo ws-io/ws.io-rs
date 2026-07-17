@@ -1,8 +1,14 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use std::{
+    future::Future,
     hint::black_box,
     sync::Arc,
+    task::{
+        Context,
+        Poll,
+        Waker,
+    },
 };
 
 use criterion::{
@@ -27,30 +33,23 @@ const HANDLER_COUNTS: [usize; 4] = [0, 1, 10, 100];
 // Structs
 struct DummyConnection;
 
-struct DummySpawner {
-    cancel_token: Arc<CancellationToken>,
-}
+struct ImmediateSpawner;
 
-impl TaskSpawner for DummySpawner {
+impl TaskSpawner for ImmediateSpawner {
     fn cancel_token(&self) -> Arc<CancellationToken> {
-        self.cancel_token.clone()
+        Arc::new(CancellationToken::new())
     }
 
-    fn spawn_task<F: std::future::Future<Output = anyhow::Result<()>> + Send + 'static>(&self, _future: F) {
-        // Drop tasks so this benchmark isolates registry lookup, decode scheduling,
-        // handler snapshotting, and spawner calls rather than Tokio scheduler cost.
+    fn spawn_task<F: Future<Output = anyhow::Result<()>> + Send + 'static>(&self, future: F) {
+        let mut context = Context::from_waker(Waker::noop());
+        let mut future = Box::pin(future);
+        assert!(matches!(future.as_mut().poll(&mut context), Poll::Ready(Ok(()))));
     }
 }
 
 // Functions
-fn spawner() -> Arc<DummySpawner> {
-    Arc::new(DummySpawner {
-        cancel_token: Arc::new(CancellationToken::new()),
-    })
-}
-
-fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnection, DummySpawner> {
-    let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
+fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnection, ImmediateSpawner> {
+    let registry = WsIoEventRegistry::<DummyConnection, ImmediateSpawner>::new();
     for _ in 0..handler_count {
         register_handler(&registry);
     }
@@ -58,7 +57,7 @@ fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnec
     registry
 }
 
-fn register_handler(registry: &WsIoEventRegistry<DummyConnection, DummySpawner>) -> u32 {
+fn register_handler(registry: &WsIoEventRegistry<DummyConnection, ImmediateSpawner>) -> u32 {
     registry.on(EVENT_NAME, |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
         Ok(())
     })
@@ -66,14 +65,17 @@ fn register_handler(registry: &WsIoEventRegistry<DummyConnection, DummySpawner>)
 
 fn bench_event_dispatch(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("event_registry/dispatch");
-    let spawner = spawner();
+    let spawner = Arc::new(ImmediateSpawner);
     let ctx = Arc::new(DummyConnection);
     let packet_codec = WsIoPacketCodec::SerdeJson;
     let packet_data = packet_codec.encode_data(&"Hello world benchmark").unwrap();
 
     for handler_count in HANDLER_COUNTS {
-        let registry = Arc::new(registry_with_handlers(handler_count));
-        group.throughput(Throughput::Elements(handler_count.max(1) as u64));
+        let registry = registry_with_handlers(handler_count);
+        if handler_count > 0 {
+            group.throughput(Throughput::Elements(handler_count as u64));
+        }
+
         group.bench_with_input(
             BenchmarkId::from_parameter(handler_count),
             &handler_count,
@@ -99,7 +101,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
 
     group.bench_function("register_new_event", |bencher| {
         bencher.iter_batched(
-            WsIoEventRegistry::<DummyConnection, DummySpawner>::new,
+            WsIoEventRegistry::<DummyConnection, ImmediateSpawner>::new,
             |registry| {
                 black_box(register_handler(&registry));
             },
@@ -120,7 +122,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
     group.bench_function("off_by_handler_id_last_handler", |bencher| {
         bencher.iter_batched(
             || {
-                let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
+                let registry = WsIoEventRegistry::<DummyConnection, ImmediateSpawner>::new();
                 let handler_id = register_handler(&registry);
                 (registry, handler_id)
             },

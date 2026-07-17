@@ -47,6 +47,27 @@ impl WsIoServerNamespaceBroadcastOperator {
         F: Fn(Arc<WsIoServerConnection>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<()>> + Send + 'static,
     {
+        let target_connection_ids = self.target_connection_ids();
+        if target_connection_ids.is_empty() {
+            return;
+        }
+
+        iter(target_connection_ids)
+            .filter_map(|target_connection_id| {
+                ready(
+                    self.namespace
+                        .connections
+                        .get(&target_connection_id)
+                        .map(|entry| entry.value().clone()),
+                )
+            })
+            .for_each_concurrent(self.namespace.config.broadcast_concurrency_limit, |connection| async {
+                let _ = f(connection).await;
+            })
+            .await;
+    }
+
+    fn target_connection_ids(&self) -> RoaringTreemap {
         let mut target_connection_ids = if self.include_rooms.is_empty() {
             (**self.namespace.connection_ids.load()).clone()
         } else {
@@ -83,23 +104,7 @@ impl WsIoServerNamespaceBroadcastOperator {
             "resolved broadcast targets"
         );
 
-        if target_connection_ids.is_empty() {
-            return;
-        }
-
-        iter(target_connection_ids)
-            .filter_map(|target_connection_id| {
-                ready(
-                    self.namespace
-                        .connections
-                        .get(&target_connection_id)
-                        .map(|entry| entry.value().clone()),
-                )
-            })
-            .for_each_concurrent(self.namespace.config.broadcast_concurrency_limit, |connection| async {
-                let _ = f(connection).await;
-            })
-            .await;
+        target_connection_ids
     }
 
     // Public methods
@@ -178,5 +183,53 @@ impl WsIoServerNamespaceBroadcastOperator {
     pub fn to(mut self, room_names: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.include_rooms.extend(room_names.into_iter().map(Into::into));
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::WsIoServer;
+
+    fn namespace_with_rooms() -> Arc<WsIoServerNamespace> {
+        let namespace = WsIoServer::builder()
+            .build()
+            .new_namespace_builder("/test")
+            .register()
+            .unwrap();
+
+        namespace
+            .connection_ids
+            .store(Arc::new(RoaringTreemap::from_iter([1, 2, 3])));
+
+        namespace.add_connection_id_to_room("included", 1);
+        namespace.add_connection_id_to_room("included", 2);
+        namespace.add_connection_id_to_room("excluded", 2);
+        namespace.add_connection_id_to_room("excluded", 3);
+        namespace
+    }
+
+    #[test]
+    fn resolves_existing_include_room_members() {
+        let targets = namespace_with_rooms().to(["included"]).target_connection_ids();
+
+        assert_eq!(targets, RoaringTreemap::from_iter([1, 2]));
+    }
+
+    #[test]
+    fn resolves_included_and_excluded_room_intersection() {
+        let targets = namespace_with_rooms()
+            .to(["included"])
+            .except(["excluded"])
+            .target_connection_ids();
+
+        assert_eq!(targets, RoaringTreemap::from_iter([1]));
+    }
+
+    #[test]
+    fn resolves_empty_include_room_to_no_targets() {
+        let targets = namespace_with_rooms().to(["missing"]).target_connection_ids();
+
+        assert!(targets.is_empty());
     }
 }

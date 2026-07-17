@@ -260,8 +260,8 @@ mod tests {
     use super::*;
     use crate::WsIoServer;
 
-    #[tokio::test]
-    async fn test_namespace_builder_configuration() {
+    #[test]
+    fn test_namespace_builder_configuration() {
         let server = Arc::new(WsIoServer::builder().build());
         let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
             .broadcast_concurrency_limit(42)
@@ -292,8 +292,8 @@ mod tests {
         assert_eq!(config.websocket_config.max_frame_size, Some(888));
     }
 
-    #[tokio::test]
-    async fn test_namespace_builder_registers_lifecycle_handlers() {
+    #[test]
+    fn test_namespace_builder_registers_lifecycle_handlers() {
         let server = Arc::new(WsIoServer::builder().build());
         let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
             .on_connect(|_connection| async { Ok(()) })

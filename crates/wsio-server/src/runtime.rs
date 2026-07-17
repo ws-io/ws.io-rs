@@ -228,38 +228,37 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_runtime_new() {
+    #[test]
+    fn test_runtime_new() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         assert_eq!(runtime.namespace_count(), 0);
         assert_eq!(runtime.connection_count(), 0);
     }
 
-    #[tokio::test]
-    async fn test_runtime_get_namespace_not_found() {
+    #[test]
+    fn test_runtime_get_namespace_not_found() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         assert!(runtime.get_namespace("/nonexistent").is_none());
     }
 
-    #[tokio::test]
-    async fn test_runtime_insert_namespace_and_get() {
+    #[test]
+    fn test_runtime_insert_namespace_and_get() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         runtime.new_namespace_builder("/test").register().unwrap();
         assert_eq!(runtime.namespace_count(), 1);
         assert_eq!(runtime.get_namespace("/test").unwrap().path(), "/test");
     }
 
-    #[tokio::test]
-    async fn test_runtime_insert_duplicate_namespace_fails() {
+    #[test]
+    fn test_runtime_insert_duplicate_namespace_fails() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         let namespace = runtime.new_namespace_builder("/test").register().unwrap();
-        let result = runtime.insert_namespace(namespace);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("already exists"));
+        let error = runtime.insert_namespace(namespace).unwrap_err();
+        assert!(error.to_string().contains("already exists"));
     }
 
-    #[tokio::test]
-    async fn test_runtime_connection_id_tracking() {
+    #[test]
+    fn test_runtime_connection_id_tracking() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         runtime.insert_connection_id(1);
         runtime.insert_connection_id(2);
@@ -278,15 +277,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_runtime_new_namespace_builder() {
-        let runtime = WsIoServerRuntime::new(create_test_config());
-        let builder = runtime.new_namespace_builder("/test");
-        let namespace = builder.register().unwrap();
-        assert_eq!(namespace.path(), "/test");
-        assert_eq!(runtime.namespace_count(), 1);
-    }
-
-    #[tokio::test]
     async fn test_runtime_emit_invalid_status() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         // Insert namespace first to make emit work (namespace-level emit checks runtime status)
@@ -295,8 +285,7 @@ mod tests {
         // Shutdown runtime to make it invalid for emit
         runtime.shutdown().await;
 
-        let result = namespace.emit("test_event", Option::<&()>::None).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid status"));
+        let error = namespace.emit("test_event", Option::<&()>::None).await.unwrap_err();
+        assert!(error.to_string().contains("invalid status"));
     }
 }

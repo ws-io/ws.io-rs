@@ -464,20 +464,63 @@ async fn shutdown_websocket_tasks(
 mod tests {
     use std::future::pending;
 
+    use tokio::{
+        sync::oneshot,
+        time::timeout,
+    };
+
     use super::*;
+
+    async fn pending_task_with_drop_signal(drop_signal: oneshot::Sender<()>) {
+        let _drop_signal = drop_signal;
+        pending().await
+    }
+
+    async fn assert_task_dropped(drop_signal: oneshot::Receiver<()>) {
+        timeout(Duration::from_secs(1), drop_signal)
+            .await
+            .expect("task should be dropped before timeout")
+            .expect_err("task sender should be dropped");
+    }
 
     #[tokio::test]
     async fn shutdown_websocket_tasks_handles_read_completion() {
-        shutdown_websocket_tasks(spawn(async {}), spawn(pending()), Duration::from_secs(1)).await;
+        let (write_task_drop_signal, write_task_dropped) = oneshot::channel();
+        shutdown_websocket_tasks(
+            spawn(async {}),
+            spawn(pending_task_with_drop_signal(write_task_drop_signal)),
+            Duration::from_secs(1),
+        )
+        .await;
+
+        assert_task_dropped(write_task_dropped).await;
     }
 
     #[tokio::test]
     async fn shutdown_websocket_tasks_handles_write_completion() {
-        shutdown_websocket_tasks(spawn(pending()), spawn(async {}), Duration::from_secs(1)).await;
+        let (read_task_drop_signal, read_task_dropped) = oneshot::channel();
+        shutdown_websocket_tasks(
+            spawn(pending_task_with_drop_signal(read_task_drop_signal)),
+            spawn(async {}),
+            Duration::from_secs(1),
+        )
+        .await;
+
+        assert_task_dropped(read_task_dropped).await;
     }
 
     #[tokio::test]
     async fn shutdown_websocket_tasks_aborts_both_on_timeout() {
-        shutdown_websocket_tasks(spawn(pending()), spawn(pending()), Duration::ZERO).await;
+        let (read_task_drop_signal, read_task_dropped) = oneshot::channel();
+        let (write_task_drop_signal, write_task_dropped) = oneshot::channel();
+        shutdown_websocket_tasks(
+            spawn(pending_task_with_drop_signal(read_task_drop_signal)),
+            spawn(pending_task_with_drop_signal(write_task_drop_signal)),
+            Duration::ZERO,
+        )
+        .await;
+
+        assert_task_dropped(read_task_dropped).await;
+        assert_task_dropped(write_task_dropped).await;
     }
 }

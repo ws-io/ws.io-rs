@@ -114,14 +114,16 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
 
         let packet_codec = *packet_codec;
         let task_spawner_clone = task_spawner.clone();
-        let _event_name = event.to_owned();
+
+        #[cfg(feature = "tracing")]
+        let event_name = event.to_owned();
         task_spawner.spawn_task(async move {
             let data = match packet_data {
                 Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
                     Ok(data) => data,
                     Err(_err) => {
                         #[cfg(feature = "tracing")]
-                        tracing::debug!(event = %_event_name, error = %_err, "failed to decode event packet data");
+                        tracing::debug!(event = %event_name, error = %_err, "failed to decode event packet data");
                         return Ok(());
                     },
                 },
@@ -132,7 +134,7 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
 
             #[cfg(feature = "tracing")]
             tracing::trace!(
-                event = %_event_name,
+                event = %event_name,
                 handler_count = handlers.len(),
                 "spawning event handlers"
             );
@@ -236,15 +238,12 @@ fn decode_data_as_any_arc<D: DeserializeOwned + Send + Sync + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{
-        AtomicBool,
-        AtomicU32,
-        Ordering,
-    };
+    use std::time::Duration;
 
     use tokio::{
         spawn,
-        task::yield_now,
+        sync::mpsc::unbounded_channel,
+        time::timeout,
     };
     use tokio_util::sync::CancellationToken;
 
@@ -268,82 +267,91 @@ mod tests {
 
     #[tokio::test]
     async fn test_registry_dispatch() {
-        let registry = Arc::new(WsIoEventRegistry::<DummyConnection, DummySpawner>::new());
+        let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
         let spawner = Arc::new(DummySpawner {
             cancel_token: Arc::new(CancellationToken::new()),
         });
 
         let ctx = Arc::new(DummyConnection);
 
-        let count = Arc::new(AtomicU32::new(0));
-        let count_clone1 = count.clone();
-        let count_clone2 = count.clone();
+        let (handled_tx, mut handled_rx) = unbounded_channel();
+        let first_handler_tx = handled_tx.clone();
 
-        // Register two handlers for the same event
         registry.on("ping", move |_ctx, payload: Arc<String>| {
             assert_eq!(*payload, "hello");
-            count_clone1.fetch_add(1, Ordering::Relaxed);
+            first_handler_tx.send("first").unwrap();
             async move { Ok(()) }
         });
 
         registry.on("ping", move |_ctx, payload: Arc<String>| {
             assert_eq!(*payload, "hello");
-            count_clone2.fetch_add(1, Ordering::Relaxed);
+            handled_tx.send("second").unwrap();
             async move { Ok(()) }
         });
 
-        // Dispatch
         let packet_codec = WsIoPacketCodec::SerdeJson;
         let packet_data = packet_codec.encode_data(&"hello").unwrap();
 
-        registry.dispatch_event_packet(ctx.clone(), "ping", &packet_codec, Some(packet_data), &spawner);
+        registry.dispatch_event_packet(ctx, "ping", &packet_codec, Some(packet_data), &spawner);
 
-        // Yield to let the spawned Tokio tasks run
-        yield_now().await;
+        let mut handlers = Vec::with_capacity(2);
+        for _ in 0..2 {
+            let handler = timeout(Duration::from_secs(1), handled_rx.recv())
+                .await
+                .expect("handler should run before timeout")
+                .expect("handler channel should remain open");
 
-        // Verify both handlers ran
-        assert_eq!(count.load(Ordering::Relaxed), 2);
+            handlers.push(handler);
+        }
+
+        handlers.sort_unstable();
+        assert_eq!(handlers, ["first", "second"]);
     }
 
-    #[tokio::test]
-    async fn test_registry_on_off() {
+    #[test]
+    fn test_registry_on_off() {
         let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
-        let target_flag = Arc::new(AtomicBool::new(false));
-        let flag_clone = target_flag.clone();
 
-        let handler_id = registry.on("test_event", move |_ctx, _data: Arc<String>| {
-            let flag = flag_clone.clone();
-            async move {
-                flag.store(true, Ordering::Relaxed);
-                Ok(())
-            }
-        });
+        let handler_id = registry.on("test_event", |_ctx, _data: Arc<String>| async { Ok(()) });
 
         // Verify the handler was registered
         assert_eq!(handler_id, 0);
-        let event_entries = registry.event_entries.read();
-        assert!(event_entries.contains_key("test_event"));
-        assert_eq!(event_entries.get("test_event").unwrap().handlers.read().len(), 1);
-        drop(event_entries);
+        assert!(registry.event_entries.read().contains_key("test_event"));
+        assert_eq!(
+            registry
+                .event_entries
+                .read()
+                .get("test_event")
+                .unwrap()
+                .handlers
+                .read()
+                .len(),
+            1
+        );
 
         // Remove by handler ID
         registry.off_by_handler_id("test_event", handler_id);
 
         // Verify it was removed and the event entry was cleaned up since it's empty
-        let event_entries = registry.event_entries.read();
-        assert!(!event_entries.contains_key("test_event"));
-        drop(event_entries);
+        assert!(!registry.event_entries.read().contains_key("test_event"));
 
         // Register multiple and test full off
         registry.on("multi_event", |_ctx, _data: Arc<String>| async { Ok(()) });
         registry.on("multi_event", |_ctx, _data: Arc<String>| async { Ok(()) });
 
-        let event_entries = registry.event_entries.read();
-        assert_eq!(event_entries.get("multi_event").unwrap().handlers.read().len(), 2);
-        drop(event_entries);
+        assert_eq!(
+            registry
+                .event_entries
+                .read()
+                .get("multi_event")
+                .unwrap()
+                .handlers
+                .read()
+                .len(),
+            2
+        );
 
         registry.off("multi_event");
-        let event_entries = registry.event_entries.read();
-        assert!(!event_entries.contains_key("multi_event"));
+        assert!(!registry.event_entries.read().contains_key("multi_event"));
     }
 }
