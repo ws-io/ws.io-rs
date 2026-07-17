@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.11 - 2026-07-17T03:19:49Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.10...wsio-core-v0.12.11)
+
+### ✅ Tests
+
+- harden async coverage and benchmarks ([0f180f2](https://github.com/ws-io/ws.io-rs/commit/0f180f2740521b2d0fc6b36a8002894f91048948))
+
+### 🏡 Chore
+
+- upgrade deps ([87018e5](https://github.com/ws-io/ws.io-rs/commit/87018e5ed65bf819c7efd8a584b3e6951e4ac72f))
+
+### 🩹 Fixes
+
+- make namespace registration atomic and broaden APIs ([1df4ec2](https://github.com/ws-io/ws.io-rs/commit/1df4ec2f957b056f661fddfe54d7c5d53f86de07))
+
 ## 0.12.10 - 2026-07-04 04:48
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.9...wsio-core-v0.12.10)
