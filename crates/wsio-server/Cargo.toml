@@ -88,21 +88,21 @@ tracing = [
 # =============================================================================
 
 [dependencies]
-anyhow = "1.0.103"
+anyhow = "1.0.104"
 arc-swap = "1.9.2"
-futures-util = { version = "0.3.32", default-features = false }
+futures-util = { version = "0.3.33", default-features = false }
 http = "1.4.2"
 http-body = "1.1.0"
-hyper = "1.10.1"
+hyper = "1.11.0"
 hyper-util = { version = "0.1.20", features = ["tokio"] }
 kikiutils = { version = "0.11.2", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
 parking_lot = "0.12.5"
 roaring = "0.11.4"
-serde = "1.0.228"
-tokio = { version = "1.52.4", features = ["macros", "rt", "sync", "time"] }
+serde = "1.0.229"
+tokio = { version = "1.53.1", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
-tokio-util = "0.7.18"
+tokio-util = "0.7.19"
 tower-layer = { version = "0.3.3", optional = true }
 tower-service = { version = "0.3.3", optional = true }
 tracing = { version = "0.1.44", optional = true }
