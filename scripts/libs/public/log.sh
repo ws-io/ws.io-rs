@@ -25,7 +25,7 @@ lc_setup_colors() {
     LC_COLOR_BLUE=''
     LC_COLOR_CYAN=''
 
-    [[ -t 1 && -z "${NO_COLOR:-}" ]] || return 0
+    [[ -z "${NO_COLOR:-}" ]] || return 0
 
     LC_COLOR_RESET=$'\033[0m'
     LC_COLOR_RED=$'\033[1;31m'
@@ -39,10 +39,16 @@ lc_log_line() {
     local stream="$1"
     local color="$2"
     local level="$3"
+    local reset="${LC_COLOR_RESET}"
     shift 3
 
+    if [[ ! -t "${stream}" ]]; then
+        color=''
+        reset=''
+    fi
+
     printf '%s[%s] %s:%s %s\n' \
-        "${color}" "${SCRIPT_NAME:-script}" "${level}" "${LC_COLOR_RESET}" "$*" \
+        "${color}" "${SCRIPT_NAME:-script}" "${level}" "${reset}" "$*" \
         >&"${stream}"
 }
 
