@@ -36,7 +36,7 @@ impl WsIoServer {
     }
 
     pub async fn close_all(&self) {
-        self.0.close_all().await
+        self.0.close_all().await;
     }
 
     #[inline]
@@ -45,7 +45,7 @@ impl WsIoServer {
     }
 
     pub async fn disconnect_all(&self) {
-        self.0.disconnect_all().await
+        self.0.disconnect_all().await;
     }
 
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
@@ -73,10 +73,10 @@ impl WsIoServer {
     }
 
     pub async fn remove_namespace(&self, path: impl AsRef<str>) {
-        self.0.remove_namespace(path.as_ref()).await
+        self.0.remove_namespace(path.as_ref()).await;
     }
 
     pub async fn shutdown(&self) {
-        self.0.shutdown().await
+        self.0.shutdown().await;
     }
 }

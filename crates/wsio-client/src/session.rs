@@ -100,6 +100,10 @@ impl WsIoClientSession {
 
     // Private methods
     #[inline]
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "packet handlers share a fallible dispatch interface"
+    )]
     fn handle_disconnect_packet(&self) -> Result<()> {
         #[cfg(feature = "tracing")]
         tracing::debug!("received server disconnect packet");
@@ -109,6 +113,10 @@ impl WsIoClientSession {
     }
 
     #[inline]
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "packet handlers share a fallible dispatch interface"
+    )]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
         #[cfg(feature = "tracing")]
         tracing::trace!(event, has_data = packet_data.is_some(), "received server event packet");
@@ -126,13 +134,12 @@ impl WsIoClientSession {
     async fn handle_init_packet(self: &Arc<Self>, packet_data: Option<&[u8]>) -> Result<()> {
         // Verify current state; only valid from AwaitingInit → Initiating
         let state = self.state.get();
-        match state {
-            SessionState::AwaitingInit => self.state.try_transition(state, SessionState::Initiating)?,
-            _ => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(?state, "received init packet in invalid client session state");
-                bail!("Received init packet in invalid state: {state:?}");
-            },
+        if state == SessionState::AwaitingInit {
+            self.state.try_transition(state, SessionState::Initiating)?;
+        } else {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(?state, "received init packet in invalid client session state");
+            bail!("Received init packet in invalid state: {state:?}");
         }
 
         #[cfg(feature = "tracing")]
@@ -182,13 +189,12 @@ impl WsIoClientSession {
     async fn handle_ready_packet(self: &Arc<Self>) -> Result<()> {
         // Verify current state; only valid from AwaitingReady → Ready
         let state = self.state.get();
-        match state {
-            SessionState::AwaitingReady => self.state.try_transition(state, SessionState::Ready)?,
-            _ => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(?state, "received ready packet in invalid client session state");
-                bail!("Received ready packet in invalid state: {state:?}");
-            },
+        if state == SessionState::AwaitingReady {
+            self.state.try_transition(state, SessionState::Ready)?;
+        } else {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(?state, "received ready packet in invalid client session state");
+            bail!("Received ready packet in invalid state: {state:?}");
         }
 
         #[cfg(feature = "tracing")]
@@ -259,7 +265,7 @@ impl WsIoClientSession {
             _state => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(state = ?_state, "closing client session");
-                self.state.store(SessionState::Closing)
+                self.state.store(SessionState::Closing);
             },
         }
 
@@ -291,9 +297,9 @@ impl WsIoClientSession {
                 if self.is_ready() {
                     if let Some(event) = packet.key.as_deref() {
                         return self.handle_event_packet(event, packet.data);
-                    } else {
-                        bail!("Event packet missing key");
                     }
+
+                    bail!("Event packet missing key");
                 }
 
                 Ok(())

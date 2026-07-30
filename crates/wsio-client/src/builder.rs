@@ -32,6 +32,7 @@ use crate::{
 /// The URL passed to the client constructor selects the namespace from its path,
 /// while the actual WebSocket request path defaults to `/ws.io`.
 #[derive(Debug)]
+#[must_use]
 pub struct WsIoClientBuilder {
     config: WsIoClientConfig,
     connect_url: Url,
@@ -301,7 +302,7 @@ mod tests {
 
     #[test]
     fn test_builder_new_valid_wss_url() {
-        WsIoClientBuilder::new(Url::parse("wss://localhost:8080/socket").unwrap()).unwrap();
+        let _builder = WsIoClientBuilder::new(Url::parse("wss://localhost:8080/socket").unwrap()).unwrap();
     }
 
     #[test]

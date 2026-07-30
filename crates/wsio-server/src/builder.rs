@@ -17,6 +17,7 @@ use crate::{
 /// from the server. Namespace builders may override most of these values per
 /// namespace.
 #[derive(Debug)]
+#[must_use]
 pub struct WsIoServerBuilder {
     config: WsIoServerConfig,
 }
@@ -141,7 +142,7 @@ impl WsIoServerBuilder {
     /// wrapped service. Client namespace routing is carried separately in the
     /// `namespace` query parameter.
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
-        self.config.request_path = request_path.as_ref().to_owned();
+        request_path.as_ref().clone_into(&mut self.config.request_path);
         self
     }
 

@@ -48,7 +48,7 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
     type Response = S::Response;
 
-    #[inline(always)]
+    #[inline]
     fn call(&mut self, request: Request<ReqBody>) -> Self::Future {
         if request.uri().path() == self.runtime.config.request_path {
             let runtime = self.runtime.clone();
@@ -60,7 +60,7 @@ where
         }
     }
 
-    #[inline(always)]
+    #[inline]
     fn poll_ready(&mut self, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(ctx)
     }

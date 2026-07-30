@@ -66,7 +66,7 @@ impl WsIoServerRuntime {
     // Protected methods
     #[inline]
     pub(crate) fn connection_count(&self) -> usize {
-        self.connection_ids.load().len() as usize
+        usize::try_from(self.connection_ids.load().len()).unwrap_or(usize::MAX)
     }
 
     pub(crate) async fn close_all(&self) {
@@ -76,12 +76,12 @@ impl WsIoServerRuntime {
             "closing all server connections"
         );
 
-        join_all(self.clone_namespaces().iter().map(|namespace| namespace.close_all())).await;
+        join_all(self.clone_namespaces().iter().map(WsIoServerNamespace::close_all)).await;
     }
 
     pub(crate) async fn emit<D: Serialize>(&self, event: &str, data: Option<&D>) -> Result<()> {
         self.status.ensure(WsIoServerRuntimeStatus::Running, |status| {
-            format!("Cannot emit in invalid status: {status:?}",)
+            format!("Cannot emit in invalid status: {status:?}")
         })?;
 
         #[cfg(feature = "tracing")]
@@ -108,12 +108,7 @@ impl WsIoServerRuntime {
             "disconnecting all server connections"
         );
 
-        join_all(
-            self.clone_namespaces()
-                .iter()
-                .map(|namespace| namespace.disconnect_all()),
-        )
-        .await;
+        join_all(self.clone_namespaces().iter().map(WsIoServerNamespace::disconnect_all)).await;
     }
 
     #[inline]
@@ -193,12 +188,12 @@ impl WsIoServerRuntime {
             WsIoServerRuntimeStatus::Running => {
                 #[cfg(feature = "tracing")]
                 tracing::info!(namespace_count = self.namespace_count(), "shutting down server runtime");
-                self.status.store(WsIoServerRuntimeStatus::Stopping)
+                self.status.store(WsIoServerRuntimeStatus::Stopping);
             },
-            _ => unreachable!(),
+            WsIoServerRuntimeStatus::Stopping => unreachable!(),
         }
 
-        join_all(self.clone_namespaces().iter().map(|namespace| namespace.shutdown())).await;
+        join_all(self.clone_namespaces().iter().map(WsIoServerNamespace::shutdown)).await;
         self.status.store(WsIoServerRuntimeStatus::Stopped);
 
         #[cfg(feature = "tracing")]

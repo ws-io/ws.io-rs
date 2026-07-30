@@ -40,7 +40,7 @@ const TEST_NAMESPACE: &str = "/socket";
 async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let local_addr = listener.local_addr().unwrap();
-    let ws_url = format!("ws://{}{}", local_addr, TEST_NAMESPACE);
+    let ws_url = format!("ws://{local_addr}{TEST_NAMESPACE}");
 
     let server = Arc::new(WsIoServer::builder().build());
 

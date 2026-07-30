@@ -154,6 +154,10 @@ fn runtime() -> Runtime {
     Builder::new_current_thread().enable_all().build().unwrap()
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "benchmark client counts are deliberately bounded well below u32::MAX"
+)]
 async fn wait_for_acks(acks: &Semaphore, count: usize) {
     timeout(CLIENT_READY_TIMEOUT, acks.acquire_many(count as u32))
         .await

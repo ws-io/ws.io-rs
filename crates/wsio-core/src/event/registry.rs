@@ -194,8 +194,7 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
                 let event_entry = occupied.into_mut();
                 assert_eq!(
                     event_entry.data_type_id, data_type_id,
-                    "Event '{}' already registered with a different data type — each event name must correspond to exactly one payload type.",
-                    event
+                    "Event '{event}' already registered with a different data type — each event name must correspond to exactly one payload type."
                 );
 
                 event_entry

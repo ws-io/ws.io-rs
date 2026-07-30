@@ -201,6 +201,10 @@ impl WsIoServerConnection {
 
     // Private methods
     #[inline]
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "packet handlers share a fallible dispatch interface"
+    )]
     fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
         #[cfg(feature = "tracing")]
         tracing::trace!(
@@ -224,18 +228,17 @@ impl WsIoServerConnection {
     async fn handle_init_packet(self: &Arc<Self>, packet_data: Option<&[u8]>) -> Result<()> {
         // Verify current state; only valid from AwaitingInit → Initiating
         let state = self.state.get();
-        match state {
-            ConnectionState::AwaitingInit => self.state.try_transition(state, ConnectionState::Initiating)?,
-            _ => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(
-                    connection_id = self.id,
-                    ?state,
-                    "received init packet in invalid server connection state"
-                );
+        if state == ConnectionState::AwaitingInit {
+            self.state.try_transition(state, ConnectionState::Initiating)?;
+        } else {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(
+                connection_id = self.id,
+                ?state,
+                "received init packet in invalid server connection state"
+            );
 
-                bail!("Received init packet in invalid state: {state:?}");
-            },
+            bail!("Received init packet in invalid state: {state:?}");
         }
 
         #[cfg(feature = "tracing")]
@@ -314,7 +317,7 @@ impl WsIoServerConnection {
             .try_transition(ConnectionState::Activating, ConnectionState::Ready)?;
 
         // Insert connection into namespace
-        self.namespace.insert_connection(self.clone());
+        self.namespace.insert_connection(self);
 
         #[cfg(feature = "tracing")]
         tracing::debug!(connection_id = self.id, "server connection is ready");
@@ -387,7 +390,7 @@ impl WsIoServerConnection {
             _state => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(connection_id = self.id, state = ?_state, "closing server connection");
-                self.state.store(ConnectionState::Closing)
+                self.state.store(ConnectionState::Closing);
             },
         }
 
@@ -419,9 +422,9 @@ impl WsIoServerConnection {
                 if self.is_ready() {
                     if let Some(event) = packet.key.as_deref() {
                         return self.handle_event_packet(event, packet.data);
-                    } else {
-                        bail!("Event packet missing key");
                     }
+
+                    bail!("Event packet missing key");
                 }
 
                 Ok(())
@@ -496,7 +499,7 @@ impl WsIoServerConnection {
         #[cfg(feature = "tracing")]
         tracing::debug!(connection_id = self.id, "disconnecting server connection");
         let _ = self.send_packet(&WsIoPacket::new_disconnect()).await;
-        self.close()
+        self.close();
     }
 
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
@@ -699,7 +702,7 @@ mod tests {
         let namespace = connection.namespace();
 
         // Insert connection manually for test
-        namespace.insert_connection(connection.clone());
+        namespace.insert_connection(&connection);
         assert_eq!(namespace.connection_count(), 1);
 
         connection.join(["room_a", "room_b"]);

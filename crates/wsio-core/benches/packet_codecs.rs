@@ -72,7 +72,7 @@ fn bench_codecs(criterion: &mut Criterion) {
                 |bencher, payload| {
                     bencher.iter(|| {
                         black_box(codec.encode_data(black_box(payload)).unwrap());
-                    })
+                    });
                 },
             );
 
@@ -83,7 +83,7 @@ fn bench_codecs(criterion: &mut Criterion) {
                 |bencher, encoded_data| {
                     bencher.iter(|| {
                         black_box(codec.decode_data::<BenchPayload>(black_box(encoded_data)).unwrap());
-                    })
+                    });
                 },
             );
 
@@ -94,7 +94,7 @@ fn bench_codecs(criterion: &mut Criterion) {
                 |bencher, packet| {
                     bencher.iter(|| {
                         black_box(codec.encode(black_box(packet)).unwrap());
-                    })
+                    });
                 },
             );
 
@@ -105,7 +105,7 @@ fn bench_codecs(criterion: &mut Criterion) {
                 |bencher, encoded_packet| {
                     bencher.iter(|| {
                         black_box(codec.decode(black_box(encoded_packet)).unwrap());
-                    })
+                    });
                 },
             );
         }

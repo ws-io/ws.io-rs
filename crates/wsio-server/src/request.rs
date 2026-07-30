@@ -126,6 +126,10 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 }
 
 #[inline]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the adapter response must preserve the wrapped service error type"
+)]
 fn respond<ResBody: Default, E: Send>(status: StatusCode) -> Result<Response<ResBody>, E> {
     let mut response = Response::new(ResBody::default());
     *response.status_mut() = status;

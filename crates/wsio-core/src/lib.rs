@@ -8,6 +8,12 @@ pub mod traits;
 pub mod types;
 pub mod utils;
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "the logarithmic estimate is clamped to a small positive usize range"
+)]
 pub fn channel_capacity_from_websocket_config(websocket_config: &WebSocketConfig) -> usize {
     let ratio = (websocket_config.max_write_buffer_size as f64 / websocket_config.write_buffer_size as f64).max(1.0);
     let capacity = (ratio.log2() * 256.0).round() as usize;

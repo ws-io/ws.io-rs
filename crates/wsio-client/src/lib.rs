@@ -54,11 +54,11 @@ impl WsIoClient {
     }
 
     pub async fn connect(&self) {
-        self.0.connect().await
+        self.0.connect().await;
     }
 
     pub async fn disconnect(&self) {
-        self.0.disconnect().await
+        self.0.disconnect().await;
     }
 
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {

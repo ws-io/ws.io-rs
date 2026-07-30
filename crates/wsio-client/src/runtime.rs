@@ -128,7 +128,10 @@ impl WsIoClientRuntime {
             host = self.connect_url.host_str(),
             port = self.connect_url.port(),
             path = self.connect_url.path(),
-            connect_timeout_ms = self.config.connect_timeout.map(|duration| duration.as_millis() as u64),
+            connect_timeout_ms = self
+                .config
+                .connect_timeout
+                .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)),
             "starting WebSocket connection"
         );
 
@@ -147,7 +150,7 @@ impl WsIoClientRuntime {
                     #[cfg(feature = "tracing")]
                     tracing::warn!(
                         error = %err,
-                        timeout_ms = connect_timeout.as_millis() as u64,
+                        timeout_ms = u64::try_from(connect_timeout.as_millis()).unwrap_or(u64::MAX),
                         "WebSocket connection timed out"
                     );
 
@@ -218,7 +221,7 @@ impl WsIoClientRuntime {
         // Wait for any of the tasks to finish or canceled
         let cancel_token = self.cancel_token();
         select! {
-            _ = cancel_token.cancelled() => {
+            () = cancel_token.cancelled() => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("client connection cancellation requested");
                 session.close();
@@ -265,9 +268,9 @@ impl WsIoClientRuntime {
             RuntimeStatus::Stopped => {
                 #[cfg(feature = "tracing")]
                 tracing::info!("starting client runtime");
-                self.status.store(RuntimeStatus::Running)
+                self.status.store(RuntimeStatus::Running);
             },
-            _ => unreachable!(),
+            RuntimeStatus::Stopping => unreachable!(),
         }
 
         // Create new cancel token
@@ -286,13 +289,14 @@ impl WsIoClientRuntime {
                     let cancel_token = runtime.cancel_token();
                     #[cfg(feature = "tracing")]
                     tracing::trace!(
-                        reconnect_delay_ms = runtime.config.reconnect_delay.as_millis() as u64,
+                        reconnect_delay_ms =
+                            u64::try_from(runtime.config.reconnect_delay.as_millis()).unwrap_or(u64::MAX),
                         "waiting before reconnect"
                     );
 
                     select! {
-                        _ = cancel_token.cancelled() => {},
-                        _ = sleep(runtime.config.reconnect_delay) => {},
+                        () = cancel_token.cancelled() => {},
+                        () = sleep(runtime.config.reconnect_delay) => {},
                     }
                 }
             }
@@ -338,9 +342,9 @@ impl WsIoClientRuntime {
             RuntimeStatus::Running => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("stopping client runtime");
-                self.status.store(RuntimeStatus::Stopping)
+                self.status.store(RuntimeStatus::Stopping);
             },
-            _ => unreachable!(),
+            RuntimeStatus::Stopping => unreachable!(),
         }
 
         // Abort send-event-message task
@@ -389,10 +393,11 @@ impl WsIoClientRuntime {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
-        Ok(Arc::new(match self.config.packet_codec.is_text() {
+        Ok(Arc::new(if self.config.packet_codec.is_text() {
             // SAFETY: text packet codecs only produce valid UTF-8 payloads.
-            true => Message::Text(unsafe { String::from_utf8_unchecked(bytes).into() }),
-            false => Message::Binary(bytes.into()),
+            Message::Text(unsafe { String::from_utf8_unchecked(bytes) }.into())
+        } else {
+            Message::Binary(bytes.into())
         }))
     }
 
@@ -448,7 +453,7 @@ async fn shutdown_websocket_tasks(
         Err(_) => {
             #[cfg(feature = "tracing")]
             tracing::warn!(
-                timeout_ms = shutdown_timeout.as_millis() as u64,
+                timeout_ms = u64::try_from(shutdown_timeout.as_millis()).unwrap_or(u64::MAX),
                 "graceful WebSocket shutdown timed out; aborting tasks"
             );
 
@@ -473,7 +478,7 @@ mod tests {
 
     async fn pending_task_with_drop_signal(drop_signal: oneshot::Sender<()>) {
         let _drop_signal = drop_signal;
-        pending().await
+        pending::<()>().await;
     }
 
     async fn assert_task_dropped(drop_signal: oneshot::Receiver<()>) {

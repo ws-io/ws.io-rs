@@ -15,7 +15,7 @@ pub trait TaskSpawner: Send + Sync + 'static {
         let cancel_token = self.cancel_token();
         spawn(async move {
             select! {
-                _ = cancel_token.cancelled() => {},
+                () = cancel_token.cancelled() => {},
                 _ = future => {},
             }
         });

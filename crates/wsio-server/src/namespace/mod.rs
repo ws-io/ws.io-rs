@@ -201,7 +201,7 @@ impl WsIoServerNamespace {
 
         // Try to init connection
         match connection.init().await {
-            Ok(_) => {
+            Ok(()) => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(connection_id = connection.id(), "server connection initialized");
                 // Wait for either read or write task to finish
@@ -248,10 +248,11 @@ impl WsIoServerNamespace {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
-        Ok(Arc::new(match self.config.packet_codec.is_text() {
+        Ok(Arc::new(if self.config.packet_codec.is_text() {
             // SAFETY: text packet codecs only produce valid UTF-8 payloads.
-            true => Message::Text(unsafe { String::from_utf8_unchecked(bytes).into() }),
-            false => Message::Binary(bytes.into()),
+            Message::Text(unsafe { String::from_utf8_unchecked(bytes) }.into())
+        } else {
+            Message::Binary(bytes.into())
         }))
     }
 
@@ -286,7 +287,8 @@ impl WsIoServerNamespace {
                     tracing::warn!(
                         namespace = namespace.config.path,
                         error = %_err,
-                        timeout_ms = namespace.config.http_request_upgrade_timeout.as_millis() as u64,
+                        timeout_ms = u64::try_from(namespace.config.http_request_upgrade_timeout.as_millis())
+                            .unwrap_or(u64::MAX),
                         "HTTP upgrade timed out"
                     );
                 },
@@ -295,7 +297,7 @@ impl WsIoServerNamespace {
     }
 
     #[inline]
-    pub(crate) fn insert_connection(&self, connection: Arc<WsIoServerConnection>) {
+    pub(crate) fn insert_connection(&self, connection: &Arc<WsIoServerConnection>) {
         self.connections.insert(connection.id(), connection.clone());
         self.runtime.insert_connection_id(connection.id());
         self.connection_ids.rcu(|old_connection_ids| {
@@ -371,9 +373,9 @@ impl WsIoServerNamespace {
             NamespaceStatus::Running => {
                 #[cfg(feature = "tracing")]
                 tracing::info!(namespace = self.config.path, "shutting down namespace");
-                self.status.store(NamespaceStatus::Stopping)
+                self.status.store(NamespaceStatus::Stopping);
             },
-            _ => unreachable!(),
+            NamespaceStatus::Stopping => unreachable!(),
         }
 
         self.close_all().await;

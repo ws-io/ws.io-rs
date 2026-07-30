@@ -88,7 +88,7 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
                         black_box(Some(packet_data.clone())),
                         black_box(&spawner),
                     );
-                })
+                });
             },
         );
     }
@@ -106,7 +106,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
                 black_box(register_handler(&registry));
             },
             BatchSize::SmallInput,
-        )
+        );
     });
 
     group.bench_function("register_existing_event", |bencher| {
@@ -116,7 +116,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
                 black_box(register_handler(&registry));
             },
             BatchSize::SmallInput,
-        )
+        );
     });
 
     group.bench_function("off_by_handler_id_last_handler", |bencher| {
@@ -128,7 +128,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
             },
             |(registry, handler_id)| registry.off_by_handler_id(black_box(EVENT_NAME), black_box(handler_id)),
             BatchSize::SmallInput,
-        )
+        );
     });
 
     group.finish();
