@@ -35,57 +35,89 @@ keywords = [
 # =============================================================================
 
 [workspace.lints.clippy]
+
+# Lint groups
 all = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+
+# Deny
 await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
-cargo = { level = "warn", priority = -1 }
-cast_ptr_alignment = "warn"
 dbg_macro = "deny"
 expect_used = "deny"
 fn_to_numeric_cast_any = "deny"
-items_after_statements = "warn"
+items_after_statements = "deny"
+missing_safety_doc = "deny"
+needless_for_each = "deny"
+semicolon_if_nothing_returned = "deny"
+transmute_ptr_to_ptr = "deny"
+undocumented_unsafe_blocks = "deny"
+unnecessary_mut_passed = "deny"
+unnecessary_sort_by = "deny"
+unused_async = "deny"
+unwrap_used = "deny"
+
+# Warn
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_precision_loss = "warn"
+cast_ptr_alignment = "warn"
+cast_sign_loss = "warn"
+doc_markdown = "warn"
+fn_params_excessive_bools = "warn"
 large_futures = "warn"
 large_stack_arrays = "warn"
 large_types_passed_by_value = "warn"
 manual_let_else = "warn"
+many_single_char_names = "warn"
 match_same_arms = "warn"
 mutex_atomic = "warn"
-needless_for_each = "warn"
 print_stderr = "warn"
 print_stdout = "warn"
 rc_mutex = "warn"
+struct_excessive_bools = "warn"
 todo = "warn"
-transmute_ptr_to_ptr = "deny"
+too_many_arguments = "warn"
 trivially_copy_pass_by_ref = "warn"
-undocumented_unsafe_blocks = "deny"
 unimplemented = "warn"
-unnecessary_mut_passed = "deny"
-unnecessary_sort_by = "deny"
+unnecessary_wraps = "warn"
 unreadable_literal = "warn"
-unused_async = "deny"
 unused_self = "warn"
-unwrap_used = "deny"
 
-# Usually too noisy for many crates; enable when you want stricter docs.
+# Allow
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
-missing_safety_doc = "allow"
-
-# Commonly triggered by dependency trees; usually not actionable per crate.
 multiple_crate_versions = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+struct_field_names = "allow"
+too_many_lines = "allow"
+used_underscore_binding = "allow"
 
 [workspace.lints.rust]
-missing_debug_implementations = "warn"
-missing_docs = "allow"
-unreachable_pub = "warn"
+
+# Deny
 unsafe_op_in_unsafe_fn = "deny"
 unused_must_use = "deny"
 
+# Warn
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+# Allow
+missing_docs = "allow"
+
 [workspace.lints.rustdoc]
-broken_intra_doc_links = "warn"
-missing_crate_level_docs = "allow"
+
+# Deny
+broken_intra_doc_links = "deny"
+
+# Warn
 private_intra_doc_links = "warn"
+
+# Allow
+missing_crate_level_docs = "allow"
 
 # =============================================================================
 # Dependencies
