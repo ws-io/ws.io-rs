@@ -36,6 +36,7 @@ keywords = [
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
 await_holding_lock = "deny"
 await_holding_refcell_ref = "deny"
 cargo = { level = "warn", priority = -1 }
@@ -58,6 +59,7 @@ todo = "warn"
 transmute_ptr_to_ptr = "deny"
 trivially_copy_pass_by_ref = "warn"
 undocumented_unsafe_blocks = "deny"
+unimplemented = "warn"
 unnecessary_mut_passed = "deny"
 unnecessary_sort_by = "deny"
 unreadable_literal = "warn"
