@@ -21,8 +21,15 @@ Cargo.lock
 
 ### Other ###
 
-# OMX
+# Local AI agent and code-indexing files
 .omx/
+.codegraph/
+.aider*
+CLAUDE.local.md
+**/.claude/settings.local.json
+.serena/cache/
+.serena/project.local.yml
+repomix-output.*
 
 # Test-related files
 coverage/
