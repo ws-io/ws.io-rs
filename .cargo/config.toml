@@ -10,6 +10,8 @@ profile-rustflags = true
 [alias]
 coverage = "llvm-cov --all-features --color always --quiet"
 coverage-generate = "llvm-cov --all-features --lcov --output-path ./lcov.info --quiet"
+dlint = "dylint --all -- --all-features --all-targets --message-format=short --quiet"
+dlint-fix = "dylint --all --fix -- --all-features --all-targets --message-format=short --quiet"
 format = "fmt --all -- --check"
 format-fix = "fmt --all"
 lint = "clippy --all-features --all-targets --message-format=short --quiet"
