@@ -205,7 +205,8 @@ impl WsIoClientBuilder {
     /// Registers an async modifier for the WebSocket HTTP request.
     ///
     /// Use this to add headers or adjust request metadata before
-    /// `connect_async_with_config` is called.
+    /// `connect_async_with_config` is called. An in-flight modifier future is
+    /// cancelled when the client disconnects and may run again on reconnect.
     pub fn request_modifier<M, Fut>(mut self, modifier: M) -> Self
     where
         M: Fn(Request<()>) -> Fut + Send + Sync + 'static,

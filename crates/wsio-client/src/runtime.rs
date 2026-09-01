@@ -3,7 +3,10 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{
+    Error as AnyhowError,
+    Result,
+};
 use arc_swap::{
     ArcSwap,
     ArcSwapOption,
@@ -135,30 +138,41 @@ impl WsIoClientRuntime {
             "starting WebSocket connection"
         );
 
+        let cancel_token = self.cancel_token();
         let mut request = self.connect_url.as_str().into_client_request()?;
         if let Some(modifier) = &self.config.request_modifier {
             #[cfg(feature = "tracing")]
             tracing::trace!("applying WebSocket request modifier");
-            request = modifier(request).await?;
+            request = select! {
+                () = cancel_token.cancelled() => return Ok(()),
+                result = modifier(request) => result?,
+            };
         }
 
-        let connect = connect_async_with_config(request, Some(self.config.websocket_config), false);
-        let (ws_stream, _) = if let Some(connect_timeout) = self.config.connect_timeout {
-            match timeout(connect_timeout, connect).await {
-                Ok(result) => result?,
-                Err(err) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::warn!(
-                        error = %err,
-                        timeout_ms = u64::try_from(connect_timeout.as_millis()).unwrap_or(u64::MAX),
-                        "WebSocket connection timed out"
-                    );
+        let websocket_handshake = connect_async_with_config(request, Some(self.config.websocket_config), false);
+        let connection_attempt = async {
+            if let Some(connect_timeout) = self.config.connect_timeout {
+                match timeout(connect_timeout, websocket_handshake).await {
+                    Ok(result) => Ok(result?),
+                    Err(err) => {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            error = %err,
+                            timeout_ms = u64::try_from(connect_timeout.as_millis()).unwrap_or(u64::MAX),
+                            "WebSocket connection timed out"
+                        );
 
-                    return Err(err.into());
-                },
+                        Err(AnyhowError::from(err))
+                    },
+                }
+            } else {
+                Ok(websocket_handshake.await?)
             }
-        } else {
-            connect.await?
+        };
+
+        let (ws_stream, _) = select! {
+            () = cancel_token.cancelled() => return Ok(()),
+            result = connection_attempt => result?,
         };
 
         #[cfg(feature = "tracing")]
@@ -219,7 +233,6 @@ impl WsIoClientRuntime {
         self.session.store(Some(session.clone()));
 
         // Wait for any of the tasks to finish or canceled
-        let cancel_token = self.cancel_token();
         select! {
             () = cancel_token.cancelled() => {
                 #[cfg(feature = "tracing")]
@@ -467,14 +480,30 @@ async fn shutdown_websocket_tasks(
 
 #[cfg(test)]
 mod tests {
-    use std::future::pending;
+    use std::{
+        future::pending,
+        io::ErrorKind as IoErrorKind,
+        net::TcpListener,
+        sync::{
+            Arc,
+            mpsc,
+        },
+        thread::{
+            sleep as thread_sleep,
+            spawn as thread_spawn,
+        },
+    };
 
     use tokio::{
-        sync::oneshot,
+        sync::{
+            Notify,
+            oneshot,
+        },
         time::timeout,
     };
 
     use super::*;
+    use crate::WsIoClient;
 
     async fn pending_task_with_drop_signal(drop_signal: oneshot::Sender<()>) {
         let _drop_signal = drop_signal;
@@ -486,6 +515,89 @@ mod tests {
             .await
             .expect("task should be dropped before timeout")
             .expect_err("task sender should be dropped");
+    }
+
+    #[tokio::test]
+    async fn disconnect_cancels_pending_request_modifier() {
+        let modifier_entered = Arc::new(Notify::new());
+        let modifier_entered_for_callback = modifier_entered.clone();
+        let client = WsIoClient::builder("ws://127.0.0.1/socket")
+            .unwrap()
+            .request_modifier(move |_request| {
+                let modifier_entered = modifier_entered_for_callback.clone();
+                async move {
+                    modifier_entered.notify_one();
+                    pending().await
+                }
+            })
+            .build();
+
+        client.connect().await;
+        timeout(Duration::from_secs(1), modifier_entered.notified())
+            .await
+            .expect("request modifier should start before timeout");
+
+        timeout(Duration::from_secs(1), client.disconnect())
+            .await
+            .expect("disconnect should cancel the pending request modifier");
+
+        assert!(client.0.status.is(RuntimeStatus::Stopped));
+    }
+
+    #[tokio::test]
+    async fn disconnect_cancels_unbounded_websocket_handshake() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let server_address = listener.local_addr().unwrap();
+        let (accepted_tx, accepted_rx) = oneshot::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let server_thread = thread_spawn(move || {
+            loop {
+                if release_rx.try_recv().is_ok() {
+                    return;
+                }
+
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        let _stream = stream;
+                        let _ = accepted_tx.send(());
+                        let _ = release_rx.recv();
+                        return;
+                    },
+                    Err(err) if err.kind() == IoErrorKind::WouldBlock => {
+                        thread_sleep(Duration::from_millis(1));
+                    },
+                    Err(err) => panic!("test listener failed: {err}"),
+                }
+            }
+        });
+
+        let client = WsIoClient::builder(format!("ws://{server_address}/socket"))
+            .unwrap()
+            .connect_timeout(None)
+            .build();
+
+        client.connect().await;
+
+        match timeout(Duration::from_secs(1), accepted_rx).await {
+            Ok(Ok(())) => {},
+            accepted => {
+                let _ = release_tx.send(());
+                server_thread.join().unwrap();
+                accepted
+                    .expect("client should connect to the test listener before timeout")
+                    .expect("test listener should report the accepted connection");
+
+                return;
+            },
+        }
+
+        let disconnect_result = timeout(Duration::from_secs(1), client.disconnect()).await;
+        let _ = release_tx.send(());
+        server_thread.join().unwrap();
+
+        disconnect_result.expect("disconnect should cancel the pending WebSocket handshake");
+        assert!(client.0.status.is(RuntimeStatus::Stopped));
     }
 
     #[tokio::test]
