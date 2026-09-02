@@ -409,7 +409,11 @@ impl WsIoServerConnection {
         // Skip if connection is already Closing or Closed, otherwise set connection state to Closing
         match self.state.get() {
             ConnectionState::Closed | ConnectionState::Closing => return,
-            _state => {
+            _state @ (ConnectionState::Activating
+            | ConnectionState::AwaitingInit
+            | ConnectionState::Created
+            | ConnectionState::Initiating
+            | ConnectionState::Ready) => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(connection_id = self.id, state = ?_state, "closing server connection");
                 self.state.store(ConnectionState::Closing);

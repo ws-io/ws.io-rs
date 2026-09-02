@@ -276,7 +276,11 @@ impl WsIoClientSession {
         // Skip if session is already Closing or Closed, otherwise set state to Closing
         match self.state.get() {
             SessionState::Closed | SessionState::Closing => return,
-            _state => {
+            _state @ (SessionState::AwaitingInit
+            | SessionState::AwaitingReady
+            | SessionState::Created
+            | SessionState::Initiating
+            | SessionState::Ready) => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(state = ?_state, "closing client session");
                 self.state.store(SessionState::Closing);
