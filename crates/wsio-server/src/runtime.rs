@@ -20,6 +20,7 @@ use num_enum::{
 use parking_lot::RwLock;
 use roaring::RoaringTreemap;
 use serde::Serialize;
+use tokio::sync::Mutex;
 
 use crate::{
     config::WsIoServerConfig,
@@ -44,6 +45,7 @@ pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_ids: ArcSwap<RoaringTreemap>,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
+    operation_lock: Mutex<()>,
     pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
 }
 
@@ -53,6 +55,7 @@ impl WsIoServerRuntime {
             config,
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             namespaces: RwLock::new(FxHashMap::default()),
+            operation_lock: Mutex::new(()),
             status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
         })
     }
@@ -179,6 +182,8 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn shutdown(&self) {
+        let _operation_guard = self.operation_lock.lock().await;
+
         match self.status.get() {
             WsIoServerRuntimeStatus::Stopped => {
                 #[cfg(feature = "tracing")]

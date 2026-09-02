@@ -29,6 +29,7 @@ use tokio::{
     join,
     select,
     spawn,
+    sync::Mutex,
     time::timeout,
 };
 use tokio_tungstenite::{
@@ -74,6 +75,7 @@ pub struct WsIoServerNamespace {
     connection_ids: ArcSwap<RoaringTreemap>,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
     connection_task_tracker: TaskTracker,
+    operation_lock: Mutex<()>,
     rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Arc<WsIoServerRuntime>,
     status: AtomicEnumCell<NamespaceStatus>,
@@ -86,6 +88,7 @@ impl WsIoServerNamespace {
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             connections: FxDashMap::default(),
             connection_task_tracker: TaskTracker::new(),
+            operation_lock: Mutex::new(()),
             rooms: FxDashMap::default(),
             runtime,
             status: AtomicEnumCell::new(NamespaceStatus::Running),
@@ -371,6 +374,8 @@ impl WsIoServerNamespace {
     }
 
     pub async fn shutdown(self: &Arc<Self>) {
+        let _operation_guard = self.operation_lock.lock().await;
+
         match self.status.get() {
             NamespaceStatus::Stopped => return,
             NamespaceStatus::Running => {
@@ -402,6 +407,13 @@ impl WsIoServerNamespace {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use tokio::{
+        task::yield_now,
+        time::sleep,
+    };
+
     use super::*;
     use crate::WsIoServer;
 
@@ -458,6 +470,23 @@ mod tests {
         namespace.clone().shutdown().await;
         // Shutting down again should be safe
         namespace.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_namespace_concurrent_shutdown_is_idempotent() {
+        let namespace = create_test_namespace();
+        namespace.connection_task_tracker.spawn(async {
+            sleep(Duration::from_millis(10)).await;
+        });
+
+        let first = namespace.clone();
+        let first_task = spawn(async move { first.shutdown().await });
+        while !namespace.status.is(NamespaceStatus::Stopping) {
+            yield_now().await;
+        }
+
+        namespace.shutdown().await;
+        first_task.await.unwrap();
     }
 
     #[tokio::test]
