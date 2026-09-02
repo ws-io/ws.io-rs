@@ -49,7 +49,7 @@ impl WsIoClient {
         WsIoClientBuilder::new(url)
     }
 
-    pub fn cancel_token(&self) -> Arc<CancellationToken> {
+    pub fn cancel_token(&self) -> CancellationToken {
         self.0.cancel_token()
     }
 

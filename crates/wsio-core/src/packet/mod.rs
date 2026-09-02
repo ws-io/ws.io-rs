@@ -1,3 +1,7 @@
+use anyhow::{
+    Result,
+    bail,
+};
 use bytes::Bytes;
 use serde::{
     Deserialize,
@@ -46,12 +50,13 @@ impl WsIoPacket {
 
     // Protected methods
     #[inline]
-    pub(self) fn from_inner(inner: InnerPacket) -> Self {
-        Self {
-            data: inner.2,
-            key: inner.1,
-            r#type: inner.0,
+    pub(self) fn from_inner(inner: InnerPacket) -> Result<Self> {
+        let InnerPacket(r#type, key, data) = inner;
+        if matches!(&r#type, WsIoPacketType::Event) && key.as_deref().is_none_or(str::is_empty) {
+            bail!("Event packet missing key");
         }
+
+        Ok(Self { data, key, r#type })
     }
 
     #[inline]

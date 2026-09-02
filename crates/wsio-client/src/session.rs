@@ -11,7 +11,6 @@ use anyhow::{
     anyhow,
     bail,
 };
-use arc_swap::ArcSwap;
 use futures_util::FutureExt;
 use kikiutils::atomic::enum_cell::AtomicEnumCell;
 use num_enum::{
@@ -63,12 +62,11 @@ enum SessionState {
     Created,
     Initiating,
     Ready,
-    Readying,
 }
 
 #[derive(Debug)]
 pub struct WsIoClientSession {
-    cancel_token: ArcSwap<CancellationToken>,
+    cancel_token: CancellationToken,
     event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
     event_queue_tx: Sender<WsIoPacket>,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
@@ -81,8 +79,8 @@ pub struct WsIoClientSession {
 
 impl TaskSpawner for WsIoClientSession {
     #[inline]
-    fn cancel_token(&self) -> Arc<CancellationToken> {
-        self.cancel_token.load_full()
+    fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
     }
 }
 
@@ -95,7 +93,7 @@ impl WsIoClientSession {
 
         (
             Arc::new(Self {
-                cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
+                cancel_token: CancellationToken::new(),
                 event_dispatcher_task: Mutex::new(None),
                 event_queue_tx,
                 init_timeout_task: Mutex::new(None),
@@ -126,13 +124,9 @@ impl WsIoClientSession {
 
     #[inline]
     async fn handle_event_packet(self: &Arc<Self>, packet: WsIoPacket) -> Result<()> {
-        let Some(_event) = packet.key.as_deref() else {
-            bail!("Event packet missing key");
-        };
-
         #[cfg(feature = "tracing")]
         tracing::trace!(
-            event = _event,
+            event = packet.key.as_deref().unwrap_or_default(),
             has_data = packet.data.is_some(),
             "received server event packet"
         );
@@ -256,7 +250,7 @@ impl WsIoClientSession {
         abort_locked_task(&self.ready_timeout_task).await;
 
         // Cancel all ongoing operations via cancel token
-        self.cancel_token.load().cancel();
+        self.cancel_token.cancel();
 
         // Invoke on_session_close_handler with timeout protection if configured
         if let Some(on_session_close_handler) = &self.runtime.config.on_session_close_handler

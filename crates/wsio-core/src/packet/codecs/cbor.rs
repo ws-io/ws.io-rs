@@ -19,7 +19,7 @@ pub(super) struct WsIoPacketCborCodec;
 impl WsIoPacketCborCodec {
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Result<WsIoPacket> {
-        Ok(WsIoPacket::from_inner(from_reader(Cursor::new(bytes))?))
+        WsIoPacket::from_inner(from_reader(Cursor::new(bytes))?)
     }
 
     #[inline]

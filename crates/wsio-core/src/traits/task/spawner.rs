@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use tokio::{
     select,
@@ -8,7 +6,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 pub trait TaskSpawner: Send + Sync + 'static {
-    fn cancel_token(&self) -> Arc<CancellationToken>;
+    fn cancel_token(&self) -> CancellationToken;
 
     #[inline]
     fn spawn_task<F: Future<Output = Result<()>> + Send + 'static>(&self, future: F) {
@@ -37,11 +35,11 @@ mod tests {
     use super::*;
 
     struct TestSpawner {
-        cancel_token: Arc<CancellationToken>,
+        cancel_token: CancellationToken,
     }
 
     impl TaskSpawner for TestSpawner {
-        fn cancel_token(&self) -> Arc<CancellationToken> {
+        fn cancel_token(&self) -> CancellationToken {
             self.cancel_token.clone()
         }
     }
@@ -49,7 +47,7 @@ mod tests {
     #[tokio::test]
     async fn test_spawn_task_runs_to_completion() {
         let spawner = TestSpawner {
-            cancel_token: Arc::new(CancellationToken::new()),
+            cancel_token: CancellationToken::new(),
         };
 
         let (completed_tx, completed_rx) = channel();
@@ -67,7 +65,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_spawn_task_is_cancelled() {
-        let cancel_token = Arc::new(CancellationToken::new());
+        let cancel_token = CancellationToken::new();
         let spawner = TestSpawner {
             cancel_token: cancel_token.clone(),
         };

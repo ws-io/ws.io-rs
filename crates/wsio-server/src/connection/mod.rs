@@ -20,7 +20,6 @@ use anyhow::{
     anyhow,
     bail,
 };
-use arc_swap::ArcSwap;
 use futures_util::FutureExt;
 use http::{
     HeaderMap,
@@ -97,7 +96,7 @@ enum ConnectionState {
 
 // Structs
 pub struct WsIoServerConnection {
-    cancel_token: ArcSwap<CancellationToken>,
+    cancel_token: CancellationToken,
     event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
     event_queue_tx: Sender<WsIoPacket>,
     event_registry: WsIoEventRegistry<WsIoServerConnection>,
@@ -174,8 +173,8 @@ impl FmtDebug for WsIoServerConnection {
 
 impl TaskSpawner for WsIoServerConnection {
     #[inline]
-    fn cancel_token(&self) -> Arc<CancellationToken> {
-        self.cancel_token.load_full()
+    fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.clone()
     }
 }
 
@@ -201,7 +200,7 @@ impl WsIoServerConnection {
 
         (
             Arc::new(Self {
-                cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
+                cancel_token: CancellationToken::new(),
                 event_dispatcher_task: Mutex::new(None),
                 event_queue_tx,
                 event_registry: WsIoEventRegistry::new(),
@@ -225,14 +224,10 @@ impl WsIoServerConnection {
     // Private methods
     #[inline]
     async fn handle_event_packet(self: &Arc<Self>, packet: WsIoPacket) -> Result<()> {
-        let Some(_event) = packet.key.as_deref() else {
-            bail!("Event packet missing key");
-        };
-
         #[cfg(feature = "tracing")]
         tracing::trace!(
             connection_id = self.id,
-            event = _event,
+            event = packet.key.as_deref().unwrap_or_default(),
             has_data = packet.data.is_some(),
             "received client event packet"
         );
@@ -388,7 +383,7 @@ impl WsIoServerConnection {
         abort_locked_task(&self.init_timeout_task).await;
 
         // Cancel all ongoing operations via cancel token
-        self.cancel_token.load().cancel();
+        self.cancel_token.cancel();
 
         // Invoke on_close_handler with timeout protection if configured
         if let Some(on_close_handler) = self.on_close_handler.lock().await.take()
@@ -765,20 +760,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_event_packet_missing_key() {
+    async fn test_handle_event_packet_rejects_missing_or_empty_key() {
         let connection = create_test_connection();
 
         // Force the connection into the Ready state so it accepts Event packets
         connection.state.store(ConnectionState::Ready);
 
         let packet_codec = connection.namespace.config.packet_codec;
-        let encoded = packet_codec
-            .encode(&WsIoPacket::new(WsIoPacketType::Event, None, None))
-            .unwrap();
 
-        let result = connection.handle_incoming_packet(&encoded).await;
-        assert!(result.is_err(), "Should bail on missing event key");
-        assert_eq!(result.unwrap_err().to_string(), "Event packet missing key");
+        for key in [None, Some("")] {
+            let encoded = packet_codec
+                .encode(&WsIoPacket::new(WsIoPacketType::Event, key, None))
+                .unwrap();
+
+            let result = connection.handle_incoming_packet(&encoded).await;
+            assert!(result.is_err(), "Should reject an invalid event key");
+            assert_eq!(result.unwrap_err().to_string(), "Event packet missing key");
+        }
     }
 
     #[tokio::test]

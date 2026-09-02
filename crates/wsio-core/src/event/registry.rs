@@ -206,6 +206,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
         D: DeserializeOwned + Send + Sync + 'static,
     {
         let event = event.as_ref();
+        assert!(!event.is_empty(), "Event key cannot be empty");
         let data_type_id = TypeId::of::<D>();
 
         let mut event_entries = self.event_entries.write();
@@ -428,5 +429,12 @@ mod tests {
 
         registry.off("multi_event");
         assert!(!registry.event_entries.read().contains_key("multi_event"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Event key cannot be empty")]
+    fn test_registry_rejects_empty_event_key() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        registry.on("", |_ctx, _data: Arc<()>| async { Ok(()) });
     }
 }

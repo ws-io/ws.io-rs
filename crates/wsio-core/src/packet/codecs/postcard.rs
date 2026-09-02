@@ -17,7 +17,7 @@ pub(super) struct WsIoPacketPostcardCodec;
 impl WsIoPacketPostcardCodec {
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Result<WsIoPacket> {
-        Ok(WsIoPacket::from_inner(from_bytes(bytes)?))
+        WsIoPacket::from_inner(from_bytes(bytes)?)
     }
 
     #[inline]

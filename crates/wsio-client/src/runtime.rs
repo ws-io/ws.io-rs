@@ -97,8 +97,8 @@ pub(crate) struct WsIoClientRuntime {
 
 impl TaskSpawner for WsIoClientRuntime {
     #[inline]
-    fn cancel_token(&self) -> Arc<CancellationToken> {
-        self.cancel_token.load_full()
+    fn cancel_token(&self) -> CancellationToken {
+        self.cancel_token.load().as_ref().clone()
     }
 }
 
