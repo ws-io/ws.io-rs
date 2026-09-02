@@ -44,16 +44,18 @@ impl WsIoClientBuilder {
             bail!("Invalid URL scheme: {}", url.scheme());
         }
 
-        let mut query_pairs = url.query_pairs().collect::<Vec<_>>();
-        query_pairs.retain(|(k, _)| k != "namespace");
-        query_pairs.push(("namespace".into(), Self::normalize_url_path(url.path()).into()));
-        let query = query_pairs
-            .iter()
-            .map(|(k, v)| format!("{k}={v}"))
-            .collect::<Vec<_>>()
-            .join("&");
+        let query_pairs = url
+            .query_pairs()
+            .filter(|(key, _)| key != "namespace")
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect::<Vec<_>>();
 
-        url.set_query(Some(&query));
+        let namespace = Self::normalize_url_path(url.path());
+        url.query_pairs_mut()
+            .clear()
+            .extend_pairs(query_pairs)
+            .append_pair("namespace", &namespace);
+
         url.set_path("ws.io");
         Ok(Self {
             config: WsIoClientConfig {
@@ -304,6 +306,25 @@ mod tests {
     #[test]
     fn test_builder_new_valid_wss_url() {
         let _builder = WsIoClientBuilder::new(Url::parse("wss://localhost:8080/socket").unwrap()).unwrap();
+    }
+
+    #[test]
+    fn test_builder_new_preserves_percent_encoded_query_values() {
+        let builder =
+            WsIoClientBuilder::new(Url::parse("ws://localhost:8080/socket?token=a%26b&scope=a%3Db").unwrap()).unwrap();
+
+        assert_eq!(
+            builder.connect_url.query(),
+            Some("token=a%26b&scope=a%3Db&namespace=%2Fsocket"),
+        );
+        assert_eq!(
+            builder.connect_url.query_pairs().collect::<Vec<_>>(),
+            vec![
+                ("token".into(), "a&b".into()),
+                ("scope".into(), "a=b".into()),
+                ("namespace".into(), "/socket".into())
+            ],
+        );
     }
 
     #[test]
