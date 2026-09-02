@@ -472,12 +472,12 @@ mod tests {
         // Shutdown to make status invalid
         namespace.clone().shutdown().await;
 
-        let error = namespace
+        let err = namespace
             .to(["room1"])
             .emit("event", Option::<&()>::None)
             .await
             .unwrap_err();
 
-        assert!(error.to_string().contains("invalid status"));
+        assert!(err.to_string().contains("invalid status"));
     }
 }

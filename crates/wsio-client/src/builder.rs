@@ -308,8 +308,8 @@ mod tests {
 
     #[test]
     fn test_builder_new_invalid_scheme() {
-        let error = WsIoClientBuilder::new(Url::parse("http://localhost:8080/socket").unwrap()).unwrap_err();
-        assert!(error.to_string().contains("Invalid URL scheme"));
+        let err = WsIoClientBuilder::new(Url::parse("http://localhost:8080/socket").unwrap()).unwrap_err();
+        assert!(err.to_string().contains("Invalid URL scheme"));
     }
 
     #[test]

@@ -329,8 +329,8 @@ mod tests {
         );
 
         match register2_result {
-            Err(e) => {
-                assert!(e.to_string().contains("already exists"));
+            Err(err) => {
+                assert!(err.to_string().contains("already exists"));
             },
             Ok(_) => panic!("Should have failed"),
         }

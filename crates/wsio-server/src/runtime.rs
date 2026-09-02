@@ -251,8 +251,8 @@ mod tests {
     fn test_runtime_insert_duplicate_namespace_fails() {
         let runtime = WsIoServerRuntime::new(create_test_config());
         let namespace = runtime.new_namespace_builder("/test").register().unwrap();
-        let error = runtime.insert_namespace(namespace).unwrap_err();
-        assert!(error.to_string().contains("already exists"));
+        let err = runtime.insert_namespace(namespace).unwrap_err();
+        assert!(err.to_string().contains("already exists"));
     }
 
     #[test]
@@ -283,7 +283,7 @@ mod tests {
         // Shutdown runtime to make it invalid for emit
         runtime.shutdown().await;
 
-        let error = namespace.emit("test_event", Option::<&()>::None).await.unwrap_err();
-        assert!(error.to_string().contains("invalid status"));
+        let err = namespace.emit("test_event", Option::<&()>::None).await.unwrap_err();
+        assert!(err.to_string().contains("invalid status"));
     }
 }
