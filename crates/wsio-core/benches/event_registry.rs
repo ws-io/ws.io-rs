@@ -62,7 +62,7 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
             &handler_count,
             |bencher, _| {
                 bencher.iter(|| {
-                    runtime.block_on(registry.dispatch_event_packet(
+                    let _ = runtime.block_on(registry.dispatch_event_packet(
                         black_box(ctx.clone()),
                         black_box(EVENT_NAME),
                         black_box(&packet_codec),

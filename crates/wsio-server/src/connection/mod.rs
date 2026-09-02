@@ -4,6 +4,7 @@ use std::{
         Formatter,
         Result as FmtResult,
     },
+    panic::AssertUnwindSafe,
     sync::{
         Arc,
         LazyLock,
@@ -20,6 +21,7 @@ use anyhow::{
     bail,
 };
 use arc_swap::ArcSwap;
+use futures_util::FutureExt;
 use http::{
     HeaderMap,
     Uri,
@@ -519,30 +521,53 @@ impl WsIoServerConnection {
         let cancel_token = self.cancel_token();
         let connection = self.clone();
         *self.event_dispatcher_task.lock().await = Some(spawn(async move {
-            loop {
-                let event_packet = select! {
-                    () = cancel_token.cancelled() => break,
-                    event_packet = event_queue_rx.recv() => event_packet,
-                };
+            let dispatcher = async {
+                loop {
+                    let event_packet = select! {
+                        () = cancel_token.cancelled() => break,
+                        event_packet = event_queue_rx.recv() => event_packet,
+                    };
 
-                let Some(event_packet) = event_packet else {
-                    break;
-                };
+                    let Some(event_packet) = event_packet else {
+                        break;
+                    };
 
-                let Some(event) = event_packet.key else {
-                    continue;
-                };
+                    let Some(event) = event_packet.key else {
+                        continue;
+                    };
 
-                connection
-                    .event_registry
-                    .dispatch_event_packet(
-                        connection.clone(),
-                        event,
-                        &connection.namespace.config.packet_codec,
-                        event_packet.data,
-                        &cancel_token,
-                    )
-                    .await;
+                    if let Err(_err) = connection
+                        .event_registry
+                        .dispatch_event_packet(
+                            connection.clone(),
+                            event,
+                            &connection.namespace.config.packet_codec,
+                            event_packet.data,
+                            &cancel_token,
+                        )
+                        .await
+                    {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(
+                            connection_id = connection.id,
+                            error = %_err,
+                            "server event dispatcher failed; closing connection"
+                        );
+
+                        connection.close();
+                        break;
+                    }
+                }
+            };
+
+            if AssertUnwindSafe(dispatcher).catch_unwind().await.is_err() {
+                #[cfg(feature = "tracing")]
+                tracing::error!(
+                    connection_id = connection.id,
+                    "server event dispatcher panicked; closing connection"
+                );
+
+                connection.close();
             }
         }));
     }

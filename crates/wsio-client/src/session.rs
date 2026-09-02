@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc,
-    LazyLock,
+use std::{
+    panic::AssertUnwindSafe,
+    sync::{
+        Arc,
+        LazyLock,
+    },
 };
 
 use anyhow::{
@@ -9,6 +12,7 @@ use anyhow::{
     bail,
 };
 use arc_swap::ArcSwap;
+use futures_util::FutureExt;
 use kikiutils::atomic::enum_cell::AtomicEnumCell;
 use num_enum::{
     IntoPrimitive,
@@ -356,31 +360,45 @@ impl WsIoClientSession {
         let cancel_token = self.cancel_token();
         let session = self.clone();
         *self.event_dispatcher_task.lock().await = Some(spawn(async move {
-            loop {
-                let event_packet = select! {
-                    () = cancel_token.cancelled() => break,
-                    event_packet = event_queue_rx.recv() => event_packet,
-                };
+            let dispatcher = async {
+                loop {
+                    let event_packet = select! {
+                        () = cancel_token.cancelled() => break,
+                        event_packet = event_queue_rx.recv() => event_packet,
+                    };
 
-                let Some(event_packet) = event_packet else {
-                    break;
-                };
+                    let Some(event_packet) = event_packet else {
+                        break;
+                    };
 
-                let Some(event) = event_packet.key else {
-                    continue;
-                };
+                    let Some(event) = event_packet.key else {
+                        continue;
+                    };
 
-                session
-                    .runtime
-                    .event_registry
-                    .dispatch_event_packet(
-                        session.clone(),
-                        event,
-                        &session.runtime.config.packet_codec,
-                        event_packet.data,
-                        &cancel_token,
-                    )
-                    .await;
+                    if let Err(_err) = session
+                        .runtime
+                        .event_registry
+                        .dispatch_event_packet(
+                            session.clone(),
+                            event,
+                            &session.runtime.config.packet_codec,
+                            event_packet.data,
+                            &cancel_token,
+                        )
+                        .await
+                    {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(error = %_err, "client event dispatcher failed; closing session");
+                        session.close();
+                        break;
+                    }
+                }
+            };
+
+            if AssertUnwindSafe(dispatcher).catch_unwind().await.is_err() {
+                #[cfg(feature = "tracing")]
+                tracing::error!("client event dispatcher panicked; closing session");
+                session.close();
             }
         }));
     }

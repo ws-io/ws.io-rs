@@ -96,7 +96,8 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     /// Dispatches one event packet and waits for every registered handler to finish.
     ///
     /// The handlers for this packet are started concurrently and all must finish
-    /// before this method returns.
+    /// before this method returns. Handler failures are logged and do not fail the
+    /// dispatch; payload decoding failures are returned to the connection dispatcher.
     #[inline]
     pub async fn dispatch_event_packet(
         &self,
@@ -105,12 +106,12 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
         packet_codec: &WsIoPacketCodec,
         packet_data: Option<Vec<u8>>,
         cancel_token: &CancellationToken,
-    ) {
+    ) -> Result<()> {
         let event = event.as_ref();
         let Some(event_entry) = self.event_entries.read().get(event).cloned() else {
             #[cfg(feature = "tracing")]
             tracing::trace!(event, "dropping event packet without registered handlers");
-            return;
+            return Ok(());
         };
 
         let packet_codec = *packet_codec;
@@ -120,10 +121,10 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
         let data = match packet_data {
             Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
                 Ok(data) => data,
-                Err(_err) => {
+                Err(err) => {
                     #[cfg(feature = "tracing")]
-                    tracing::debug!(event = %event_name, error = %_err, "failed to decode event packet data");
-                    return;
+                    tracing::debug!(event = %event_name, error = %err, "failed to decode event packet data");
+                    return Err(err);
                 },
             },
             None => EMPTY_EVENT_DATA_ANY_ARC.clone(),
@@ -164,6 +165,8 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
                 },
             }
         }
+
+        Ok(())
     }
 
     #[inline]
@@ -299,7 +302,8 @@ mod tests {
 
         registry
             .dispatch_event_packet(ctx, "ping", &packet_codec, Some(packet_data), &cancel_token)
-            .await;
+            .await
+            .expect("event dispatch should succeed");
 
         let mut handlers = Vec::with_capacity(2);
         for _ in 0..2 {
@@ -341,11 +345,13 @@ mod tests {
 
         registry
             .dispatch_event_packet(ctx.clone(), "ordered", &packet_codec, Some(first_packet), &cancel_token)
-            .await;
+            .await
+            .expect("event dispatch should succeed");
 
         registry
             .dispatch_event_packet(ctx, "ordered", &packet_codec, Some(second_packet), &cancel_token)
-            .await;
+            .await
+            .expect("event dispatch should succeed");
 
         let mut handled = Vec::with_capacity(4);
         for _ in 0..4 {
@@ -353,6 +359,27 @@ mod tests {
         }
 
         assert_eq!(handled, ["start:first", "end:first", "start:second", "end:second"]);
+    }
+
+    #[tokio::test]
+    async fn test_registry_dispatch_returns_payload_decode_error() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        let cancel_token = CancellationToken::new();
+        let packet_codec = WsIoPacketCodec::SerdeJson;
+
+        registry.on("ping", |_ctx, _payload: Arc<String>| async { Ok(()) });
+
+        let result = registry
+            .dispatch_event_packet(
+                Arc::new(DummyConnection),
+                "ping",
+                &packet_codec,
+                Some(vec![0]),
+                &cancel_token,
+            )
+            .await;
+
+        assert!(result.is_err());
     }
 
     #[test]
