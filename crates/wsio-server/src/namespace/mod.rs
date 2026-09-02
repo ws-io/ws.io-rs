@@ -131,7 +131,10 @@ impl WsIoServerNamespace {
         }
 
         // Create connection
-        let (connection, mut message_rx) = WsIoServerConnection::new(headers, self.clone(), request_uri);
+        let (connection, mut message_rx, event_queue_rx) =
+            WsIoServerConnection::new(headers, self.clone(), request_uri);
+
+        connection.start_event_dispatcher(event_queue_rx).await;
 
         #[cfg(feature = "tracing")]
         tracing::debug!(

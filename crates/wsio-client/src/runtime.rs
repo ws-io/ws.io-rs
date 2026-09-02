@@ -85,7 +85,7 @@ pub(crate) struct WsIoClientRuntime {
     pub(crate) config: WsIoClientConfig,
     connect_url: Url,
     connection_loop_task: Mutex<Option<JoinHandle<()>>>,
-    pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession, WsIoClientRuntime>,
+    pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession>,
     operate_lock: Mutex<()>,
     send_event_message_rx: Mutex<Receiver<Arc<Message>>>,
     send_event_message_task: Mutex<Option<JoinHandle<()>>>,
@@ -179,8 +179,9 @@ impl WsIoClientRuntime {
         tracing::debug!("WebSocket connection established");
 
         // Create session and init
-        let (session, mut message_rx) = WsIoClientSession::new(self.clone());
+        let (session, mut message_rx, event_queue_rx) = WsIoClientSession::new(self.clone());
         session.init().await;
+        session.start_event_dispatcher(event_queue_rx).await;
 
         // Create read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();

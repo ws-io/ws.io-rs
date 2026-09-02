@@ -1,14 +1,8 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
 
 use std::{
-    future::Future,
     hint::black_box,
     sync::Arc,
-    task::{
-        Context,
-        Poll,
-        Waker,
-    },
 };
 
 use criterion::{
@@ -19,11 +13,11 @@ use criterion::{
     criterion_group,
     criterion_main,
 };
+use tokio::runtime::Builder;
 use tokio_util::sync::CancellationToken;
 use wsio_core::{
     event::registry::WsIoEventRegistry,
     packet::codecs::WsIoPacketCodec,
-    traits::task::spawner::TaskSpawner,
 };
 
 // Constants/Statics
@@ -33,23 +27,9 @@ const HANDLER_COUNTS: [usize; 4] = [0, 1, 10, 100];
 // Structs
 struct DummyConnection;
 
-struct ImmediateSpawner;
-
-impl TaskSpawner for ImmediateSpawner {
-    fn cancel_token(&self) -> Arc<CancellationToken> {
-        Arc::new(CancellationToken::new())
-    }
-
-    fn spawn_task<F: Future<Output = anyhow::Result<()>> + Send + 'static>(&self, future: F) {
-        let mut context = Context::from_waker(Waker::noop());
-        let mut future = Box::pin(future);
-        assert!(matches!(future.as_mut().poll(&mut context), Poll::Ready(Ok(()))));
-    }
-}
-
 // Functions
-fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnection, ImmediateSpawner> {
-    let registry = WsIoEventRegistry::<DummyConnection, ImmediateSpawner>::new();
+fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnection> {
+    let registry = WsIoEventRegistry::<DummyConnection>::new();
     for _ in 0..handler_count {
         register_handler(&registry);
     }
@@ -57,7 +37,7 @@ fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnec
     registry
 }
 
-fn register_handler(registry: &WsIoEventRegistry<DummyConnection, ImmediateSpawner>) -> u32 {
+fn register_handler(registry: &WsIoEventRegistry<DummyConnection>) -> u32 {
     registry.on(EVENT_NAME, |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
         Ok(())
     })
@@ -65,7 +45,8 @@ fn register_handler(registry: &WsIoEventRegistry<DummyConnection, ImmediateSpawn
 
 fn bench_event_dispatch(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("event_registry/dispatch");
-    let spawner = Arc::new(ImmediateSpawner);
+    let runtime = Builder::new_current_thread().build().unwrap();
+    let cancel_token = CancellationToken::new();
     let ctx = Arc::new(DummyConnection);
     let packet_codec = WsIoPacketCodec::SerdeJson;
     let packet_data = packet_codec.encode_data(&"Hello world benchmark").unwrap();
@@ -81,13 +62,13 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
             &handler_count,
             |bencher, _| {
                 bencher.iter(|| {
-                    registry.dispatch_event_packet(
+                    runtime.block_on(registry.dispatch_event_packet(
                         black_box(ctx.clone()),
                         black_box(EVENT_NAME),
                         black_box(&packet_codec),
                         black_box(Some(packet_data.clone())),
-                        black_box(&spawner),
-                    );
+                        black_box(&cancel_token),
+                    ));
                 });
             },
         );
@@ -101,7 +82,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
 
     group.bench_function("register_new_event", |bencher| {
         bencher.iter_batched(
-            WsIoEventRegistry::<DummyConnection, ImmediateSpawner>::new,
+            WsIoEventRegistry::<DummyConnection>::new,
             |registry| {
                 black_box(register_handler(&registry));
             },
@@ -122,7 +103,7 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
     group.bench_function("off_by_handler_id_last_handler", |bencher| {
         bencher.iter_batched(
             || {
-                let registry = WsIoEventRegistry::<DummyConnection, ImmediateSpawner>::new();
+                let registry = WsIoEventRegistry::<DummyConnection>::new();
                 let handler_id = register_handler(&registry);
                 (registry, handler_id)
             },

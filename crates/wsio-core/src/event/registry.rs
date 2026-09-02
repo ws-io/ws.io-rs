@@ -9,7 +9,6 @@ use std::{
         Formatter,
         Result as FmtResult,
     },
-    marker::PhantomData,
     pin::Pin,
     sync::{
         Arc,
@@ -25,11 +24,13 @@ use anyhow::Result;
 use kikiutils::types::fx_collections::FxHashMap;
 use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
-
-use crate::{
-    packet::codecs::WsIoPacketCodec,
-    traits::task::spawner::TaskSpawner,
+use tokio::{
+    select,
+    task::JoinSet,
 };
+use tokio_util::sync::CancellationToken;
+
+use crate::packet::codecs::WsIoPacketCodec;
 
 // Types
 type DataDecoder = fn(&[u8], WsIoPacketCodec) -> Result<Arc<dyn Any + Send + Sync>>;
@@ -71,37 +72,39 @@ impl<C> FmtDebug for EventEntry<C> {
 }
 
 #[derive(Debug)]
-pub struct WsIoEventRegistry<C: Send + Sync + 'static, S: TaskSpawner> {
-    _task_spawner: PhantomData<S>,
+pub struct WsIoEventRegistry<C: Send + Sync + 'static> {
     event_entries: RwLock<FxHashMap<String, Arc<EventEntry<C>>>>,
     next_handler_id: AtomicU32,
 }
 
-impl<C: Send + Sync + 'static, S: TaskSpawner> Default for WsIoEventRegistry<C, S> {
+impl<C: Send + Sync + 'static> Default for WsIoEventRegistry<C> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
+impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     #[inline]
     pub fn new() -> Self {
         Self {
-            _task_spawner: PhantomData,
             event_entries: RwLock::new(FxHashMap::default()),
             next_handler_id: AtomicU32::new(0),
         }
     }
 
     // Public methods
+    /// Dispatches one event packet and waits for every registered handler to finish.
+    ///
+    /// The handlers for this packet are started concurrently and all must finish
+    /// before this method returns.
     #[inline]
-    pub fn dispatch_event_packet(
+    pub async fn dispatch_event_packet(
         &self,
         ctx: Arc<C>,
         event: impl AsRef<str>,
         packet_codec: &WsIoPacketCodec,
         packet_data: Option<Vec<u8>>,
-        task_spawner: &Arc<S>,
+        cancel_token: &CancellationToken,
     ) {
         let event = event.as_ref();
         let Some(event_entry) = self.event_entries.read().get(event).cloned() else {
@@ -110,44 +113,57 @@ impl<C: Send + Sync + 'static, S: TaskSpawner> WsIoEventRegistry<C, S> {
             return;
         };
 
-        #[cfg(feature = "tracing")]
-        tracing::trace!(event, has_data = packet_data.is_some(), "dispatching event packet");
-
         let packet_codec = *packet_codec;
-        let task_spawner_clone = task_spawner.clone();
 
         #[cfg(feature = "tracing")]
         let event_name = event.to_owned();
-        task_spawner.spawn_task(async move {
-            let data = match packet_data {
-                Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
-                    Ok(data) => data,
-                    Err(_err) => {
-                        #[cfg(feature = "tracing")]
-                        tracing::debug!(event = %event_name, error = %_err, "failed to decode event packet data");
-                        return Ok(());
-                    },
+        let data = match packet_data {
+            Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
+                Ok(data) => data,
+                Err(_err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(event = %event_name, error = %_err, "failed to decode event packet data");
+                    return;
                 },
-                None => EMPTY_EVENT_DATA_ANY_ARC.clone(),
-            };
+            },
+            None => EMPTY_EVENT_DATA_ANY_ARC.clone(),
+        };
 
-            let handlers = event_entry.handlers.read().values().cloned().collect::<Vec<_>>();
+        let handlers = event_entry.handlers.read().values().cloned().collect::<Vec<_>>();
 
-            #[cfg(feature = "tracing")]
-            tracing::trace!(
-                event = %event_name,
-                handler_count = handlers.len(),
-                "spawning event handlers"
-            );
+        #[cfg(feature = "tracing")]
+        tracing::trace!(
+            event = %event_name,
+            handler_count = handlers.len(),
+            "dispatching event handlers"
+        );
 
-            for handler in handlers {
-                let ctx = ctx.clone();
-                let data = data.clone();
-                task_spawner_clone.spawn_task(handler(ctx, data));
+        let mut handler_tasks = JoinSet::new();
+        for handler in handlers {
+            let ctx = ctx.clone();
+            let data = data.clone();
+            let cancel_token = cancel_token.clone();
+            handler_tasks.spawn(async move {
+                select! {
+                    () = cancel_token.cancelled() => Ok(()),
+                    result = handler(ctx, data) => result,
+                }
+            });
+        }
+
+        while let Some(result) = handler_tasks.join_next().await {
+            match result {
+                Ok(Ok(())) => {},
+                Ok(Err(_err)) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(event = %event_name, error = %_err, "event handler failed");
+                },
+                Err(_err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(event = %event_name, error = %_err, "event handler task failed");
+                },
             }
-
-            Ok(())
-        });
+        }
     }
 
     #[inline]
@@ -244,9 +260,11 @@ mod tests {
     use std::time::Duration;
 
     use tokio::{
-        spawn,
         sync::mpsc::unbounded_channel,
-        time::timeout,
+        time::{
+            sleep,
+            timeout,
+        },
     };
     use tokio_util::sync::CancellationToken;
 
@@ -254,26 +272,10 @@ mod tests {
 
     struct DummyConnection;
 
-    struct DummySpawner {
-        cancel_token: Arc<CancellationToken>,
-    }
-
-    impl TaskSpawner for DummySpawner {
-        fn cancel_token(&self) -> Arc<CancellationToken> {
-            self.cancel_token.clone()
-        }
-
-        fn spawn_task<F: Future<Output = Result<()>> + Send + 'static>(&self, future: F) {
-            spawn(future);
-        }
-    }
-
     #[tokio::test]
-    async fn test_registry_dispatch() {
-        let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
-        let spawner = Arc::new(DummySpawner {
-            cancel_token: Arc::new(CancellationToken::new()),
-        });
+    async fn test_registry_dispatch_runs_all_handlers() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        let cancel_token = CancellationToken::new();
 
         let ctx = Arc::new(DummyConnection);
 
@@ -295,7 +297,9 @@ mod tests {
         let packet_codec = WsIoPacketCodec::SerdeJson;
         let packet_data = packet_codec.encode_data(&"hello").unwrap();
 
-        registry.dispatch_event_packet(ctx, "ping", &packet_codec, Some(packet_data), &spawner);
+        registry
+            .dispatch_event_packet(ctx, "ping", &packet_codec, Some(packet_data), &cancel_token)
+            .await;
 
         let mut handlers = Vec::with_capacity(2);
         for _ in 0..2 {
@@ -311,9 +315,49 @@ mod tests {
         assert_eq!(handlers, ["first", "second"]);
     }
 
+    #[tokio::test]
+    async fn test_registry_dispatch_waits_for_handlers() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        let cancel_token = CancellationToken::new();
+        let packet_codec = WsIoPacketCodec::SerdeJson;
+        let (handled_tx, mut handled_rx) = unbounded_channel();
+
+        registry.on("ordered", move |_ctx, payload: Arc<String>| {
+            let handled_tx = handled_tx.clone();
+            async move {
+                handled_tx.send(format!("start:{payload}")).unwrap();
+                if payload.as_str() == "first" {
+                    sleep(Duration::from_millis(25)).await;
+                }
+
+                handled_tx.send(format!("end:{payload}")).unwrap();
+                Ok(())
+            }
+        });
+
+        let ctx = Arc::new(DummyConnection);
+        let first_packet = packet_codec.encode_data(&"first").unwrap();
+        let second_packet = packet_codec.encode_data(&"second").unwrap();
+
+        registry
+            .dispatch_event_packet(ctx.clone(), "ordered", &packet_codec, Some(first_packet), &cancel_token)
+            .await;
+
+        registry
+            .dispatch_event_packet(ctx, "ordered", &packet_codec, Some(second_packet), &cancel_token)
+            .await;
+
+        let mut handled = Vec::with_capacity(4);
+        for _ in 0..4 {
+            handled.push(handled_rx.recv().await.unwrap());
+        }
+
+        assert_eq!(handled, ["start:first", "end:first", "start:second", "end:second"]);
+    }
+
     #[test]
     fn test_registry_on_off() {
-        let registry = WsIoEventRegistry::<DummyConnection, DummySpawner>::new();
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
 
         let handler_id = registry.on("test_event", |_ctx, _data: Arc<String>| async { Ok(()) });
 

@@ -16,6 +16,7 @@ use std::{
 
 use anyhow::{
     Result,
+    anyhow,
     bail,
 };
 use arc_swap::ArcSwap;
@@ -36,6 +37,7 @@ use serde::{
     de::DeserializeOwned,
 };
 use tokio::{
+    select,
     spawn,
     sync::{
         Mutex,
@@ -94,7 +96,9 @@ enum ConnectionState {
 // Structs
 pub struct WsIoServerConnection {
     cancel_token: ArcSwap<CancellationToken>,
-    event_registry: WsIoEventRegistry<WsIoServerConnection, WsIoServerConnection>,
+    event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
+    event_queue_tx: Sender<WsIoPacket>,
+    event_registry: WsIoEventRegistry<WsIoServerConnection>,
     #[cfg(feature = "connection-extensions")]
     extensions: ConnectionExtensions,
     headers: HeaderMap,
@@ -110,6 +114,17 @@ pub struct WsIoServerConnection {
 
 impl FmtDebug for WsIoServerConnection {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let event_dispatcher_task = match self.event_dispatcher_task.try_lock() {
+            Ok(task) => {
+                if task.is_some() {
+                    "<task>"
+                } else {
+                    "<none>"
+                }
+            },
+            Err(_) => "<locked>",
+        };
+
         let init_timeout_task = match self.init_timeout_task.try_lock() {
             Ok(task) => {
                 if task.is_some() {
@@ -140,6 +155,8 @@ impl FmtDebug for WsIoServerConnection {
             .field("headers", &self.headers)
             .field("joined_rooms_len", &self.joined_rooms.len())
             .field("message_tx", &self.message_tx)
+            .field("event_queue_tx", &self.event_queue_tx)
+            .field("event_dispatcher_task", &event_dispatcher_task)
             .field("cancel_token", &"<cancel_token>")
             .field("namespace", &"<namespace>")
             .field("event_registry", &self.event_registry)
@@ -166,8 +183,9 @@ impl WsIoServerConnection {
         headers: HeaderMap,
         namespace: Arc<WsIoServerNamespace>,
         request_uri: Uri,
-    ) -> (Arc<Self>, Receiver<Arc<Message>>) {
+    ) -> (Arc<Self>, Receiver<Arc<Message>>, Receiver<WsIoPacket>) {
         let channel_capacity = channel_capacity_from_websocket_config(&namespace.config.websocket_config);
+        let (event_queue_tx, event_queue_rx) = channel(channel_capacity);
         let (message_tx, message_rx) = channel(channel_capacity);
         let id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -182,6 +200,8 @@ impl WsIoServerConnection {
         (
             Arc::new(Self {
                 cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
+                event_dispatcher_task: Mutex::new(None),
+                event_queue_tx,
                 event_registry: WsIoEventRegistry::new(),
                 #[cfg(feature = "connection-extensions")]
                 extensions: ConnectionExtensions::new(),
@@ -196,33 +216,30 @@ impl WsIoServerConnection {
                 state: AtomicEnumCell::new(ConnectionState::Created),
             }),
             message_rx,
+            event_queue_rx,
         )
     }
 
     // Private methods
     #[inline]
-    #[allow(
-        clippy::unnecessary_wraps,
-        reason = "packet handlers share a fallible dispatch interface"
-    )]
-    fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
+    async fn handle_event_packet(self: &Arc<Self>, packet: WsIoPacket) -> Result<()> {
+        let Some(_event) = packet.key.as_deref() else {
+            bail!("Event packet missing key");
+        };
+
         #[cfg(feature = "tracing")]
         tracing::trace!(
             connection_id = self.id,
-            event,
-            has_data = packet_data.is_some(),
+            event = _event,
+            has_data = packet.data.is_some(),
             "received client event packet"
         );
 
-        self.event_registry.dispatch_event_packet(
-            self.clone(),
-            event,
-            &self.namespace.config.packet_codec,
-            packet_data,
-            self,
-        );
-
-        Ok(())
+        let cancel_token = self.cancel_token();
+        select! {
+            () = cancel_token.cancelled() => Ok(()),
+            result = self.event_queue_tx.send(packet) => result.map_err(|_| anyhow!("event dispatcher is closed")),
+        }
     }
 
     async fn handle_init_packet(self: &Arc<Self>, packet_data: Option<&[u8]>) -> Result<()> {
@@ -340,11 +357,19 @@ impl WsIoServerConnection {
     }
 
     // Protected methods
-    pub(crate) async fn cleanup(self: &Arc<Self>) {
+    pub(super) async fn cleanup(self: &Arc<Self>) {
         #[cfg(feature = "tracing")]
         tracing::debug!(connection_id = self.id, "cleaning up server connection");
+
         // Set connection state to Closing
         self.state.store(ConnectionState::Closing);
+
+        // Stop event dispatch before mutating namespace and room membership.
+        let event_dispatcher_task = self.event_dispatcher_task.lock().await.take();
+        if let Some(event_dispatcher_task) = event_dispatcher_task {
+            event_dispatcher_task.abort();
+            let _ = event_dispatcher_task.await;
+        }
 
         // Remove connection from namespace
         self.namespace.remove_connection(self.id);
@@ -383,7 +408,7 @@ impl WsIoServerConnection {
     }
 
     #[inline]
-    pub(crate) fn close(&self) {
+    pub(super) fn close(&self) {
         // Skip if connection is already Closing or Closed, otherwise set connection state to Closing
         match self.state.get() {
             ConnectionState::Closed | ConnectionState::Closing => return,
@@ -398,7 +423,7 @@ impl WsIoServerConnection {
         let _ = self.message_tx.try_send(Arc::new(Message::Close(None)));
     }
 
-    pub(crate) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
+    pub(super) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
         self.state.ensure(ConnectionState::Ready, |state| {
             format!("Cannot emit in invalid state: {state:?}")
         })?;
@@ -406,7 +431,7 @@ impl WsIoServerConnection {
         self.send_message(message).await
     }
 
-    pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
+    pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
         // TODO: lazy load
         let packet = match self.namespace.config.packet_codec.decode(encoded_packet) {
             Ok(packet) => packet,
@@ -417,14 +442,10 @@ impl WsIoServerConnection {
             },
         };
 
-        match packet.r#type {
+        match &packet.r#type {
             WsIoPacketType::Event => {
                 if self.is_ready() {
-                    if let Some(event) = packet.key.as_deref() {
-                        return self.handle_event_packet(event, packet.data);
-                    }
-
-                    bail!("Event packet missing key");
+                    return self.handle_event_packet(packet).await;
                 }
 
                 Ok(())
@@ -434,7 +455,7 @@ impl WsIoServerConnection {
         }
     }
 
-    pub(crate) async fn init(self: &Arc<Self>) -> Result<()> {
+    pub(super) async fn init(self: &Arc<Self>) -> Result<()> {
         // Verify current state; only valid Created
         self.state.ensure(ConnectionState::Created, |state| {
             format!("Cannot init connection in invalid state: {state:?}")
@@ -490,8 +511,40 @@ impl WsIoServerConnection {
         self.send_packet(&WsIoPacket::new_init(init_request_data)).await
     }
 
-    pub(crate) async fn send_message(&self, message: Arc<Message>) -> Result<()> {
+    pub(super) async fn send_message(&self, message: Arc<Message>) -> Result<()> {
         Ok(self.message_tx.send(message).await?)
+    }
+
+    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: Receiver<WsIoPacket>) {
+        let cancel_token = self.cancel_token();
+        let connection = self.clone();
+        *self.event_dispatcher_task.lock().await = Some(spawn(async move {
+            loop {
+                let event_packet = select! {
+                    () = cancel_token.cancelled() => break,
+                    event_packet = event_queue_rx.recv() => event_packet,
+                };
+
+                let Some(event_packet) = event_packet else {
+                    break;
+                };
+
+                let Some(event) = event_packet.key else {
+                    continue;
+                };
+
+                connection
+                    .event_registry
+                    .dispatch_event_packet(
+                        connection.clone(),
+                        event,
+                        &connection.namespace.config.packet_codec,
+                        event_packet.data,
+                        &cancel_token,
+                    )
+                    .await;
+            }
+        }));
     }
 
     // Public methods
@@ -624,9 +677,18 @@ static NEXT_CONNECTION_ID: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use http::{
         HeaderMap,
         Uri,
+    };
+    use tokio::{
+        sync::mpsc::unbounded_channel,
+        time::{
+            sleep,
+            timeout,
+        },
     };
 
     use super::*;
@@ -634,10 +696,19 @@ mod tests {
     fn create_test_connection() -> Arc<WsIoServerConnection> {
         let server = Arc::new(WsIoServer::builder().build());
         let namespace = server.new_namespace_builder("/socket").register().unwrap();
-        let (connection, _rx) =
+        let (connection, _rx, _event_rx) =
             WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
 
         connection
+    }
+
+    fn create_test_connection_with_event_queue_rx() -> (Arc<WsIoServerConnection>, Receiver<WsIoPacket>) {
+        let server = Arc::new(WsIoServer::builder().build());
+        let namespace = server.new_namespace_builder("/socket").register().unwrap();
+        let (connection, _rx, event_queue_rx) =
+            WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
+
+        (connection, event_queue_rx)
     }
 
     #[tokio::test]
@@ -681,6 +752,51 @@ mod tests {
         let result = connection.handle_incoming_packet(encoded).await;
         assert!(result.is_err(), "Should bail on missing event key");
         assert_eq!(result.unwrap_err().to_string(), "Event packet missing key");
+    }
+
+    #[tokio::test]
+    async fn test_event_dispatcher_preserves_packet_order() {
+        let (connection, event_queue_rx) = create_test_connection_with_event_queue_rx();
+        connection.state.store(ConnectionState::Ready);
+
+        let (handled_tx, mut handled_rx) = unbounded_channel();
+        connection.on("ordered", move |_connection, payload: Arc<String>| {
+            let handled_tx = handled_tx.clone();
+            async move {
+                handled_tx.send(format!("start:{payload}")).unwrap();
+                if payload.as_str() == "first" {
+                    sleep(Duration::from_millis(25)).await;
+                }
+
+                handled_tx.send(format!("end:{payload}")).unwrap();
+                Ok(())
+            }
+        });
+
+        connection.start_event_dispatcher(event_queue_rx).await;
+        let packet_codec = connection.namespace.config.packet_codec;
+        for payload in ["first", "second"] {
+            let packet_data = packet_codec.encode_data(&payload).unwrap();
+            let encoded_packet = packet_codec
+                .encode(&WsIoPacket::new_event("ordered", Some(packet_data)))
+                .unwrap();
+
+            connection.handle_incoming_packet(&encoded_packet).await.unwrap();
+        }
+
+        let mut handled = Vec::with_capacity(4);
+        for _ in 0..4 {
+            handled.push(
+                timeout(Duration::from_secs(1), handled_rx.recv())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+            );
+        }
+
+        assert_eq!(handled, ["start:first", "end:first", "start:second", "end:second"]);
+
+        connection.cleanup().await;
     }
 
     #[tokio::test]

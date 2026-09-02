@@ -5,6 +5,7 @@ use std::sync::{
 
 use anyhow::{
     Result,
+    anyhow,
     bail,
 };
 use arc_swap::ArcSwap;
@@ -14,6 +15,7 @@ use num_enum::{
     TryFromPrimitive,
 };
 use tokio::{
+    select,
     spawn,
     sync::{
         Mutex,
@@ -60,10 +62,11 @@ enum SessionState {
     Readying,
 }
 
-// Structs
 #[derive(Debug)]
 pub struct WsIoClientSession {
     cancel_token: ArcSwap<CancellationToken>,
+    event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
+    event_queue_tx: Sender<WsIoPacket>,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
     message_tx: Sender<Arc<Message>>,
     ping_task: Mutex<Option<JoinHandle<()>>>,
@@ -81,12 +84,16 @@ impl TaskSpawner for WsIoClientSession {
 
 impl WsIoClientSession {
     #[inline]
-    pub(crate) fn new(runtime: Arc<WsIoClientRuntime>) -> (Arc<Self>, Receiver<Arc<Message>>) {
+    pub(crate) fn new(runtime: Arc<WsIoClientRuntime>) -> (Arc<Self>, Receiver<Arc<Message>>, Receiver<WsIoPacket>) {
         let channel_capacity = channel_capacity_from_websocket_config(&runtime.config.websocket_config);
+        let (event_queue_tx, event_queue_rx) = channel(channel_capacity);
         let (message_tx, message_rx) = channel(channel_capacity);
+
         (
             Arc::new(Self {
                 cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
+                event_dispatcher_task: Mutex::new(None),
+                event_queue_tx,
                 init_timeout_task: Mutex::new(None),
                 message_tx,
                 ping_task: Mutex::new(None),
@@ -95,6 +102,7 @@ impl WsIoClientSession {
                 state: AtomicEnumCell::new(SessionState::Created),
             }),
             message_rx,
+            event_queue_rx,
         )
     }
 
@@ -113,22 +121,23 @@ impl WsIoClientSession {
     }
 
     #[inline]
-    #[allow(
-        clippy::unnecessary_wraps,
-        reason = "packet handlers share a fallible dispatch interface"
-    )]
-    fn handle_event_packet(self: &Arc<Self>, event: &str, packet_data: Option<Vec<u8>>) -> Result<()> {
+    async fn handle_event_packet(self: &Arc<Self>, packet: WsIoPacket) -> Result<()> {
+        let Some(_event) = packet.key.as_deref() else {
+            bail!("Event packet missing key");
+        };
+
         #[cfg(feature = "tracing")]
-        tracing::trace!(event, has_data = packet_data.is_some(), "received server event packet");
-        self.runtime.event_registry.dispatch_event_packet(
-            self.clone(),
-            event,
-            &self.runtime.config.packet_codec,
-            packet_data,
-            &self.runtime,
+        tracing::trace!(
+            event = _event,
+            has_data = packet.data.is_some(),
+            "received server event packet"
         );
 
-        Ok(())
+        let cancel_token = self.cancel_token();
+        select! {
+            () = cancel_token.cancelled() => Ok(()),
+            result = self.event_queue_tx.send(packet) => result.map_err(|_| anyhow!("event dispatcher is closed")),
+        }
     }
 
     async fn handle_init_packet(self: &Arc<Self>, packet_data: Option<&[u8]>) -> Result<()> {
@@ -224,13 +233,20 @@ impl WsIoClientSession {
     }
 
     // Protected methods
-    pub(crate) async fn cleanup(self: &Arc<Self>) {
+    pub(super) async fn cleanup(self: &Arc<Self>) {
         #[cfg(feature = "tracing")]
         tracing::debug!("cleaning up client session");
+
         // Set state to Closing
         self.state.store(SessionState::Closing);
 
         // Abort tasks
+        let event_dispatcher_task = self.event_dispatcher_task.lock().await.take();
+        if let Some(event_dispatcher_task) = event_dispatcher_task {
+            event_dispatcher_task.abort();
+            let _ = event_dispatcher_task.await;
+        }
+
         abort_locked_task(&self.init_timeout_task).await;
         abort_locked_task(&self.ping_task).await;
         abort_locked_task(&self.ready_timeout_task).await;
@@ -258,7 +274,7 @@ impl WsIoClientSession {
     }
 
     #[inline]
-    pub(crate) fn close(&self) {
+    pub(super) fn close(&self) {
         // Skip if session is already Closing or Closed, otherwise set state to Closing
         match self.state.get() {
             SessionState::Closed | SessionState::Closing => return,
@@ -273,7 +289,7 @@ impl WsIoClientSession {
         let _ = self.message_tx.try_send(Arc::new(Message::Close(None)));
     }
 
-    pub(crate) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
+    pub(super) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
         self.state.ensure(SessionState::Ready, |state| {
             format!("Cannot emit event message in invalid state: {state:?}")
         })?;
@@ -281,7 +297,7 @@ impl WsIoClientSession {
         self.send_message(message).await
     }
 
-    pub(crate) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
+    pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
         // TODO: lazy load
         let packet = match self.runtime.config.packet_codec.decode(encoded_packet) {
             Ok(packet) => packet,
@@ -291,15 +307,12 @@ impl WsIoClientSession {
                 return Err(err);
             },
         };
-        match packet.r#type {
+
+        match &packet.r#type {
             WsIoPacketType::Disconnect => self.handle_disconnect_packet(),
             WsIoPacketType::Event => {
                 if self.is_ready() {
-                    if let Some(event) = packet.key.as_deref() {
-                        return self.handle_event_packet(event, packet.data);
-                    }
-
-                    bail!("Event packet missing key");
+                    return self.handle_event_packet(packet).await;
                 }
 
                 Ok(())
@@ -309,7 +322,7 @@ impl WsIoClientSession {
         }
     }
 
-    pub(crate) async fn init(self: &Arc<Self>) {
+    pub(super) async fn init(self: &Arc<Self>) {
         self.state.store(SessionState::AwaitingInit);
         #[cfg(feature = "tracing")]
         tracing::debug!("client session awaiting server init packet");
@@ -335,6 +348,39 @@ impl WsIoClientSession {
                     tracing::warn!("failed to send client heartbeat; closing session");
                     session.close();
                 }
+            }
+        }));
+    }
+
+    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: Receiver<WsIoPacket>) {
+        let cancel_token = self.cancel_token();
+        let session = self.clone();
+        *self.event_dispatcher_task.lock().await = Some(spawn(async move {
+            loop {
+                let event_packet = select! {
+                    () = cancel_token.cancelled() => break,
+                    event_packet = event_queue_rx.recv() => event_packet,
+                };
+
+                let Some(event_packet) = event_packet else {
+                    break;
+                };
+
+                let Some(event) = event_packet.key else {
+                    continue;
+                };
+
+                session
+                    .runtime
+                    .event_registry
+                    .dispatch_event_packet(
+                        session.clone(),
+                        event,
+                        &session.runtime.config.packet_codec,
+                        event_packet.data,
+                        &cancel_token,
+                    )
+                    .await;
             }
         }));
     }
