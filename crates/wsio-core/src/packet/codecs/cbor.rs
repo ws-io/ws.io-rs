@@ -1,6 +1,7 @@
 use std::io::Cursor;
 
 use anyhow::Result;
+use bytes::Bytes;
 use ciborium::{
     de::from_reader,
     ser::into_writer,
@@ -16,8 +17,6 @@ use super::super::WsIoPacket;
 pub(super) struct WsIoPacketCborCodec;
 
 impl WsIoPacketCborCodec {
-    pub(super) const IS_TEXT: bool = false;
-
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Result<WsIoPacket> {
         Ok(WsIoPacket::from_inner(from_reader(Cursor::new(bytes))?))
@@ -29,16 +28,16 @@ impl WsIoPacketCborCodec {
     }
 
     #[inline]
-    pub(super) fn encode(packet: &WsIoPacket) -> Result<Vec<u8>> {
+    pub(super) fn encode(packet: &WsIoPacket) -> Result<Bytes> {
         let mut buffer = Vec::new();
         into_writer(&packet.to_inner_ref(), &mut buffer)?;
-        Ok(buffer)
+        Ok(Bytes::from(buffer))
     }
 
     #[inline]
-    pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Vec<u8>> {
+    pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Bytes> {
         let mut buffer = Vec::new();
         into_writer(data, &mut buffer)?;
-        Ok(buffer)
+        Ok(Bytes::from(buffer))
     }
 }

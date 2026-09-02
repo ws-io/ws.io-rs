@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bytes::Bytes;
 use postcard::{
     from_bytes,
     to_allocvec,
@@ -14,8 +15,6 @@ use super::super::WsIoPacket;
 pub(super) struct WsIoPacketPostcardCodec;
 
 impl WsIoPacketPostcardCodec {
-    pub(super) const IS_TEXT: bool = false;
-
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Result<WsIoPacket> {
         Ok(WsIoPacket::from_inner(from_bytes(bytes)?))
@@ -27,12 +26,12 @@ impl WsIoPacketPostcardCodec {
     }
 
     #[inline]
-    pub(super) fn encode(packet: &WsIoPacket) -> Result<Vec<u8>> {
-        Ok(to_allocvec(&packet.to_inner_ref())?)
+    pub(super) fn encode(packet: &WsIoPacket) -> Result<Bytes> {
+        Ok(to_allocvec(&packet.to_inner_ref())?.into())
     }
 
     #[inline]
-    pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Vec<u8>> {
-        Ok(to_allocvec(data)?)
+    pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Bytes> {
+        Ok(to_allocvec(data)?.into())
     }
 }

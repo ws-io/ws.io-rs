@@ -48,7 +48,7 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
     let runtime = Builder::new_current_thread().build().unwrap();
     let cancel_token = CancellationToken::new();
     let ctx = Arc::new(DummyConnection);
-    let packet_codec = WsIoPacketCodec::SerdeJson;
+    let packet_codec = WsIoPacketCodec::Msgpack;
     let packet_data = packet_codec.encode_data(&"Hello world benchmark").unwrap();
 
     for handler_count in HANDLER_COUNTS {

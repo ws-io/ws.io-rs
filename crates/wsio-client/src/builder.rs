@@ -67,7 +67,7 @@ impl WsIoClientBuilder {
                 on_session_close_handler: None,
                 on_session_close_handler_timeout: Duration::from_secs(2),
                 on_session_ready_handler: None,
-                packet_codec: WsIoPacketCodec::SerdeJson,
+                packet_codec: WsIoPacketCodec::Msgpack,
                 ping_interval: Duration::from_secs(25),
                 ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),
@@ -341,7 +341,7 @@ mod tests {
             .init_handler_timeout(Duration::from_secs(10))
             .init_packet_timeout(Duration::from_secs(15))
             .on_session_close_handler_timeout(Duration::from_secs(5))
-            .packet_codec(WsIoPacketCodec::SerdeJson)
+            .packet_codec(WsIoPacketCodec::Msgpack)
             .ping_interval(Duration::from_secs(30))
             .ready_packet_timeout(Duration::from_secs(10))
             .reconnect_delay(Duration::from_secs(5))
@@ -357,7 +357,7 @@ mod tests {
         assert_eq!(config.init_handler_timeout, Duration::from_secs(10));
         assert_eq!(config.init_packet_timeout, Duration::from_secs(15));
         assert_eq!(config.on_session_close_handler_timeout, Duration::from_secs(5));
-        assert!(matches!(config.packet_codec, WsIoPacketCodec::SerdeJson));
+        assert!(matches!(config.packet_codec, WsIoPacketCodec::Msgpack));
         assert_eq!(config.ping_interval, Duration::from_secs(30));
         assert_eq!(config.ready_packet_timeout, Duration::from_secs(10));
         assert_eq!(config.reconnect_delay, Duration::from_secs(5));

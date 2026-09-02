@@ -225,7 +225,7 @@ mod tests {
             middleware_execution_timeout: Duration::from_secs(3),
             on_close_handler_timeout: Duration::from_secs(3),
             on_connect_handler_timeout: Duration::from_secs(3),
-            packet_codec: WsIoPacketCodec::SerdeJson,
+            packet_codec: WsIoPacketCodec::Msgpack,
             request_path: "/socket".into(),
             websocket_config: WebSocketConfig::default(),
         }

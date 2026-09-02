@@ -54,9 +54,7 @@ default = []
 # Convenience aliases.
 all = [
   "packet-codec-cbor",
-  "packet-codec-msgpack",
   "packet-codec-postcard",
-  "packet-codec-sonic-rs",
   "tls-rustls-webpki",
 ]
 
@@ -69,9 +67,7 @@ full = ["all"]
 
 # Define features here.
 packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
-packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
-packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
 tls-native = ["tokio-tungstenite/native-tls"]
 tls-rustls-native = ["tokio-tungstenite/rustls-tls-native-roots"]
 tls-rustls-webpki = ["tokio-tungstenite/rustls-tls-webpki-roots"]
@@ -87,6 +83,7 @@ tracing = [
 [dependencies]
 anyhow = "1.0.104"
 arc-swap = "1.9.2"
+bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
 kikiutils = { version = "0.11.3", features = ["atomic-enum-cell"] }
 num_enum = "0.7.6"

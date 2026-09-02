@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bytes::Bytes;
 use rmp_serde::{
     from_slice,
     to_vec_named,
@@ -14,8 +15,6 @@ use super::super::WsIoPacket;
 pub(super) struct WsIoPacketMsgpackCodec;
 
 impl WsIoPacketMsgpackCodec {
-    pub(super) const IS_TEXT: bool = false;
-
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Result<WsIoPacket> {
         Ok(WsIoPacket::from_inner(from_slice(bytes)?))
@@ -27,12 +26,12 @@ impl WsIoPacketMsgpackCodec {
     }
 
     #[inline]
-    pub(super) fn encode(packet: &WsIoPacket) -> Result<Vec<u8>> {
-        Ok(to_vec_named(&packet.to_inner_ref())?)
+    pub(super) fn encode(packet: &WsIoPacket) -> Result<Bytes> {
+        Ok(to_vec_named(&packet.to_inner_ref())?.into())
     }
 
     #[inline]
-    pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Vec<u8>> {
-        Ok(to_vec_named(data)?)
+    pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Bytes> {
+        Ok(to_vec_named(data)?.into())
     }
 }

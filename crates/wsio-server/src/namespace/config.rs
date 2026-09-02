@@ -10,6 +10,7 @@ use std::{
 };
 
 use anyhow::Result;
+use bytes::Bytes;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use crate::{
@@ -28,7 +29,7 @@ type InitRequestHandler = Box<
     dyn for<'a> Fn(
             Arc<WsIoServerConnection>,
             &'a WsIoPacketCodec,
-        ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>>> + Send + 'a>>
+        ) -> Pin<Box<dyn Future<Output = Result<Option<Bytes>>> + Send + 'a>>
         + Send
         + Sync
         + 'static,

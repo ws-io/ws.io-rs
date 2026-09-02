@@ -739,7 +739,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_incoming_packet_decode_error() {
         let connection = create_test_connection();
-        let garbage_data = b"obviously not valid json or messagepack";
+        let garbage_data = b"obviously not valid messagepack";
         // Should seamlessly return a Result::Err, not panic
         let result = connection.handle_incoming_packet(garbage_data).await;
         assert!(result.is_err(), "Decoding garbage payload should trigger an error");
@@ -751,11 +751,11 @@ mod tests {
         assert_eq!(connection.state.get(), ConnectionState::Created);
 
         // Sending an init packet when the connection is merely `Created` (not yet `AwaitingInit`) should throw an error
-        // Init packet JSON encoded (type: 2 = Init) -> serialized as tuple array
-        let encoded = b"[2,null,null]";
+        let packet_codec = connection.namespace.config.packet_codec;
+        let encoded = packet_codec.encode(&WsIoPacket::new_init(None)).unwrap();
 
         // This simulates a manual client Init push before server starts the handshake buffer
-        let result = connection.handle_incoming_packet(encoded).await;
+        let result = connection.handle_incoming_packet(&encoded).await;
         assert!(
             result.is_err(),
             "Should error because state is Created, not AwaitingInit"
@@ -771,10 +771,12 @@ mod tests {
         // Force the connection into the Ready state so it accepts Event packets
         connection.state.store(ConnectionState::Ready);
 
-        // Manufacture an Event packet manually without a key (type: 1 = Event) -> serialized as tuple array
-        let encoded = b"[1,null,null]";
+        let packet_codec = connection.namespace.config.packet_codec;
+        let encoded = packet_codec
+            .encode(&WsIoPacket::new(WsIoPacketType::Event, None, None))
+            .unwrap();
 
-        let result = connection.handle_incoming_packet(encoded).await;
+        let result = connection.handle_incoming_packet(&encoded).await;
         assert!(result.is_err(), "Should bail on missing event key");
         assert_eq!(result.unwrap_err().to_string(), "Event packet missing key");
     }

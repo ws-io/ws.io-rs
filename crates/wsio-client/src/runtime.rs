@@ -4,8 +4,8 @@ use std::{
 };
 
 use anyhow::{
-    Error as AnyhowError,
     Result,
+    anyhow,
 };
 use arc_swap::{
     ArcSwap,
@@ -162,7 +162,7 @@ impl WsIoClientRuntime {
                             "WebSocket connection timed out"
                         );
 
-                        Err(AnyhowError::from(err))
+                        Err(anyhow!(err))
                     },
                 }
             } else {
@@ -200,7 +200,7 @@ impl WsIoClientRuntime {
                         tracing::debug!(error = %_err, "WebSocket read task failed");
                         break;
                     },
-                    Ok(Message::Text(text)) => session_clone.handle_incoming_packet(text.as_bytes()).await,
+                    Ok(Message::Text(_)) => Err(anyhow!("text WebSocket frames are not supported")),
                     _ => Ok(()),
                 }
                 .is_err()
@@ -407,12 +407,7 @@ impl WsIoClientRuntime {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
-        Ok(Arc::new(if self.config.packet_codec.is_text() {
-            // SAFETY: text packet codecs only produce valid UTF-8 payloads.
-            Message::Text(unsafe { String::from_utf8_unchecked(bytes) }.into())
-        } else {
-            Message::Binary(bytes.into())
-        }))
+        Ok(Arc::new(Message::Binary(bytes)))
     }
 
     #[inline]

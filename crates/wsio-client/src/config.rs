@@ -10,6 +10,7 @@ use std::{
 };
 
 use anyhow::Result;
+use bytes::Bytes;
 use tokio_tungstenite::tungstenite::{
     http::Request,
     protocol::WebSocketConfig,
@@ -32,7 +33,7 @@ type InitHandler = Box<
             Arc<WsIoClientSession>,
             Option<&'a [u8]>,
             &'a WsIoPacketCodec,
-        ) -> Pin<Box<dyn Future<Output = Result<Option<Vec<u8>>>> + Send + 'a>>
+        ) -> Pin<Box<dyn Future<Output = Result<Option<Bytes>>> + Send + 'a>>
         + Send
         + Sync
         + 'static,
@@ -89,8 +90,8 @@ pub(crate) struct WsIoClientConfig {
 
     /// Packet codec used to encode and decode ws.io protocol packets.
     ///
-    /// It must match the server namespace codec and controls whether encoded
-    /// packets use WebSocket text or binary messages.
+    /// It must match the server namespace codec. All supported codecs use
+    /// binary WebSocket messages.
     pub(crate) packet_codec: WsIoPacketCodec,
 
     /// Interval between client heartbeat frames sent after the WebSocket session

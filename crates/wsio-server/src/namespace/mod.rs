@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{
+    Result,
+    anyhow,
+};
 use arc_swap::ArcSwap;
 use futures_util::{
     SinkExt,
@@ -169,7 +172,7 @@ impl WsIoServerNamespace {
                         tracing::debug!(connection_id = connection_clone.id(), error = %_err, "server read task failed");
                         break;
                     },
-                    Ok(Message::Text(text)) => connection_clone.handle_incoming_packet(text.as_bytes()).await,
+                    Ok(Message::Text(_)) => Err(anyhow!("text WebSocket frames are not supported")),
                     _ => Ok(()),
                 }
                 .is_err()
@@ -253,12 +256,7 @@ impl WsIoServerNamespace {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
-        Ok(Arc::new(if self.config.packet_codec.is_text() {
-            // SAFETY: text packet codecs only produce valid UTF-8 payloads.
-            Message::Text(unsafe { String::from_utf8_unchecked(bytes) }.into())
-        } else {
-            Message::Binary(bytes.into())
-        }))
+        Ok(Arc::new(Message::Binary(bytes)))
     }
 
     #[inline]
@@ -461,7 +459,7 @@ mod tests {
         let packet = WsIoPacket::new_disconnect();
         let message = namespace.encode_packet_to_message(&packet).unwrap();
 
-        assert!(matches!(&*message, Message::Text(_)));
+        assert!(matches!(&*message, Message::Binary(_)));
     }
 
     #[tokio::test]

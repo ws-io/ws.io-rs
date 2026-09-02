@@ -55,9 +55,7 @@ default = []
 all = [
   "connection-extensions",
   "packet-codec-cbor",
-  "packet-codec-msgpack",
   "packet-codec-postcard",
-  "packet-codec-sonic-rs",
   "tower",
 ]
 
@@ -71,9 +69,7 @@ full = ["all"]
 # Define features here.
 connection-extensions = []
 packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
-packet-codec-msgpack = ["wsio-core/packet-codec-msgpack"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
-packet-codec-sonic-rs = ["wsio-core/packet-codec-sonic-rs"]
 tower = [
   "dep:tower-layer",
   "dep:tower-service",
@@ -90,6 +86,7 @@ tracing = [
 [dependencies]
 anyhow = "1.0.104"
 arc-swap = "1.9.2"
+bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
 http = "1.5.0"
 http-body = "1.1.0"

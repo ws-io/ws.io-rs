@@ -21,6 +21,7 @@ use std::{
 };
 
 use anyhow::Result;
+use bytes::Bytes;
 use kikiutils::types::fx_collections::FxHashMap;
 use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
@@ -104,7 +105,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
         ctx: Arc<C>,
         event: impl AsRef<str>,
         packet_codec: &WsIoPacketCodec,
-        packet_data: Option<Vec<u8>>,
+        packet_data: Option<Bytes>,
         cancel_token: &CancellationToken,
     ) -> Result<()> {
         let event = event.as_ref();
@@ -297,7 +298,7 @@ mod tests {
             async move { Ok(()) }
         });
 
-        let packet_codec = WsIoPacketCodec::SerdeJson;
+        let packet_codec = WsIoPacketCodec::Msgpack;
         let packet_data = packet_codec.encode_data(&"hello").unwrap();
 
         registry
@@ -323,7 +324,7 @@ mod tests {
     async fn test_registry_dispatch_waits_for_handlers() {
         let registry = WsIoEventRegistry::<DummyConnection>::new();
         let cancel_token = CancellationToken::new();
-        let packet_codec = WsIoPacketCodec::SerdeJson;
+        let packet_codec = WsIoPacketCodec::Msgpack;
         let (handled_tx, mut handled_rx) = unbounded_channel();
 
         registry.on("ordered", move |_ctx, payload: Arc<String>| {
@@ -365,7 +366,7 @@ mod tests {
     async fn test_registry_dispatch_returns_payload_decode_error() {
         let registry = WsIoEventRegistry::<DummyConnection>::new();
         let cancel_token = CancellationToken::new();
-        let packet_codec = WsIoPacketCodec::SerdeJson;
+        let packet_codec = WsIoPacketCodec::Msgpack;
 
         registry.on("ping", |_ctx, _payload: Arc<String>| async { Ok(()) });
 
@@ -374,7 +375,7 @@ mod tests {
                 Arc::new(DummyConnection),
                 "ping",
                 &packet_codec,
-                Some(vec![0]),
+                Some(vec![0].into()),
                 &cancel_token,
             )
             .await;

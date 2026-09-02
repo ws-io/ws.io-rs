@@ -78,8 +78,8 @@ pub(crate) struct WsIoServerConfig {
 
     /// Packet codec used to encode and decode ws.io protocol packets.
     ///
-    /// The same codec must be understood by the client. It also controls whether
-    /// encoded packets are sent as WebSocket text or binary messages.
+    /// The same codec must be understood by the client. All supported codecs use
+    /// binary WebSocket messages.
     ///
     /// Can be overridden by namespace-level configuration.
     pub(crate) packet_codec: WsIoPacketCodec,

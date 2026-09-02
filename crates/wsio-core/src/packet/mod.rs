@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use serde::{
     Deserialize,
     Serialize,
@@ -21,21 +22,21 @@ pub enum WsIoPacketType {
 
 // Structs
 #[derive(Deserialize)]
-struct InnerPacket(WsIoPacketType, Option<String>, Option<Vec<u8>>);
+struct InnerPacket(WsIoPacketType, Option<String>, Option<Bytes>);
 
 #[derive(Serialize)]
-struct InnerPacketRef<'a>(&'a WsIoPacketType, &'a Option<String>, &'a Option<Vec<u8>>);
+struct InnerPacketRef<'a>(&'a WsIoPacketType, &'a Option<String>, &'a Option<Bytes>);
 
 #[derive(Clone, Debug)]
 pub struct WsIoPacket {
-    pub data: Option<Vec<u8>>,
+    pub data: Option<Bytes>,
     pub key: Option<String>,
     pub r#type: WsIoPacketType,
 }
 
 impl WsIoPacket {
     #[inline]
-    pub fn new(r#type: WsIoPacketType, key: Option<&str>, data: Option<Vec<u8>>) -> Self {
+    pub fn new(r#type: WsIoPacketType, key: Option<&str>, data: Option<Bytes>) -> Self {
         Self {
             data,
             key: key.map(str::to_owned),
@@ -65,7 +66,7 @@ impl WsIoPacket {
     }
 
     #[inline]
-    pub fn new_event(event: impl Into<String>, data: Option<Vec<u8>>) -> Self {
+    pub fn new_event(event: impl Into<String>, data: Option<Bytes>) -> Self {
         Self {
             data,
             key: Some(event.into()),
@@ -74,7 +75,7 @@ impl WsIoPacket {
     }
 
     #[inline]
-    pub fn new_init(data: Option<Vec<u8>>) -> Self {
+    pub fn new_init(data: Option<Bytes>) -> Self {
         Self::new(WsIoPacketType::Init, None, data)
     }
 
@@ -103,13 +104,13 @@ mod tests {
         assert_eq!(packet.data, None);
 
         // Event with data
-        let packet = WsIoPacket::new_event("chat", Some(vec![1, 2, 3]));
+        let packet = WsIoPacket::new_event("chat", Some(vec![1, 2, 3].into()));
         assert!(matches!(packet.r#type, WsIoPacketType::Event));
         assert_eq!(packet.key.as_deref(), Some("chat"));
         assert_eq!(packet.data.as_deref(), Some(&[1, 2, 3][..]));
 
         // Init with data
-        let packet = WsIoPacket::new_init(Some(vec![4, 5, 6]));
+        let packet = WsIoPacket::new_init(Some(vec![4, 5, 6].into()));
         assert!(matches!(packet.r#type, WsIoPacketType::Init));
         assert_eq!(packet.key, None);
         assert_eq!(packet.data.as_deref(), Some(&[4, 5, 6][..]));

@@ -47,15 +47,11 @@ fn bench_codecs(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("packet_codecs");
 
     let codecs = [
-        ("SerdeJson", WsIoPacketCodec::SerdeJson),
         #[cfg(feature = "packet-codec-cbor")]
         ("Cbor", WsIoPacketCodec::Cbor),
-        #[cfg(feature = "packet-codec-msgpack")]
         ("Msgpack", WsIoPacketCodec::Msgpack),
         #[cfg(feature = "packet-codec-postcard")]
         ("Postcard", WsIoPacketCodec::Postcard),
-        #[cfg(feature = "packet-codec-sonic-rs")]
-        ("SonicRs", WsIoPacketCodec::SonicRs),
     ];
 
     for (name, codec) in codecs {
