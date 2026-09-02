@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 - 2026-09-02T09:07:31Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-adapter-v0.1.2...wsio-adapter-v0.1.3)
+
+### 🏡 Chore
+
+- copy LICENSE into each crates ([5e2a4ec](https://github.com/ws-io/ws.io-rs/commit/5e2a4ecbe8dcf37b2cef811c5dab2bbba231574f))
+
 ## 0.1.2 - 2026-06-22 04:09
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-adapter-v0.1.0...wsio-adapter-v0.1.2)

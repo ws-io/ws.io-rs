@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.0 - 2026-09-02T09:07:31Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.11...wsio-core-v0.13.0)
+
+### 🏡 Chore
+
+- upgrade deps ([fb54232](https://github.com/ws-io/ws.io-rs/commit/fb54232cb6b79e2ace5a9713045ff04e6faf2189))
+- resolve workspace lint warnings ([6a37fa4](https://github.com/ws-io/ws.io-rs/commit/6a37fa4d523eace5ce1c300751501c71e2fca89b))
+- upgrade deps ([dae255a](https://github.com/ws-io/ws.io-rs/commit/dae255acf84337fe2755fc7b881464376bbb7a73))
+- copy LICENSE into each crates ([5e2a4ec](https://github.com/ws-io/ws.io-rs/commit/5e2a4ecbe8dcf37b2cef811c5dab2bbba231574f))
+
+### 🚀 Enhancements
+
+- *(protocol)* [**breaking**] switch Rust packets to binary MsgPack ([ad7fdd7](https://github.com/ws-io/ws.io-rs/commit/ad7fdd72b24bfc5cc1c2b6d8081b43b3efceddb5))
+
+### 🩹 Fixes
+
+- [**breaking**] enforce event-key validation and simplify cancellation handles ([fa37ec1](https://github.com/ws-io/ws.io-rs/commit/fa37ec1dc7c903b4e39498ee0db57bf1b5447de6))
+- [**breaking**] close connections on event dispatcher failure ([dcb560d](https://github.com/ws-io/ws.io-rs/commit/dcb560d6f41c31409cf6d35f26c69758e447b1aa))
+- [**breaking**] preserve per-connection event ordering ([ab28136](https://github.com/ws-io/ws.io-rs/commit/ab281366466649003ac388650c8c527db6aa0526))
+
 ## 0.12.11 - 2026-07-17T03:19:49Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.10...wsio-core-v0.12.11)

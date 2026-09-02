@@ -1,6 +1,6 @@
 [package]
 name = "wsio-server"
-version = "0.12.8"
+version = "0.13.0"
 edition.workspace = true
 
 description = "Event-driven WebSocket server for ws.io with namespaces and room broadcasting."
