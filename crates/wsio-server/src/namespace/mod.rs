@@ -29,8 +29,6 @@ use tokio::{
     join,
     select,
     spawn,
-    sync::Mutex,
-    task::JoinSet,
     time::timeout,
 };
 use tokio_tungstenite::{
@@ -40,6 +38,7 @@ use tokio_tungstenite::{
         protocol::Role,
     },
 };
+use tokio_util::task::TaskTracker;
 
 pub(crate) mod builder;
 mod config;
@@ -74,7 +73,7 @@ pub struct WsIoServerNamespace {
     pub(crate) config: WsIoServerNamespaceConfig,
     connection_ids: ArcSwap<RoaringTreemap>,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
-    connection_task_set: Mutex<JoinSet<()>>,
+    connection_task_tracker: TaskTracker,
     rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Arc<WsIoServerRuntime>,
     status: AtomicEnumCell<NamespaceStatus>,
@@ -86,7 +85,7 @@ impl WsIoServerNamespace {
             config,
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             connections: FxDashMap::default(),
-            connection_task_set: Mutex::new(JoinSet::new()),
+            connection_task_tracker: TaskTracker::new(),
             rooms: FxDashMap::default(),
             runtime,
             status: AtomicEnumCell::new(NamespaceStatus::Running),
@@ -259,7 +258,8 @@ impl WsIoServerNamespace {
         }))
     }
 
-    pub(crate) async fn handle_on_upgrade_request(
+    #[inline]
+    pub(crate) fn handle_on_upgrade_request(
         self: &Arc<Self>,
         headers: HeaderMap,
         on_upgrade: OnUpgrade,
@@ -273,7 +273,7 @@ impl WsIoServerNamespace {
         );
 
         let namespace = self.clone();
-        self.connection_task_set.lock().await.spawn(async move {
+        self.connection_task_tracker.spawn(async move {
             match timeout(namespace.config.http_request_upgrade_timeout, on_upgrade).await {
                 Ok(Ok(upgraded)) => {
                     if let Err(_err) = namespace.handle_upgraded_request(headers, request_uri, upgraded).await {
@@ -382,8 +382,8 @@ impl WsIoServerNamespace {
         }
 
         self.close_all().await;
-        let mut connection_task_set = self.connection_task_set.lock().await;
-        while connection_task_set.join_next().await.is_some() {}
+        self.connection_task_tracker.close();
+        self.connection_task_tracker.wait().await;
 
         self.status.store(NamespaceStatus::Stopped);
 

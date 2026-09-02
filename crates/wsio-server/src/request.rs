@@ -116,9 +116,7 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
         return respond(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    namespace
-        .handle_on_upgrade_request(request.headers().clone(), on_upgrade, request.uri().clone())
-        .await;
+    namespace.handle_on_upgrade_request(request.headers().clone(), on_upgrade, request.uri().clone());
 
     #[cfg(feature = "tracing")]
     tracing::debug!(namespace = %namespace_path, "accepted WebSocket upgrade request");
