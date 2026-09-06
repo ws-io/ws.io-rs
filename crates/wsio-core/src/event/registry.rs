@@ -147,6 +147,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
             let cancel_token = cancel_token.clone();
             handler_tasks.spawn(async move {
                 select! {
+                    biased;
                     () = cancel_token.cancelled() => Ok(()),
                     result = handler(ctx, data) => result,
                 }

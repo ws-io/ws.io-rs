@@ -133,6 +133,7 @@ impl WsIoClientSession {
 
         let cancel_token = self.cancel_token();
         select! {
+            biased;
             () = cancel_token.cancelled() => Ok(()),
             result = self.event_queue_tx.send(packet) => result.map_err(|_| anyhow!("event dispatcher is closed")),
         }
@@ -361,6 +362,7 @@ impl WsIoClientSession {
             let dispatcher = async {
                 loop {
                     let event_packet = select! {
+                        biased;
                         () = cancel_token.cancelled() => break,
                         event_packet = event_queue_rx.recv() => event_packet,
                     };

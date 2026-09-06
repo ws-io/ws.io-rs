@@ -144,6 +144,7 @@ impl WsIoClientRuntime {
             #[cfg(feature = "tracing")]
             tracing::trace!("applying WebSocket request modifier");
             request = select! {
+                biased;
                 () = cancel_token.cancelled() => return Ok(()),
                 result = modifier(request) => result?,
             };
@@ -171,6 +172,7 @@ impl WsIoClientRuntime {
         };
 
         let (ws_stream, _) = select! {
+            biased;
             () = cancel_token.cancelled() => return Ok(()),
             result = connection_attempt => result?,
         };
@@ -309,6 +311,7 @@ impl WsIoClientRuntime {
                     );
 
                     select! {
+                        biased;
                         () = cancel_token.cancelled() => {},
                         () = sleep(runtime.config.reconnect_delay) => {},
                     }
