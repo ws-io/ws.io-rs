@@ -78,7 +78,7 @@ pub struct WsIoServerNamespace {
     connection_ids: ArcSwap<RoaringTreemap>,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
     connection_task_tracker: TaskTracker,
-    operation_lock: Mutex<()>,
+    lifecycle_lock: Mutex<()>,
     rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Arc<WsIoServerRuntime>,
     status: AtomicEnumCell<NamespaceStatus>,
@@ -91,7 +91,7 @@ impl WsIoServerNamespace {
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             connections: FxDashMap::default(),
             connection_task_tracker: TaskTracker::new(),
-            operation_lock: Mutex::new(()),
+            lifecycle_lock: Mutex::new(()),
             rooms: FxDashMap::default(),
             runtime,
             status: AtomicEnumCell::new(NamespaceStatus::Running),
@@ -372,7 +372,7 @@ impl WsIoServerNamespace {
     }
 
     pub async fn shutdown(self: &Arc<Self>) {
-        let _operation_guard = self.operation_lock.lock().await;
+        let _lifecycle_lock = self.lifecycle_lock.lock().await;
 
         match self.status.get() {
             NamespaceStatus::Stopped => return,

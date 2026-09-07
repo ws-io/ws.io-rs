@@ -44,8 +44,8 @@ pub(crate) enum WsIoServerRuntimeStatus {
 pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_ids: ArcSwap<RoaringTreemap>,
+    lifecycle_lock: Mutex<()>,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
-    operation_lock: Mutex<()>,
     pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
 }
 
@@ -54,8 +54,8 @@ impl WsIoServerRuntime {
         Arc::new(Self {
             config,
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
+            lifecycle_lock: Mutex::new(()),
             namespaces: RwLock::new(FxHashMap::default()),
-            operation_lock: Mutex::new(()),
             status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
         })
     }
@@ -182,7 +182,7 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn shutdown(&self) {
-        let _operation_guard = self.operation_lock.lock().await;
+        let _lifecycle_lock = self.lifecycle_lock.lock().await;
 
         match self.status.get() {
             WsIoServerRuntimeStatus::Stopped => {
