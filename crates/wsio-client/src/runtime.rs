@@ -410,7 +410,7 @@ impl WsIoClientRuntime {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
-        let bytes = self.config.packet_transformer.encode_bytes(bytes)?;
+        let bytes = self.config.packet_transformer.encode(bytes)?;
         Ok(Arc::new(Message::Binary(bytes)))
     }
 

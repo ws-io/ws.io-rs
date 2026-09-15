@@ -71,7 +71,7 @@ impl WsIoClientBuilder {
                 on_session_close_handler_timeout: Duration::from_secs(2),
                 on_session_ready_handler: None,
                 packet_codec: WsIoPacketCodec::Msgpack,
-                packet_transformer: WsIoPacketTransformer::Noop,
+                packet_transformer: WsIoPacketTransformer::default(),
                 ping_interval: Duration::from_secs(25),
                 ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),

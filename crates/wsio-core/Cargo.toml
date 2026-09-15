@@ -55,6 +55,7 @@ default = []
 all = [
   "packet-codec-cbor",
   "packet-codec-postcard",
+  "packet-transformer-zstd",
 ]
 
 full = ["all"]
@@ -67,6 +68,7 @@ full = ["all"]
 # Define features here.
 packet-codec-cbor = ["dep:ciborium"]
 packet-codec-postcard = ["dep:postcard"]
+packet-transformer-zstd = ["dep:zstd"]
 tracing = ["dep:tracing"]
 
 # =============================================================================
@@ -87,6 +89,7 @@ tokio = { version = "1.53.1", features = ["macros", "rt", "sync"] }
 tokio-util = "0.7.19"
 tracing = { version = "0.1.44", optional = true }
 tungstenite = { version = "0.30.0", default-features = false }
+zstd = { version = "0.14.0", default-features = false, optional = true }
 
 # -----------------------------------------------------------------------------
 # OS / family-specific dependencies

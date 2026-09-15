@@ -227,7 +227,7 @@ mod tests {
             on_close_handler_timeout: Duration::from_secs(3),
             on_connect_handler_timeout: Duration::from_secs(3),
             packet_codec: WsIoPacketCodec::Msgpack,
-            packet_transformer: WsIoPacketTransformer::Noop,
+            packet_transformer: WsIoPacketTransformer::default(),
             request_path: "/socket".into(),
             websocket_config: WebSocketConfig::default(),
         }

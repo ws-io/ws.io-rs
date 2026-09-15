@@ -40,7 +40,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const TEST_NAMESPACE: &str = "/socket";
 
 async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
-    setup_server_with_transformer(WsIoPacketTransformer::Noop).await
+    setup_server_with_transformer(WsIoPacketTransformer::default()).await
 }
 
 async fn setup_server_with_transformer(
@@ -68,7 +68,7 @@ fn register_test_namespace(server: &WsIoServer) -> Arc<WsIoServerNamespace> {
 }
 
 async fn create_connected_client(ws_url: &str) -> WsIoClient {
-    create_connected_client_with_transformer(ws_url, WsIoPacketTransformer::Noop).await
+    create_connected_client_with_transformer(ws_url, WsIoPacketTransformer::default()).await
 }
 
 async fn create_connected_client_with_transformer(

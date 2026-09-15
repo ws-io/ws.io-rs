@@ -55,7 +55,7 @@ impl WsIoCustomPacketTransformer for CountingPrefixTransformer {
 #[tokio::test]
 async fn test_e2e_custom_packet_transformer_round_trip() {
     let transformer = Arc::new(CountingPrefixTransformer::default());
-    let packet_transformer = WsIoPacketTransformer::Custom(transformer.clone());
+    let packet_transformer = WsIoPacketTransformer::custom(transformer.clone());
     let (server_task, server, ws_url) = setup_server_with_transformer(packet_transformer.clone()).await;
 
     let server_received = Arc::new(AtomicUsize::new(0));

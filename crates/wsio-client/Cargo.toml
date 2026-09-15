@@ -55,6 +55,7 @@ default = []
 all = [
   "packet-codec-cbor",
   "packet-codec-postcard",
+  "packet-transformer-zstd",
   "tls-rustls-webpki",
 ]
 
@@ -68,6 +69,7 @@ full = ["all"]
 # Define features here.
 packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
+packet-transformer-zstd = ["wsio-core/packet-transformer-zstd"]
 tls-native = ["tokio-tungstenite/native-tls"]
 tls-rustls-native = ["tokio-tungstenite/rustls-tls-native-roots"]
 tls-rustls-webpki = ["tokio-tungstenite/rustls-tls-webpki-roots"]

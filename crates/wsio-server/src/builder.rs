@@ -38,7 +38,7 @@ impl WsIoServerBuilder {
                 on_close_handler_timeout: Duration::from_secs(2),
                 on_connect_handler_timeout: Duration::from_secs(3),
                 packet_codec: WsIoPacketCodec::Msgpack,
-                packet_transformer: WsIoPacketTransformer::Noop,
+                packet_transformer: WsIoPacketTransformer::default(),
                 request_path: "/ws.io".to_owned(),
                 websocket_config: WebSocketConfig::default()
                     .max_frame_size(Some(8 * 1024 * 1024))

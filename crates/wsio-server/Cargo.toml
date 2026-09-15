@@ -56,6 +56,7 @@ all = [
   "connection-extensions",
   "packet-codec-cbor",
   "packet-codec-postcard",
+  "packet-transformer-zstd",
   "tower",
 ]
 
@@ -70,6 +71,7 @@ full = ["all"]
 connection-extensions = []
 packet-codec-cbor = ["wsio-core/packet-codec-cbor"]
 packet-codec-postcard = ["wsio-core/packet-codec-postcard"]
+packet-transformer-zstd = ["wsio-core/packet-transformer-zstd"]
 tower = [
   "dep:tower-layer",
   "dep:tower-service",

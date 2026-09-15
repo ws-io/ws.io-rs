@@ -324,20 +324,20 @@ mod tests {
 
     #[test]
     fn test_namespace_builder_inherits_and_overrides_packet_transformer() {
-        let global_transformer = WsIoPacketTransformer::Custom(Arc::new(TestPacketTransformer));
+        let global_transformer = WsIoPacketTransformer::custom(Arc::new(TestPacketTransformer));
         let server = Arc::new(WsIoServer::builder().packet_transformer(global_transformer).build());
         let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone());
 
-        assert!(matches!(
-            &builder.config.packet_transformer,
-            WsIoPacketTransformer::Custom(_)
-        ));
+        assert_eq!(
+            format!("{:?}", builder.config.packet_transformer),
+            "WsIoPacketTransformer::Custom(<transformer>)"
+        );
 
-        let builder = builder.packet_transformer(WsIoPacketTransformer::Noop);
-        assert!(matches!(
-            &builder.config.packet_transformer,
-            WsIoPacketTransformer::Noop
-        ));
+        let builder = builder.packet_transformer(WsIoPacketTransformer::default());
+        assert_eq!(
+            format!("{:?}", builder.config.packet_transformer),
+            "WsIoPacketTransformer::Noop"
+        );
     }
 
     #[test]

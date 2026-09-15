@@ -437,7 +437,7 @@ impl WsIoServerConnection {
     pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: Bytes) -> Result<()> {
         // TODO: lazy load
         let packet = {
-            let encoded_packet = self.namespace.config.packet_transformer.decode_bytes(encoded_packet)?;
+            let encoded_packet = self.namespace.config.packet_transformer.decode(encoded_packet)?;
             match self.namespace.config.packet_codec.decode(&encoded_packet) {
                 Ok(packet) => packet,
                 Err(err) => {
