@@ -276,13 +276,13 @@ mod tests {
     use super::*;
     use crate::{
         WsIoServer,
-        core::packet::transformers::WsIoCustomPacketTransformer,
+        core::packet::transformers::custom::WsIoPacketCustomTransformer,
     };
 
     struct TestPacketTransformer;
 
     #[async_trait]
-    impl WsIoCustomPacketTransformer for TestPacketTransformer {
+    impl WsIoPacketCustomTransformer for TestPacketTransformer {
         async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
             Ok(Bytes::copy_from_slice(bytes))
         }

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use http::{
     HeaderName,
     HeaderValue,
@@ -28,9 +26,9 @@ fn check_header_token<ReqBody>(request: &Request<ReqBody>, name: HeaderName, exp
     })
 }
 
-pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
-    mut request: Request<ReqBody>,
-    runtime: Arc<WsIoServerRuntime>,
+pub(super) fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
+    request: &mut Request<ReqBody>,
+    runtime: &WsIoServerRuntime,
 ) -> Result<Response<ResBody>, E> {
     // Check method
     if request.method() != Method::GET {
@@ -59,7 +57,7 @@ pub(super) async fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 
     // Tungstenite reads one Connection value, while HTTP permits the token
     // across repeated fields. Validate all values before normalizing them.
-    if !check_header_token(&request, CONNECTION, "upgrade") {
+    if !check_header_token(request, CONNECTION, "upgrade") {
         #[cfg(feature = "tracing")]
         tracing::trace!(
             path = request.uri().path(),
@@ -160,9 +158,8 @@ mod tests {
             .unwrap()
     }
 
-    async fn dispatch_status(request: Request<()>, server: &WsIoServer) -> StatusCode {
-        dispatch_request::<_, (), Infallible>(request, server.0.clone())
-            .await
+    fn dispatch_status(mut request: Request<()>, server: &WsIoServer) -> StatusCode {
+        dispatch_request::<_, (), Infallible>(&mut request, &server.0)
             .unwrap()
             .status()
     }
@@ -195,8 +192,8 @@ mod tests {
         assert!(!check_header_token(&request, CONNECTION, "upgrade"));
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_non_get_method() {
+    #[test]
+    fn dispatch_request_rejects_non_get_method() {
         let server = WsIoServer::builder().build();
         let request = Request::builder()
             .method(Method::POST)
@@ -204,11 +201,11 @@ mod tests {
             .body(())
             .unwrap();
 
-        assert_eq!(dispatch_status(request, &server).await, StatusCode::METHOD_NOT_ALLOWED);
+        assert_eq!(dispatch_status(request, &server), StatusCode::METHOD_NOT_ALLOWED);
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_missing_upgrade_headers() {
+    #[test]
+    fn dispatch_request_rejects_missing_upgrade_headers() {
         let server = WsIoServer::builder().build();
         let request = Request::builder()
             .method(Method::GET)
@@ -216,11 +213,11 @@ mod tests {
             .body(())
             .unwrap();
 
-        assert_eq!(dispatch_status(request, &server).await, StatusCode::BAD_REQUEST);
+        assert_eq!(dispatch_status(request, &server), StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_missing_sec_websocket_key() {
+    #[test]
+    fn dispatch_request_rejects_missing_sec_websocket_key() {
         let server = WsIoServer::builder().build();
         let request = Request::builder()
             .method(Method::GET)
@@ -231,11 +228,11 @@ mod tests {
             .body(())
             .unwrap();
 
-        assert_eq!(dispatch_status(request, &server).await, StatusCode::BAD_REQUEST);
+        assert_eq!(dispatch_status(request, &server), StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_invalid_sec_websocket_key() {
+    #[test]
+    fn dispatch_request_rejects_invalid_sec_websocket_key() {
         let server = WsIoServer::builder().build();
         server.new_namespace_builder("/socket").register().unwrap();
         let mut request = valid_upgrade_request("/ws.io?namespace=/socket");
@@ -243,20 +240,20 @@ mod tests {
             .headers_mut()
             .insert(SEC_WEBSOCKET_KEY, HeaderValue::from_static("invalid"));
 
-        assert_eq!(dispatch_status(request, &server).await, StatusCode::BAD_REQUEST);
+        assert_eq!(dispatch_status(request, &server), StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_http_2_upgrade() {
+    #[test]
+    fn dispatch_request_rejects_http_2_upgrade() {
         let server = WsIoServer::builder().build();
         let mut request = valid_upgrade_request("/ws.io?namespace=/socket");
         *request.version_mut() = Version::HTTP_2;
 
-        assert_eq!(dispatch_status(request, &server).await, StatusCode::BAD_REQUEST);
+        assert_eq!(dispatch_status(request, &server), StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
-    async fn dispatch_request_accepts_repeated_connection_headers() {
+    #[test]
+    fn dispatch_request_accepts_repeated_connection_headers() {
         let server = WsIoServer::builder().build();
         server.new_namespace_builder("/socket").register().unwrap();
         let mut request = valid_upgrade_request("/ws.io?namespace=/socket");
@@ -264,39 +261,36 @@ mod tests {
         headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
         headers.append(CONNECTION, HeaderValue::from_static("Upgrade"));
 
-        assert_eq!(
-            dispatch_status(request, &server).await,
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
+        assert_eq!(dispatch_status(request, &server), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_missing_namespace_query() {
+    #[test]
+    fn dispatch_request_rejects_missing_namespace_query() {
         let server = WsIoServer::builder().build();
 
         assert_eq!(
-            dispatch_status(valid_upgrade_request("/ws.io"), &server).await,
+            dispatch_status(valid_upgrade_request("/ws.io"), &server),
             StatusCode::BAD_REQUEST
         );
     }
 
-    #[tokio::test]
-    async fn dispatch_request_rejects_unknown_namespace() {
+    #[test]
+    fn dispatch_request_rejects_unknown_namespace() {
         let server = WsIoServer::builder().build();
 
         assert_eq!(
-            dispatch_status(valid_upgrade_request("/ws.io?namespace=/missing"), &server).await,
+            dispatch_status(valid_upgrade_request("/ws.io?namespace=/missing"), &server),
             StatusCode::NOT_FOUND
         );
     }
 
-    #[tokio::test]
-    async fn dispatch_request_requires_hyper_on_upgrade_extension() {
+    #[test]
+    fn dispatch_request_requires_hyper_on_upgrade_extension() {
         let server = WsIoServer::builder().build();
         server.new_namespace_builder("/socket").register().unwrap();
 
         assert_eq!(
-            dispatch_status(valid_upgrade_request("/ws.io?namespace=/socket"), &server).await,
+            dispatch_status(valid_upgrade_request("/ws.io?namespace=/socket"), &server),
             StatusCode::INTERNAL_SERVER_ERROR
         );
     }

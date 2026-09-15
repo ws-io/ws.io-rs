@@ -111,16 +111,11 @@ impl WsIoClientSession {
 
     // Private methods
     #[inline]
-    #[allow(
-        clippy::unnecessary_wraps,
-        reason = "packet handlers share a fallible dispatch interface"
-    )]
-    fn handle_disconnect_packet(&self) -> Result<()> {
+    fn handle_disconnect_packet(&self) {
         #[cfg(feature = "tracing")]
         tracing::debug!("received server disconnect packet");
         let runtime = self.runtime.clone();
         spawn(async move { runtime.disconnect().await });
-        Ok(())
     }
 
     #[inline]
@@ -317,7 +312,10 @@ impl WsIoClientSession {
         };
 
         match &packet.r#type {
-            WsIoPacketType::Disconnect => self.handle_disconnect_packet(),
+            WsIoPacketType::Disconnect => {
+                self.handle_disconnect_packet();
+                Ok(())
+            },
             WsIoPacketType::Event => {
                 if self.is_ready() {
                     return self.handle_event_packet(packet).await;

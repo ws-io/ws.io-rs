@@ -8,54 +8,29 @@ use std::{
 };
 
 use anyhow::Result;
-use async_trait::async_trait;
 use bytes::Bytes;
 
 #[cfg(feature = "packet-transformer-zstd")]
 mod compression_frame;
 #[cfg(feature = "packet-transformer-zstd")]
 mod context_pool;
+pub mod custom;
 #[cfg(feature = "packet-transformer-zstd")]
 pub mod zstd;
 
+use self::custom::WsIoPacketCustomTransformer;
 #[cfg(feature = "packet-transformer-zstd")]
 use self::zstd::{
     WsIoPacketZstdTransformer,
     WsIoPacketZstdTransformerConfig,
 };
 
-// Traits
-
-/// Transforms complete encoded ws.io packets before they cross the WebSocket.
-///
-/// A transformer is applied after the packet codec on the sending side and
-/// before the packet codec on the receiving side. The crate does not prescribe
-/// the transformation; implementations may encrypt, compress, or otherwise
-/// process the bytes. The input is borrowed so implementations can choose the
-/// output allocation, while the no-op strategy can preserve the original
-/// encoded bytes without copying.
-///
-/// Implementations must use the `async-trait` crate's `async_trait` attribute
-/// and may await arbitrary asynchronous work in either method.
-///
-/// One-byte transformed packets are currently unsupported. The server reserves
-/// every one-byte binary WebSocket frame for the client heartbeat, so a custom
-/// encoder that returns one byte produces a packet that the server ignores.
-#[async_trait]
-pub trait WsIoCustomPacketTransformer: Send + Sync + 'static {
-    /// Reverses [`Self::encode`] after a WebSocket packet is received.
-    async fn decode(&self, bytes: &[u8]) -> Result<Bytes>;
-
-    /// Transforms an encoded packet before it is sent over the WebSocket.
-    async fn encode(&self, bytes: &[u8]) -> Result<Bytes>;
-}
-
 // Enums
-#[derive(Default)]
+#[derive(Clone, Default)]
 enum WsIoPacketTransformerKind {
     #[default]
     Noop,
-    Custom(Arc<dyn WsIoCustomPacketTransformer>),
+    Custom(Arc<dyn WsIoPacketCustomTransformer>),
 
     #[cfg(feature = "packet-transformer-zstd")]
     Zstd(WsIoPacketZstdTransformer),
@@ -71,24 +46,9 @@ enum WsIoPacketTransformerKind {
 /// delegates to the user-supplied transformer through an [`Arc`]. `zstd` is
 /// available with the `packet-transformer-zstd` feature and reuses built-in
 /// zstd contexts across calls and clones.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct WsIoPacketTransformer {
     kind: WsIoPacketTransformerKind,
-}
-
-impl Clone for WsIoPacketTransformer {
-    #[inline]
-    fn clone(&self) -> Self {
-        match &self.kind {
-            WsIoPacketTransformerKind::Noop => Self::default(),
-            WsIoPacketTransformerKind::Custom(transformer) => Self::custom(transformer.clone()),
-
-            #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd(transformer) => Self {
-                kind: WsIoPacketTransformerKind::Zstd(transformer.clone()),
-            },
-        }
-    }
 }
 
 impl FmtDebug for WsIoPacketTransformer {
@@ -106,7 +66,7 @@ impl FmtDebug for WsIoPacketTransformer {
 impl WsIoPacketTransformer {
     /// Creates a custom packet transformer.
     #[inline]
-    pub fn custom(transformer: Arc<dyn WsIoCustomPacketTransformer>) -> Self {
+    pub fn custom(transformer: Arc<dyn WsIoPacketCustomTransformer>) -> Self {
         Self {
             kind: WsIoPacketTransformerKind::Custom(transformer),
         }
@@ -150,14 +110,15 @@ impl WsIoPacketTransformer {
 mod tests {
     use std::sync::Arc;
 
-    use anyhow::anyhow;
+    use anyhow::bail;
+    use async_trait::async_trait;
 
     use super::*;
 
     struct ReverseTransformer;
 
     #[async_trait]
-    impl WsIoCustomPacketTransformer for ReverseTransformer {
+    impl WsIoPacketCustomTransformer for ReverseTransformer {
         async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
             self.encode(bytes).await
         }
@@ -172,13 +133,13 @@ mod tests {
     struct FailingTransformer;
 
     #[async_trait]
-    impl WsIoCustomPacketTransformer for FailingTransformer {
+    impl WsIoPacketCustomTransformer for FailingTransformer {
         async fn decode(&self, _bytes: &[u8]) -> Result<Bytes> {
-            Err(anyhow!("decode failed"))
+            bail!("decode failed")
         }
 
         async fn encode(&self, _bytes: &[u8]) -> Result<Bytes> {
-            Err(anyhow!("encode failed"))
+            bail!("encode failed")
         }
     }
 

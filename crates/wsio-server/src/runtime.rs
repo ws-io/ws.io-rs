@@ -94,12 +94,15 @@ impl WsIoServerRuntime {
             "broadcasting server event"
         );
 
-        join_all(
+        for result in join_all(
             self.clone_namespaces()
                 .iter()
                 .map(|namespace| namespace.emit(event, data)),
         )
-        .await;
+        .await
+        {
+            result?;
+        }
 
         Ok(())
     }

@@ -16,8 +16,8 @@ use bytes::{
     BytesMut,
 };
 use wsio_core::packet::transformers::{
-    WsIoCustomPacketTransformer,
     WsIoPacketTransformer,
+    custom::WsIoPacketCustomTransformer,
 };
 
 use super::{
@@ -37,7 +37,7 @@ struct CountingPrefixTransformer {
 }
 
 #[async_trait]
-impl WsIoCustomPacketTransformer for CountingPrefixTransformer {
+impl WsIoPacketCustomTransformer for CountingPrefixTransformer {
     async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
         self.decode_calls.fetch_add(1, Ordering::SeqCst);
         ensure!(bytes.first() == Some(&TRANSFORMER_PREFIX), "missing transformer prefix");

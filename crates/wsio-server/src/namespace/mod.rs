@@ -218,11 +218,13 @@ impl WsIoServerNamespace {
                         #[cfg(feature = "tracing")]
                         tracing::debug!(connection_id = connection.id(), "server read task finished; aborting write task");
                         write_ws_stream_task.abort();
+                        let _ = write_ws_stream_task.await;
                     },
                     _ = &mut write_ws_stream_task => {
                         #[cfg(feature = "tracing")]
                         tracing::debug!(connection_id = connection.id(), "server write task finished; aborting read task");
                         read_ws_stream_task.abort();
+                        let _ = read_ws_stream_task.await;
                     },
                 }
             },
