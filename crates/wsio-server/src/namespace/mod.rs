@@ -32,7 +32,6 @@ use tokio::{
     join,
     select,
     spawn,
-    sync::Mutex,
     time::timeout,
 };
 use tokio_tungstenite::{
@@ -55,7 +54,10 @@ use self::{
 use crate::{
     WsIoServer,
     connection::WsIoServerConnection,
-    core::packet::WsIoPacket,
+    core::{
+        packet::WsIoPacket,
+        utils::lifecycle::WsIoLifecycleCompletionSlot,
+    },
     runtime::{
         WsIoServerRuntime,
         WsIoServerRuntimeStatus,
@@ -78,9 +80,9 @@ pub struct WsIoServerNamespace {
     connection_ids: ArcSwap<RoaringTreemap>,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
     connection_task_tracker: TaskTracker,
-    lifecycle_lock: Mutex<()>,
     rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Arc<WsIoServerRuntime>,
+    shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
     status: AtomicEnumCell<NamespaceStatus>,
 }
 
@@ -91,9 +93,9 @@ impl WsIoServerNamespace {
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             connections: FxDashMap::default(),
             connection_task_tracker: TaskTracker::new(),
-            lifecycle_lock: Mutex::new(()),
             rooms: FxDashMap::default(),
             runtime,
+            shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             status: AtomicEnumCell::new(NamespaceStatus::Running),
         })
     }
@@ -246,6 +248,27 @@ impl WsIoServerNamespace {
         Ok(())
     }
 
+    async fn shutdown_inner(self: &Arc<Self>) {
+        match self.status.get() {
+            NamespaceStatus::Stopped => return,
+            NamespaceStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::info!(namespace = self.config.path, "shutting down namespace");
+                self.status.store(NamespaceStatus::Stopping);
+            },
+            NamespaceStatus::Stopping => unreachable!(),
+        }
+
+        self.close_all().await;
+        self.connection_task_tracker.close();
+        self.connection_task_tracker.wait().await;
+
+        self.status.store(NamespaceStatus::Stopped);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!(namespace = self.config.path, "namespace stopped");
+    }
+
     // Protected methods
     #[inline]
     pub(crate) fn add_connection_id_to_room(&self, room_name: &str, connection_id: u64) {
@@ -375,26 +398,10 @@ impl WsIoServerNamespace {
     }
 
     pub async fn shutdown(self: &Arc<Self>) {
-        let _lifecycle_lock = self.lifecycle_lock.lock().await;
-
-        match self.status.get() {
-            NamespaceStatus::Stopped => return,
-            NamespaceStatus::Running => {
-                #[cfg(feature = "tracing")]
-                tracing::info!(namespace = self.config.path, "shutting down namespace");
-                self.status.store(NamespaceStatus::Stopping);
-            },
-            NamespaceStatus::Stopping => unreachable!(),
-        }
-
-        self.close_all().await;
-        self.connection_task_tracker.close();
-        self.connection_task_tracker.wait().await;
-
-        self.status.store(NamespaceStatus::Stopped);
-
-        #[cfg(feature = "tracing")]
-        tracing::info!(namespace = self.config.path, "namespace stopped");
+        let namespace = self.clone();
+        self.shutdown_completion
+            .wait_or_spawn(move || async move { namespace.shutdown_inner().await })
+            .await;
     }
 
     #[inline]

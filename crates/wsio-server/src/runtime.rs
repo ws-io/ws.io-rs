@@ -20,10 +20,10 @@ use num_enum::{
 use parking_lot::RwLock;
 use roaring::RoaringTreemap;
 use serde::Serialize;
-use tokio::sync::Mutex;
 
 use crate::{
     config::WsIoServerConfig,
+    core::utils::lifecycle::WsIoLifecycleCompletionSlot,
     namespace::{
         WsIoServerNamespace,
         builder::WsIoServerNamespaceBuilder,
@@ -44,8 +44,8 @@ pub(crate) enum WsIoServerRuntimeStatus {
 pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_ids: ArcSwap<RoaringTreemap>,
-    lifecycle_lock: Mutex<()>,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
+    shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
 }
 
@@ -54,8 +54,8 @@ impl WsIoServerRuntime {
         Arc::new(Self {
             config,
             connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
-            lifecycle_lock: Mutex::new(()),
             namespaces: RwLock::new(FxHashMap::default()),
+            shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
         })
     }
@@ -64,6 +64,28 @@ impl WsIoServerRuntime {
     #[inline]
     fn clone_namespaces(&self) -> Vec<Arc<WsIoServerNamespace>> {
         self.namespaces.read().values().cloned().collect()
+    }
+
+    async fn shutdown_inner(&self) {
+        match self.status.get() {
+            WsIoServerRuntimeStatus::Stopped => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("server shutdown ignored because runtime is already stopped");
+                return;
+            },
+            WsIoServerRuntimeStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::info!(namespace_count = self.namespace_count(), "shutting down server runtime");
+                self.status.store(WsIoServerRuntimeStatus::Stopping);
+            },
+            WsIoServerRuntimeStatus::Stopping => unreachable!(),
+        }
+
+        join_all(self.clone_namespaces().iter().map(WsIoServerNamespace::shutdown)).await;
+        self.status.store(WsIoServerRuntimeStatus::Stopped);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!("server runtime stopped");
     }
 
     // Protected methods
@@ -184,28 +206,11 @@ impl WsIoServerRuntime {
         namespace.shutdown().await;
     }
 
-    pub(crate) async fn shutdown(&self) {
-        let _lifecycle_lock = self.lifecycle_lock.lock().await;
-
-        match self.status.get() {
-            WsIoServerRuntimeStatus::Stopped => {
-                #[cfg(feature = "tracing")]
-                tracing::trace!("server shutdown ignored because runtime is already stopped");
-                return;
-            },
-            WsIoServerRuntimeStatus::Running => {
-                #[cfg(feature = "tracing")]
-                tracing::info!(namespace_count = self.namespace_count(), "shutting down server runtime");
-                self.status.store(WsIoServerRuntimeStatus::Stopping);
-            },
-            WsIoServerRuntimeStatus::Stopping => unreachable!(),
-        }
-
-        join_all(self.clone_namespaces().iter().map(WsIoServerNamespace::shutdown)).await;
-        self.status.store(WsIoServerRuntimeStatus::Stopped);
-
-        #[cfg(feature = "tracing")]
-        tracing::info!("server runtime stopped");
+    pub(crate) async fn shutdown(self: &Arc<Self>) {
+        let runtime = self.clone();
+        self.shutdown_completion
+            .wait_or_spawn(move || async move { runtime.shutdown_inner().await })
+            .await;
     }
 }
 

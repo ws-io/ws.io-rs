@@ -59,6 +59,7 @@ use crate::{
         event::registry::WsIoEventRegistry,
         packet::WsIoPacket,
         traits::task::spawner::TaskSpawner,
+        utils::lifecycle::WsIoLifecycleCompletionSlot,
     },
     session::WsIoClientSession,
 };
@@ -85,8 +86,10 @@ pub(crate) struct WsIoClientRuntime {
     pub(crate) config: WsIoClientConfig,
     connect_url: Url,
     connection_loop_task: Mutex<Option<JoinHandle<()>>>,
+    connect_completion: Arc<WsIoLifecycleCompletionSlot>,
+    disconnect_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession>,
-    operate_lock: Mutex<()>,
+    lifecycle_lock: Mutex<()>,
     send_event_message_rx: Mutex<Receiver<Arc<Message>>>,
     send_event_message_task: Mutex<Option<JoinHandle<()>>>,
     send_event_message_tx: Sender<Arc<Message>>,
@@ -111,8 +114,10 @@ impl WsIoClientRuntime {
             config,
             connect_url,
             connection_loop_task: Mutex::new(None),
+            connect_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
+            disconnect_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             event_registry: WsIoEventRegistry::new(),
-            operate_lock: Mutex::new(()),
+            lifecycle_lock: Mutex::new(()),
             send_event_message_rx: Mutex::new(send_event_message_rx),
             send_event_message_task: Mutex::new(None),
             send_event_message_tx,
@@ -123,6 +128,122 @@ impl WsIoClientRuntime {
     }
 
     // Private methods
+    async fn connect_inner(self: &Arc<Self>) {
+        // Lock to prevent concurrent operation
+        let _lifecycle_lock = self.lifecycle_lock.lock().await;
+
+        match self.status.get() {
+            RuntimeStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("connect request ignored because client is already running");
+                return;
+            },
+            RuntimeStatus::Stopped => {
+                #[cfg(feature = "tracing")]
+                tracing::info!("starting client runtime");
+                self.status.store(RuntimeStatus::Running);
+            },
+            RuntimeStatus::Stopping => unreachable!(),
+        }
+
+        // Create new cancel token
+        self.cancel_token.store(Arc::new(CancellationToken::new()));
+
+        // Create connection loop task
+        let runtime = self.clone();
+        *self.connection_loop_task.lock().await = Some(spawn(async move {
+            while runtime.status.is(RuntimeStatus::Running) {
+                if let Err(_err) = runtime.run_connection().await {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(error = %_err, "client connection attempt failed");
+                }
+
+                if runtime.status.is(RuntimeStatus::Running) {
+                    let cancel_token = runtime.cancel_token();
+                    #[cfg(feature = "tracing")]
+                    tracing::trace!(
+                        reconnect_delay_ms =
+                            u64::try_from(runtime.config.reconnect_delay.as_millis()).unwrap_or(u64::MAX),
+                        "waiting before reconnect"
+                    );
+
+                    select! {
+                        biased;
+                        () = cancel_token.cancelled() => {},
+                        () = sleep(runtime.config.reconnect_delay) => {},
+                    }
+                }
+            }
+        }));
+
+        // Create send event message task
+        let runtime = self.clone();
+        *self.send_event_message_task.lock().await = Some(spawn(async move {
+            let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
+            while let Some(message) = send_event_message_rx.recv().await {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("dequeued client event message for delivery");
+                loop {
+                    if let Some(session) = runtime.session.load().as_ref()
+                        && session.emit_event_message(message.clone()).await.is_ok()
+                    {
+                        break;
+                    }
+
+                    let notified = runtime.wake_send_event_message_task_notify.notified();
+                    if let Some(session) = runtime.session.load().as_ref()
+                        && session.emit_event_message(message.clone()).await.is_ok()
+                    {
+                        break;
+                    }
+
+                    notified.await;
+                }
+            }
+        }));
+    }
+
+    async fn disconnect_inner(&self) {
+        // Lock to prevent concurrent operation
+        let _lifecycle_lock = self.lifecycle_lock.lock().await;
+
+        match self.status.get() {
+            RuntimeStatus::Stopped => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("disconnect request ignored because client is already stopped");
+                return;
+            },
+            RuntimeStatus::Running => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!("stopping client runtime");
+                self.status.store(RuntimeStatus::Stopping);
+            },
+            RuntimeStatus::Stopping => unreachable!(),
+        }
+
+        // Abort send-event-message task
+        if let Some(send_event_message_task) = self.send_event_message_task.lock().await.take() {
+            send_event_message_task.abort();
+        }
+
+        // Cancel token to abort all waiting operations (ongoing operations, connection loop task)
+        self.cancel_token.load().cancel();
+
+        // Drop all pending event messages in the channel
+        let mut send_event_message_rx = self.send_event_message_rx.lock().await;
+        while send_event_message_rx.try_recv().is_ok() {}
+
+        // Await connection loop task termination
+        if let Some(connection_loop_task) = self.connection_loop_task.lock().await.take() {
+            let _ = connection_loop_task.await;
+        }
+
+        self.status.store(RuntimeStatus::Stopped);
+
+        #[cfg(feature = "tracing")]
+        tracing::info!("client runtime stopped");
+    }
+
     async fn run_connection(self: &Arc<Self>) -> Result<()> {
         // Connect to server
         #[cfg(feature = "tracing")]
@@ -272,119 +393,17 @@ impl WsIoClientRuntime {
 
     // Protected methods
     pub(crate) async fn connect(self: &Arc<Self>) {
-        // Lock to prevent concurrent operation
-        let _lock = self.operate_lock.lock().await;
-
-        match self.status.get() {
-            RuntimeStatus::Running => {
-                #[cfg(feature = "tracing")]
-                tracing::trace!("connect request ignored because client is already running");
-                return;
-            },
-            RuntimeStatus::Stopped => {
-                #[cfg(feature = "tracing")]
-                tracing::info!("starting client runtime");
-                self.status.store(RuntimeStatus::Running);
-            },
-            RuntimeStatus::Stopping => unreachable!(),
-        }
-
-        // Create new cancel token
-        self.cancel_token.store(Arc::new(CancellationToken::new()));
-
-        // Create connection loop task
         let runtime = self.clone();
-        *self.connection_loop_task.lock().await = Some(spawn(async move {
-            while runtime.status.is(RuntimeStatus::Running) {
-                if let Err(_err) = runtime.run_connection().await {
-                    #[cfg(feature = "tracing")]
-                    tracing::debug!(error = %_err, "client connection attempt failed");
-                }
-
-                if runtime.status.is(RuntimeStatus::Running) {
-                    let cancel_token = runtime.cancel_token();
-                    #[cfg(feature = "tracing")]
-                    tracing::trace!(
-                        reconnect_delay_ms =
-                            u64::try_from(runtime.config.reconnect_delay.as_millis()).unwrap_or(u64::MAX),
-                        "waiting before reconnect"
-                    );
-
-                    select! {
-                        biased;
-                        () = cancel_token.cancelled() => {},
-                        () = sleep(runtime.config.reconnect_delay) => {},
-                    }
-                }
-            }
-        }));
-
-        // Create send event message task
-        let runtime = self.clone();
-        *self.send_event_message_task.lock().await = Some(spawn(async move {
-            let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
-            while let Some(message) = send_event_message_rx.recv().await {
-                #[cfg(feature = "tracing")]
-                tracing::trace!("dequeued client event message for delivery");
-                loop {
-                    if let Some(session) = runtime.session.load().as_ref()
-                        && session.emit_event_message(message.clone()).await.is_ok()
-                    {
-                        break;
-                    }
-
-                    let notified = runtime.wake_send_event_message_task_notify.notified();
-                    if let Some(session) = runtime.session.load().as_ref()
-                        && session.emit_event_message(message.clone()).await.is_ok()
-                    {
-                        break;
-                    }
-
-                    notified.await;
-                }
-            }
-        }));
+        self.connect_completion
+            .wait_or_spawn(move || async move { runtime.connect_inner().await })
+            .await;
     }
 
-    pub(crate) async fn disconnect(&self) {
-        // Lock to prevent concurrent operation
-        let _lock = self.operate_lock.lock().await;
-
-        match self.status.get() {
-            RuntimeStatus::Stopped => {
-                #[cfg(feature = "tracing")]
-                tracing::trace!("disconnect request ignored because client is already stopped");
-                return;
-            },
-            RuntimeStatus::Running => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!("stopping client runtime");
-                self.status.store(RuntimeStatus::Stopping);
-            },
-            RuntimeStatus::Stopping => unreachable!(),
-        }
-
-        // Abort send-event-message task
-        if let Some(send_event_message_task) = self.send_event_message_task.lock().await.take() {
-            send_event_message_task.abort();
-        }
-
-        // Cancel token to abort all waiting operations (ongoing operations, connection loop task)
-        self.cancel_token.load().cancel();
-
-        // Drop all pending event messages in the channel
-        let mut send_event_message_rx = self.send_event_message_rx.lock().await;
-        while send_event_message_rx.try_recv().is_ok() {}
-
-        // Await connection loop task termination
-        if let Some(connection_loop_task) = self.connection_loop_task.lock().await.take() {
-            let _ = connection_loop_task.await;
-        }
-
-        self.status.store(RuntimeStatus::Stopped);
-
-        #[cfg(feature = "tracing")]
-        tracing::info!("client runtime stopped");
+    pub(crate) async fn disconnect(self: &Arc<Self>) {
+        let runtime = self.clone();
+        self.disconnect_completion
+            .wait_or_spawn(move || async move { runtime.disconnect_inner().await })
+            .await;
     }
 
     pub(crate) async fn emit<D: Serialize>(&self, event: &str, data: Option<&D>) -> Result<()> {
