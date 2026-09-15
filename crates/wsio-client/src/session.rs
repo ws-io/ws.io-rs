@@ -229,7 +229,8 @@ impl WsIoClientSession {
     }
 
     async fn send_packet(&self, packet: &WsIoPacket) -> Result<()> {
-        self.send_message(self.runtime.encode_packet_to_message(packet)?).await
+        self.send_message(self.runtime.encode_packet_to_message(packet).await?)
+            .await
     }
 
     // Protected methods
@@ -304,7 +305,7 @@ impl WsIoClientSession {
     pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: Bytes) -> Result<()> {
         // TODO: lazy load
         let packet = {
-            let encoded_packet = self.runtime.config.packet_transformer.decode(encoded_packet)?;
+            let encoded_packet = self.runtime.config.packet_transformer.decode(encoded_packet).await?;
             match self.runtime.config.packet_codec.decode(&encoded_packet) {
                 Ok(packet) => packet,
                 Err(err) => {

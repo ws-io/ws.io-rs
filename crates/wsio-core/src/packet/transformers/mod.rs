@@ -8,17 +8,18 @@ use std::{
 };
 
 use anyhow::Result;
+use async_trait::async_trait;
 use bytes::Bytes;
 
 #[cfg(feature = "packet-transformer-zstd")]
 mod compression_frame;
-
+#[cfg(feature = "packet-transformer-zstd")]
+mod context_pool;
 #[cfg(feature = "packet-transformer-zstd")]
 pub mod zstd;
 
 #[cfg(feature = "packet-transformer-zstd")]
 use self::zstd::{
-    WsIoPacketZstdContextPool,
     WsIoPacketZstdTransformer,
     WsIoPacketZstdTransformerConfig,
 };
@@ -34,15 +35,19 @@ use self::zstd::{
 /// output allocation, while the no-op strategy can preserve the original
 /// encoded bytes without copying.
 ///
+/// Implementations must use the `async-trait` crate's `async_trait` attribute
+/// and may await arbitrary asynchronous work in either method.
+///
 /// One-byte transformed packets are currently unsupported. The server reserves
 /// every one-byte binary WebSocket frame for the client heartbeat, so a custom
 /// encoder that returns one byte produces a packet that the server ignores.
+#[async_trait]
 pub trait WsIoCustomPacketTransformer: Send + Sync + 'static {
     /// Reverses [`Self::encode`] after a WebSocket packet is received.
-    fn decode(&self, bytes: &[u8]) -> Result<Bytes>;
+    async fn decode(&self, bytes: &[u8]) -> Result<Bytes>;
 
     /// Transforms an encoded packet before it is sent over the WebSocket.
-    fn encode(&self, bytes: &[u8]) -> Result<Bytes>;
+    async fn encode(&self, bytes: &[u8]) -> Result<Bytes>;
 }
 
 // Enums
@@ -53,10 +58,7 @@ enum WsIoPacketTransformerKind {
     Custom(Arc<dyn WsIoCustomPacketTransformer>),
 
     #[cfg(feature = "packet-transformer-zstd")]
-    Zstd {
-        config: WsIoPacketZstdTransformerConfig,
-        context_pool: WsIoPacketZstdContextPool,
-    },
+    Zstd(WsIoPacketZstdTransformer),
 }
 
 // Structs
@@ -68,7 +70,7 @@ enum WsIoPacketTransformerKind {
 /// no-op strategy, which keeps the input allocation without copying. `custom`
 /// delegates to the user-supplied transformer through an [`Arc`]. `zstd` is
 /// available with the `packet-transformer-zstd` feature and reuses built-in
-/// zstd contexts across calls.
+/// zstd contexts across calls and clones.
 #[derive(Default)]
 pub struct WsIoPacketTransformer {
     kind: WsIoPacketTransformerKind,
@@ -82,7 +84,9 @@ impl Clone for WsIoPacketTransformer {
             WsIoPacketTransformerKind::Custom(transformer) => Self::custom(transformer.clone()),
 
             #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd { config, .. } => Self::zstd(*config),
+            WsIoPacketTransformerKind::Zstd(transformer) => Self {
+                kind: WsIoPacketTransformerKind::Zstd(transformer.clone()),
+            },
         }
     }
 }
@@ -94,7 +98,7 @@ impl FmtDebug for WsIoPacketTransformer {
             WsIoPacketTransformerKind::Custom(_) => f.write_str("WsIoPacketTransformer::Custom(<transformer>)"),
 
             #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd { .. } => f.write_str("WsIoPacketTransformer::Zstd(<config>)"),
+            WsIoPacketTransformerKind::Zstd(_) => f.write_str("WsIoPacketTransformer::Zstd(<config>)"),
         }
     }
 }
@@ -110,29 +114,25 @@ impl WsIoPacketTransformer {
 
     /// Decodes one complete transformed packet.
     #[inline]
-    pub fn decode(&self, bytes: Bytes) -> Result<Bytes> {
+    pub async fn decode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
             WsIoPacketTransformerKind::Noop => Ok(bytes),
-            WsIoPacketTransformerKind::Custom(transformer) => transformer.decode(&bytes),
+            WsIoPacketTransformerKind::Custom(transformer) => transformer.decode(&bytes).await,
 
             #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd { config, context_pool } => {
-                WsIoPacketZstdTransformer::decode(config, context_pool, bytes)
-            },
+            WsIoPacketTransformerKind::Zstd(transformer) => transformer.decode(bytes).await,
         }
     }
 
     /// Encodes one complete codec packet.
     #[inline]
-    pub fn encode(&self, bytes: Bytes) -> Result<Bytes> {
+    pub async fn encode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
             WsIoPacketTransformerKind::Noop => Ok(bytes),
-            WsIoPacketTransformerKind::Custom(transformer) => transformer.encode(&bytes),
+            WsIoPacketTransformerKind::Custom(transformer) => transformer.encode(&bytes).await,
 
             #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd { config, context_pool } => {
-                WsIoPacketZstdTransformer::encode(config, context_pool, &bytes)
-            },
+            WsIoPacketTransformerKind::Zstd(transformer) => transformer.encode(bytes).await,
         }
     }
 
@@ -141,10 +141,7 @@ impl WsIoPacketTransformer {
     #[inline]
     pub fn zstd(config: WsIoPacketZstdTransformerConfig) -> Self {
         Self {
-            kind: WsIoPacketTransformerKind::Zstd {
-                config,
-                context_pool: WsIoPacketZstdContextPool::new(),
-            },
+            kind: WsIoPacketTransformerKind::Zstd(WsIoPacketZstdTransformer::new(config)),
         }
     }
 }
@@ -159,12 +156,13 @@ mod tests {
 
     struct ReverseTransformer;
 
+    #[async_trait]
     impl WsIoCustomPacketTransformer for ReverseTransformer {
-        fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
-            self.encode(bytes)
+        async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
+            self.encode(bytes).await
         }
 
-        fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
+        async fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
             let mut output = bytes.to_vec();
             output.reverse();
             Ok(output.into())
@@ -173,53 +171,57 @@ mod tests {
 
     struct FailingTransformer;
 
+    #[async_trait]
     impl WsIoCustomPacketTransformer for FailingTransformer {
-        fn decode(&self, _bytes: &[u8]) -> Result<Bytes> {
+        async fn decode(&self, _bytes: &[u8]) -> Result<Bytes> {
             Err(anyhow!("decode failed"))
         }
 
-        fn encode(&self, _bytes: &[u8]) -> Result<Bytes> {
+        async fn encode(&self, _bytes: &[u8]) -> Result<Bytes> {
             Err(anyhow!("encode failed"))
         }
     }
 
-    #[test]
-    fn noop_preserves_the_input_allocation() {
+    #[tokio::test]
+    async fn noop_preserves_the_input_allocation() {
         let bytes = Bytes::from_static(b"encoded packet");
         let input_pointer = bytes.as_ptr();
         let transformer = WsIoPacketTransformer::default();
 
-        let encoded = transformer.encode(bytes).unwrap();
+        let encoded = transformer.encode(bytes).await.unwrap();
         assert_eq!(encoded.as_ptr(), input_pointer);
 
-        let decoded = transformer.decode(encoded).unwrap();
+        let decoded = transformer.decode(encoded).await.unwrap();
         assert_eq!(decoded.as_ptr(), input_pointer);
         assert_eq!(&decoded[..], b"encoded packet");
     }
 
-    #[test]
-    fn custom_transformer_round_trips_bytes() {
+    #[tokio::test]
+    async fn custom_transformer_round_trips_bytes() {
         let transformer = WsIoPacketTransformer::custom(Arc::new(ReverseTransformer));
         let input = Bytes::from_static(b"encoded packet");
 
-        let encoded = transformer.encode(input).unwrap();
+        let encoded = transformer.encode(input).await.unwrap();
         assert_eq!(&encoded[..], b"tekcap dedocne");
 
-        let decoded = transformer.decode(encoded).unwrap();
+        let decoded = transformer.decode(encoded).await.unwrap();
         assert_eq!(&decoded[..], b"encoded packet");
     }
 
-    #[test]
-    fn custom_transformer_errors_are_propagated() {
+    #[tokio::test]
+    async fn custom_transformer_errors_are_propagated() {
         let transformer = WsIoPacketTransformer::custom(Arc::new(FailingTransformer));
         let input = Bytes::from_static(b"encoded packet");
 
         assert_eq!(
-            transformer.encode(input.clone()).unwrap_err().to_string(),
+            transformer.encode(input.clone()).await.unwrap_err().to_string(),
             "encode failed"
         );
 
-        assert_eq!(transformer.decode(input).unwrap_err().to_string(), "decode failed");
+        assert_eq!(
+            transformer.decode(input).await.unwrap_err().to_string(),
+            "decode failed"
+        );
     }
 
     #[test]

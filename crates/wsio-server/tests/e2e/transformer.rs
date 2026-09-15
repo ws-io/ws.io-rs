@@ -10,6 +10,7 @@ use anyhow::{
     Result,
     ensure,
 };
+use async_trait::async_trait;
 use bytes::{
     Bytes,
     BytesMut,
@@ -35,14 +36,15 @@ struct CountingPrefixTransformer {
     decode_calls: AtomicUsize,
 }
 
+#[async_trait]
 impl WsIoCustomPacketTransformer for CountingPrefixTransformer {
-    fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
+    async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
         self.decode_calls.fetch_add(1, Ordering::SeqCst);
         ensure!(bytes.first() == Some(&TRANSFORMER_PREFIX), "missing transformer prefix");
         Ok(Bytes::copy_from_slice(&bytes[1..]))
     }
 
-    fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
+    async fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
         self.encode_calls.fetch_add(1, Ordering::SeqCst);
 
         let mut output = BytesMut::with_capacity(bytes.len() + 1);

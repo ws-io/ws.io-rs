@@ -77,6 +77,7 @@ tracing = ["dep:tracing"]
 
 [dependencies]
 anyhow = "1.0.104"
+async-trait = "0.1.92"
 bytes = { version = "1.12.1", features = ["serde"] }
 ciborium = { version = "0.2.2", optional = true }
 kikiutils = { version = "0.11.3", features = ["fx-collections"] }

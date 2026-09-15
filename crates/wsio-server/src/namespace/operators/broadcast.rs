@@ -130,7 +130,11 @@ impl WsIoServerNamespaceBroadcastOperator {
             "broadcasting disconnect to namespace targets"
         );
 
-        let message = self.namespace.encode_packet_to_message(&WsIoPacket::new_disconnect())?;
+        let message = self
+            .namespace
+            .encode_packet_to_message(&WsIoPacket::new_disconnect())
+            .await?;
+
         self.for_each_target_connections(move |connection| {
             let message = message.clone();
             async move { connection.send_message(message).await }
@@ -154,11 +158,14 @@ impl WsIoServerNamespaceBroadcastOperator {
             "broadcasting event to namespace targets"
         );
 
-        let message = self.namespace.encode_packet_to_message(&WsIoPacket::new_event(
-            event,
-            data.map(|data| self.namespace.config.packet_codec.encode_data(data))
-                .transpose()?,
-        ))?;
+        let message = self
+            .namespace
+            .encode_packet_to_message(&WsIoPacket::new_event(
+                event,
+                data.map(|data| self.namespace.config.packet_codec.encode_data(data))
+                    .transpose()?,
+            ))
+            .await?;
 
         self.for_each_target_connections(move |connection| {
             let message = message.clone();

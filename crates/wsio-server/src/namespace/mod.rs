@@ -128,7 +128,7 @@ impl WsIoServerNamespace {
             );
 
             ws_stream
-                .send((*self.encode_packet_to_message(&WsIoPacket::new_disconnect())?).clone())
+                .send((*self.encode_packet_to_message(&WsIoPacket::new_disconnect()).await?).clone())
                 .await?;
 
             let _ = ws_stream.close(None).await;
@@ -254,9 +254,9 @@ impl WsIoServerNamespace {
     }
 
     #[inline]
-    pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
+    pub(crate) async fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
-        let bytes = self.config.packet_transformer.encode(bytes)?;
+        let bytes = self.config.packet_transformer.encode(bytes).await?;
         Ok(Arc::new(Message::Binary(bytes)))
     }
 
@@ -454,11 +454,11 @@ mod tests {
         assert!(!namespace.rooms.contains_key("room2"));
     }
 
-    #[test]
-    fn test_namespace_encode_packet_to_message() {
+    #[tokio::test]
+    async fn test_namespace_encode_packet_to_message() {
         let namespace = create_test_namespace();
         let packet = WsIoPacket::new_disconnect();
-        let message = namespace.encode_packet_to_message(&packet).unwrap();
+        let message = namespace.encode_packet_to_message(&packet).await.unwrap();
 
         assert!(matches!(&*message, Message::Binary(_)));
     }

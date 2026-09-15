@@ -270,6 +270,7 @@ impl WsIoServerNamespaceBuilder {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use async_trait::async_trait;
     use bytes::Bytes;
 
     use super::*;
@@ -280,12 +281,13 @@ mod tests {
 
     struct TestPacketTransformer;
 
+    #[async_trait]
     impl WsIoCustomPacketTransformer for TestPacketTransformer {
-        fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
+        async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
             Ok(Bytes::copy_from_slice(bytes))
         }
 
-        fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
+        async fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
             Ok(Bytes::copy_from_slice(bytes))
         }
     }

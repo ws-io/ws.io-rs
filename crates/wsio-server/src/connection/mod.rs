@@ -351,7 +351,7 @@ impl WsIoServerConnection {
     }
 
     async fn send_packet(&self, packet: &WsIoPacket) -> Result<()> {
-        self.send_message(self.namespace.encode_packet_to_message(packet)?)
+        self.send_message(self.namespace.encode_packet_to_message(packet).await?)
             .await
     }
 
@@ -437,7 +437,7 @@ impl WsIoServerConnection {
     pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: Bytes) -> Result<()> {
         // TODO: lazy load
         let packet = {
-            let encoded_packet = self.namespace.config.packet_transformer.decode(encoded_packet)?;
+            let encoded_packet = self.namespace.config.packet_transformer.decode(encoded_packet).await?;
             match self.namespace.config.packet_codec.decode(&encoded_packet) {
                 Ok(packet) => packet,
                 Err(err) => {
@@ -587,11 +587,13 @@ impl WsIoServerConnection {
 
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         self.emit_event_message(
-            self.namespace.encode_packet_to_message(&WsIoPacket::new_event(
-                event.as_ref(),
-                data.map(|data| self.namespace.config.packet_codec.encode_data(data))
-                    .transpose()?,
-            ))?,
+            self.namespace
+                .encode_packet_to_message(&WsIoPacket::new_event(
+                    event.as_ref(),
+                    data.map(|data| self.namespace.config.packet_codec.encode_data(data))
+                        .transpose()?,
+                ))
+                .await?,
         )
         .await
     }

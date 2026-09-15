@@ -228,6 +228,7 @@ wsio-core.workspace = true
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
+async-trait = "0.1.92"
 axum = { version = "0.8.9", features = ["ws"] }
 criterion = { version = "0.8.2", features = ["async_tokio"] }
 wsio-client = { workspace = true, features = ["full"] }
