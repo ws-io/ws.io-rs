@@ -20,6 +20,7 @@ use anyhow::{
     anyhow,
     bail,
 };
+use bytes::Bytes;
 use futures_util::FutureExt;
 use http::{
     HeaderMap,
@@ -433,15 +434,18 @@ impl WsIoServerConnection {
         self.send_message(message).await
     }
 
-    pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
+    pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: Bytes) -> Result<()> {
         // TODO: lazy load
-        let packet = match self.namespace.config.packet_codec.decode(encoded_packet) {
-            Ok(packet) => packet,
-            Err(err) => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(connection_id = self.id, error = %err, "failed to decode client packet");
-                return Err(err);
-            },
+        let packet = {
+            let encoded_packet = self.namespace.config.packet_transformer.decode_bytes(encoded_packet)?;
+            match self.namespace.config.packet_codec.decode(&encoded_packet) {
+                Ok(packet) => packet,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(connection_id = self.id, error = %err, "failed to decode client packet");
+                    return Err(err);
+                },
+            }
         };
 
         match &packet.r#type {
@@ -742,7 +746,7 @@ mod tests {
         let connection = create_test_connection();
         let garbage_data = b"obviously not valid messagepack";
         // Should seamlessly return a Result::Err, not panic
-        let result = connection.handle_incoming_packet(garbage_data).await;
+        let result = connection.handle_incoming_packet(garbage_data.as_slice().into()).await;
         assert!(result.is_err(), "Decoding garbage payload should trigger an error");
     }
 
@@ -756,7 +760,7 @@ mod tests {
         let encoded = packet_codec.encode(&WsIoPacket::new_init(None)).unwrap();
 
         // This simulates a manual client Init push before server starts the handshake buffer
-        let result = connection.handle_incoming_packet(&encoded).await;
+        let result = connection.handle_incoming_packet(encoded).await;
         assert!(
             result.is_err(),
             "Should error because state is Created, not AwaitingInit"
@@ -779,7 +783,7 @@ mod tests {
                 .encode(&WsIoPacket::new(WsIoPacketType::Event, key, None))
                 .unwrap();
 
-            let result = connection.handle_incoming_packet(&encoded).await;
+            let result = connection.handle_incoming_packet(encoded).await;
             assert!(result.is_err(), "Should reject an invalid event key");
             assert_eq!(result.unwrap_err().to_string(), "Event packet missing key");
         }
@@ -812,7 +816,7 @@ mod tests {
                 .encode(&WsIoPacket::new_event("ordered", Some(packet_data)))
                 .unwrap();
 
-            connection.handle_incoming_packet(&encoded_packet).await.unwrap();
+            connection.handle_incoming_packet(encoded_packet).await.unwrap();
         }
 
         let mut handled = Vec::with_capacity(4);

@@ -5,7 +5,10 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use crate::{
     WsIoServer,
     config::WsIoServerConfig,
-    core::packet::codecs::WsIoPacketCodec,
+    core::packet::{
+        codecs::WsIoPacketCodec,
+        transformers::WsIoPacketTransformer,
+    },
     runtime::WsIoServerRuntime,
 };
 
@@ -35,6 +38,7 @@ impl WsIoServerBuilder {
                 on_close_handler_timeout: Duration::from_secs(2),
                 on_connect_handler_timeout: Duration::from_secs(3),
                 packet_codec: WsIoPacketCodec::Msgpack,
+                packet_transformer: WsIoPacketTransformer::Noop,
                 request_path: "/ws.io".to_owned(),
                 websocket_config: WebSocketConfig::default()
                     .max_frame_size(Some(8 * 1024 * 1024))
@@ -133,6 +137,14 @@ impl WsIoServerBuilder {
     /// Namespace builders inherit this value and may override it.
     pub fn packet_codec(mut self, packet_codec: WsIoPacketCodec) -> Self {
         self.config.packet_codec = packet_codec;
+        self
+    }
+
+    /// Sets the default packet transformer inherited by namespaces.
+    ///
+    /// A namespace builder may override this value for that namespace only.
+    pub fn packet_transformer(mut self, packet_transformer: WsIoPacketTransformer) -> Self {
+        self.config.packet_transformer = packet_transformer;
         self
     }
 

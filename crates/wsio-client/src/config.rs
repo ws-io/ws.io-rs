@@ -18,7 +18,10 @@ use tokio_tungstenite::tungstenite::{
 
 use crate::{
     core::{
-        packet::codecs::WsIoPacketCodec,
+        packet::{
+            codecs::WsIoPacketCodec,
+            transformers::WsIoPacketTransformer,
+        },
         types::{
             ArcAsyncUnaryResultHandler,
             BoxAsyncUnaryResultHandler,
@@ -94,6 +97,9 @@ pub(crate) struct WsIoClientConfig {
     /// binary WebSocket messages.
     pub(crate) packet_codec: WsIoPacketCodec,
 
+    /// Transformer applied to complete encoded WebSocket packets.
+    pub(crate) packet_transformer: WsIoPacketTransformer,
+
     /// Interval between client heartbeat frames sent after the WebSocket session
     /// is created.
     ///
@@ -144,6 +150,7 @@ impl FmtDebug for WsIoClientConfig {
                 &self.on_session_ready_handler.as_ref().map(|_| "<handler>"),
             )
             .field("packet_codec", &self.packet_codec)
+            .field("packet_transformer", &"<transformer>")
             .field("ping_interval", &self.ping_interval)
             .field("ready_packet_timeout", &self.ready_packet_timeout)
             .field("reconnect_delay", &self.reconnect_delay)

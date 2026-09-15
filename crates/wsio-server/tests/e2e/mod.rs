@@ -23,6 +23,7 @@ use tokio::{
     },
 };
 use wsio_client::WsIoClient;
+use wsio_core::packet::transformers::WsIoPacketTransformer;
 use wsio_server::{
     WsIoServer,
     namespace::WsIoServerNamespace,
@@ -31,6 +32,7 @@ use wsio_server::{
 mod broadcast;
 mod ping_pong;
 mod reconnect;
+mod transformer;
 
 const CLIENT_STATE_TIMEOUT: Duration = Duration::from_secs(2);
 const EVENT_QUIET_PERIOD: Duration = Duration::from_millis(100);
@@ -38,11 +40,17 @@ const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const TEST_NAMESPACE: &str = "/socket";
 
 async fn setup_server() -> (JoinHandle<()>, Arc<WsIoServer>, String) {
+    setup_server_with_transformer(WsIoPacketTransformer::Noop).await
+}
+
+async fn setup_server_with_transformer(
+    packet_transformer: WsIoPacketTransformer,
+) -> (JoinHandle<()>, Arc<WsIoServer>, String) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let local_addr = listener.local_addr().unwrap();
     let ws_url = format!("ws://{local_addr}{TEST_NAMESPACE}");
 
-    let server = Arc::new(WsIoServer::builder().build());
+    let server = Arc::new(WsIoServer::builder().packet_transformer(packet_transformer).build());
 
     // Create Axum Router and attach the WsIoServer Layer
     let app = Router::new().layer(server.layer());
@@ -60,7 +68,18 @@ fn register_test_namespace(server: &WsIoServer) -> Arc<WsIoServerNamespace> {
 }
 
 async fn create_connected_client(ws_url: &str) -> WsIoClient {
-    let client = WsIoClient::builder(ws_url).unwrap().build();
+    create_connected_client_with_transformer(ws_url, WsIoPacketTransformer::Noop).await
+}
+
+async fn create_connected_client_with_transformer(
+    ws_url: &str,
+    packet_transformer: WsIoPacketTransformer,
+) -> WsIoClient {
+    let client = WsIoClient::builder(ws_url)
+        .unwrap()
+        .packet_transformer(packet_transformer)
+        .build();
+
     client.connect().await;
     wait_for_client_ready(&client).await;
     client

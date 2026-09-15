@@ -16,7 +16,10 @@ use super::{
 };
 use crate::{
     connection::WsIoServerConnection,
-    core::packet::codecs::WsIoPacketCodec,
+    core::packet::{
+        codecs::WsIoPacketCodec,
+        transformers::WsIoPacketTransformer,
+    },
     runtime::WsIoServerRuntime,
 };
 
@@ -50,6 +53,7 @@ impl WsIoServerNamespaceBuilder {
                 on_connect_handler_timeout: runtime.config.on_connect_handler_timeout,
                 on_ready_handler: None,
                 packet_codec: runtime.config.packet_codec,
+                packet_transformer: runtime.config.packet_transformer.clone(),
                 path: path.to_owned(),
                 websocket_config: runtime.config.websocket_config,
             },
@@ -163,6 +167,14 @@ impl WsIoServerNamespaceBuilder {
         self
     }
 
+    /// Sets the packet transformer used by this namespace.
+    ///
+    /// This overrides the transformer inherited from the server builder.
+    pub fn packet_transformer(mut self, packet_transformer: WsIoPacketTransformer) -> Self {
+        self.config.packet_transformer = packet_transformer;
+        self
+    }
+
     /// Registers the namespace with the owning server runtime.
     ///
     /// Returns an error if another namespace with the same path is already
@@ -257,8 +269,26 @@ impl WsIoServerNamespaceBuilder {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
+    use bytes::Bytes;
+
     use super::*;
-    use crate::WsIoServer;
+    use crate::{
+        WsIoServer,
+        core::packet::transformers::WsIoCustomPacketTransformer,
+    };
+
+    struct TestPacketTransformer;
+
+    impl WsIoCustomPacketTransformer for TestPacketTransformer {
+        fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
+            Ok(Bytes::copy_from_slice(bytes))
+        }
+
+        fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
+            Ok(Bytes::copy_from_slice(bytes))
+        }
+    }
 
     #[test]
     fn test_namespace_builder_configuration() {
@@ -290,6 +320,24 @@ mod tests {
         assert_eq!(config.on_connect_handler_timeout, Duration::from_secs(6));
         assert!(matches!(config.packet_codec, WsIoPacketCodec::Msgpack));
         assert_eq!(config.websocket_config.max_frame_size, Some(888));
+    }
+
+    #[test]
+    fn test_namespace_builder_inherits_and_overrides_packet_transformer() {
+        let global_transformer = WsIoPacketTransformer::Custom(Arc::new(TestPacketTransformer));
+        let server = Arc::new(WsIoServer::builder().packet_transformer(global_transformer).build());
+        let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone());
+
+        assert!(matches!(
+            &builder.config.packet_transformer,
+            WsIoPacketTransformer::Custom(_)
+        ));
+
+        let builder = builder.packet_transformer(WsIoPacketTransformer::Noop);
+        assert!(matches!(
+            &builder.config.packet_transformer,
+            WsIoPacketTransformer::Noop
+        ));
     }
 
     #[test]

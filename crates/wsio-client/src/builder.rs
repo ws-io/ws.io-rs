@@ -20,7 +20,10 @@ use url::Url;
 use crate::{
     WsIoClient,
     config::WsIoClientConfig,
-    core::packet::codecs::WsIoPacketCodec,
+    core::packet::{
+        codecs::WsIoPacketCodec,
+        transformers::WsIoPacketTransformer,
+    },
     runtime::WsIoClientRuntime,
     session::WsIoClientSession,
 };
@@ -68,6 +71,7 @@ impl WsIoClientBuilder {
                 on_session_close_handler_timeout: Duration::from_secs(2),
                 on_session_ready_handler: None,
                 packet_codec: WsIoPacketCodec::Msgpack,
+                packet_transformer: WsIoPacketTransformer::Noop,
                 ping_interval: Duration::from_secs(25),
                 ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),
@@ -173,6 +177,12 @@ impl WsIoClientBuilder {
     /// This must match the server namespace codec.
     pub fn packet_codec(mut self, packet_codec: WsIoPacketCodec) -> Self {
         self.config.packet_codec = packet_codec;
+        self
+    }
+
+    /// Sets the packet transformer used by this client for all protocol packets.
+    pub fn packet_transformer(mut self, packet_transformer: WsIoPacketTransformer) -> Self {
+        self.config.packet_transformer = packet_transformer;
         self
     }
 

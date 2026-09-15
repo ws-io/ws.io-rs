@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
-use crate::core::packet::codecs::WsIoPacketCodec;
+use crate::core::packet::{
+    codecs::WsIoPacketCodec,
+    transformers::WsIoPacketTransformer,
+};
 
 // Structs
 #[derive(Debug)]
@@ -83,6 +86,9 @@ pub(crate) struct WsIoServerConfig {
     ///
     /// Can be overridden by namespace-level configuration.
     pub(crate) packet_codec: WsIoPacketCodec,
+
+    /// Transformer applied to complete encoded WebSocket packets.
+    pub(crate) packet_transformer: WsIoPacketTransformer,
 
     /// HTTP request path handled by the server adapter.
     ///

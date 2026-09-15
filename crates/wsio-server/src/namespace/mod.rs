@@ -160,7 +160,7 @@ impl WsIoServerNamespace {
                             continue;
                         }
 
-                        connection_clone.handle_incoming_packet(&bytes).await
+                        connection_clone.handle_incoming_packet(bytes).await
                     },
                     Ok(Message::Close(_)) => {
                         #[cfg(feature = "tracing")]
@@ -256,6 +256,7 @@ impl WsIoServerNamespace {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
+        let bytes = self.config.packet_transformer.encode_bytes(bytes)?;
         Ok(Arc::new(Message::Binary(bytes)))
     }
 

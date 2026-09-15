@@ -33,6 +33,10 @@ pub struct WsIoClient(Arc<WsIoClientRuntime>);
 
 impl WsIoClient {
     // Public methods
+    /// Creates a client builder using the no-op packet transformer by default.
+    ///
+    /// Use [`WsIoClientBuilder::packet_transformer`] to configure a custom
+    /// packet transformer.
     pub fn builder(url: impl AsRef<str>) -> Result<WsIoClientBuilder> {
         let url = Url::parse(url.as_ref()).map_err(|err| anyhow!("Invalid URL: {err}"))?;
 

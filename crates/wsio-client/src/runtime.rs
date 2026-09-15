@@ -191,7 +191,7 @@ impl WsIoClientRuntime {
         let mut read_ws_stream_task = spawn(async move {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
-                    Ok(Message::Binary(bytes)) => session_clone.handle_incoming_packet(&bytes).await,
+                    Ok(Message::Binary(bytes)) => session_clone.handle_incoming_packet(bytes).await,
                     Ok(Message::Close(_)) => {
                         #[cfg(feature = "tracing")]
                         tracing::debug!("WebSocket read task received close frame");
@@ -410,6 +410,7 @@ impl WsIoClientRuntime {
     #[inline]
     pub(crate) fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
+        let bytes = self.config.packet_transformer.encode_bytes(bytes)?;
         Ok(Arc::new(Message::Binary(bytes)))
     }
 

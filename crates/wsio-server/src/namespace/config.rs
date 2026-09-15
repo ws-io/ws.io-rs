@@ -16,7 +16,10 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use crate::{
     connection::WsIoServerConnection,
     core::{
-        packet::codecs::WsIoPacketCodec,
+        packet::{
+            codecs::WsIoPacketCodec,
+            transformers::WsIoPacketTransformer,
+        },
         types::{
             ArcAsyncUnaryResultHandler,
             BoxAsyncUnaryResultHandler,
@@ -111,6 +114,10 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Packet codec used by this namespace for protocol packets and init data.
     pub(crate) packet_codec: WsIoPacketCodec,
 
+    /// Transformer used by this namespace for complete encoded WebSocket
+    /// packets.
+    pub(crate) packet_transformer: WsIoPacketTransformer,
+
     /// Namespace path used for routing clients from the `namespace` query
     /// parameter after the server request path is matched.
     pub(super) path: String,
@@ -151,6 +158,7 @@ impl FmtDebug for WsIoServerNamespaceConfig {
             .field("on_connect_handler_timeout", &self.on_connect_handler_timeout)
             .field("on_ready_handler", &self.on_ready_handler.as_ref().map(|_| "<handler>"))
             .field("packet_codec", &self.packet_codec)
+            .field("packet_transformer", &"<transformer>")
             .field("websocket_config", &self.websocket_config)
             .finish()
     }

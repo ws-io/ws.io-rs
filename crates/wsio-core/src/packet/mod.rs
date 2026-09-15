@@ -13,6 +13,7 @@ use serde_repr::{
 };
 
 pub mod codecs;
+pub mod transformers;
 
 // Enums
 #[repr(u8)]

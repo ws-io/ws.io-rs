@@ -11,6 +11,7 @@ use anyhow::{
     anyhow,
     bail,
 };
+use bytes::Bytes;
 use futures_util::FutureExt;
 use kikiutils::atomic::enum_cell::AtomicEnumCell;
 use num_enum::{
@@ -300,15 +301,18 @@ impl WsIoClientSession {
         self.send_message(message).await
     }
 
-    pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: &[u8]) -> Result<()> {
+    pub(super) async fn handle_incoming_packet(self: &Arc<Self>, encoded_packet: Bytes) -> Result<()> {
         // TODO: lazy load
-        let packet = match self.runtime.config.packet_codec.decode(encoded_packet) {
-            Ok(packet) => packet,
-            Err(err) => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(error = %err, "failed to decode server packet");
-                return Err(err);
-            },
+        let packet = {
+            let encoded_packet = self.runtime.config.packet_transformer.decode_bytes(encoded_packet)?;
+            match self.runtime.config.packet_codec.decode(&encoded_packet) {
+                Ok(packet) => packet,
+                Err(err) => {
+                    #[cfg(feature = "tracing")]
+                    tracing::debug!(error = %err, "failed to decode server packet");
+                    return Err(err);
+                },
+            }
         };
 
         match &packet.r#type {
