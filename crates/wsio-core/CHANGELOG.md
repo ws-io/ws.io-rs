@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.13.1 - 2026-09-15T18:51:44Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.13.0...wsio-core-v0.13.1)
+
+### ✅ Tests
+
+- *(core)* add transformer benchmarks and coverage tests ([a48cdda](https://github.com/ws-io/ws.io-rs/commit/a48cddac07122c40ae725f8ad65bfa54875e46d1))
+
+### 📖 Documentation
+
+- *(rustdoc)* standardize Rustdoc style ([7a77b9b](https://github.com/ws-io/ws.io-rs/commit/7a77b9b2d1679919ab67ebba8c8b726a85190df6))
+
+### 🚀 Enhancements
+
+- make packet transformers async with reusable zstd contexts ([c2857b2](https://github.com/ws-io/ws.io-rs/commit/c2857b2396e085817fe52f7639d9f08da2c31601))
+- *(packet)* add optional zstd packet transformation ([09f1fcc](https://github.com/ws-io/ws.io-rs/commit/09f1fcc9848afc7da758daba36ef446a6ca3d308))
+- add optional packet transformers ([576a83e](https://github.com/ws-io/ws.io-rs/commit/576a83e15705e9540afba91e50cc2332d9dde280))
+
+### 🩹 Fixes
+
+- *(runtime)* make lifecycle operations cancellation-safe ([fc379c6](https://github.com/ws-io/ws.io-rs/commit/fc379c6ebc731036d0df80a727a5c034f8898fa2))
+- propagate errors and simplify request handling ([d7f3915](https://github.com/ws-io/ws.io-rs/commit/d7f39154bc332f4cbdd7273e84a25d35640a72a1))
+- *(runtime)* prioritize shutdown in select loops ([21cb271](https://github.com/ws-io/ws.io-rs/commit/21cb27191c283c83e05af8624ac28c8b5a74d2b3))
+
 ## 0.13.0 - 2026-09-02T09:07:31Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.12.11...wsio-core-v0.13.0)

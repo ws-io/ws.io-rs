@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 - 2026-09-15T18:51:44Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-adapter-v0.1.3...wsio-adapter-v0.1.4)
+
+### 📖 Documentation
+
+- *(rustdoc)* standardize Rustdoc style ([7a77b9b](https://github.com/ws-io/ws.io-rs/commit/7a77b9b2d1679919ab67ebba8c8b726a85190df6))
+
 ## 0.1.3 - 2026-09-02T09:07:31Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-adapter-v0.1.2...wsio-adapter-v0.1.3)
