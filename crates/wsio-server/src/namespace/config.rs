@@ -51,50 +51,46 @@ type InitResponseHandler = Box<
 
 // Structs
 pub(crate) struct WsIoServerNamespaceConfig {
-    /// Maximum number of broadcast send operations this namespace runs at once.
+    /// Maximum number of concurrent broadcast sends for this namespace.
     ///
-    /// Inherited from `WsIoServerConfig` when the namespace builder is created and
-    /// overridable per namespace. This is passed to
-    /// `StreamExt::for_each_concurrent`, where `0` is treated as no concurrency
-    /// limit.
+    /// This is inherited from `WsIoServerConfig` and passed to
+    /// `StreamExt::for_each_concurrent`; `0` means unlimited concurrency.
     pub(crate) broadcast_concurrency_limit: usize,
 
-    /// Maximum duration allowed for a matched HTTP request to finish the
-    /// WebSocket upgrade for this namespace.
+    /// Maximum duration for a matched HTTP request's WebSocket upgrade.
     pub(super) http_request_upgrade_timeout: Duration,
 
-    /// Optional server-side init-request handler for this namespace.
+    /// Optional server-side init-request handler.
     ///
     /// When present, it runs during connection setup and may return optional data
-    /// that is encoded with `packet_codec` and sent to the client as the init
-    /// packet payload.
+    /// encoded with `packet_codec` for the client init packet.
     pub(crate) init_request_handler: Option<InitRequestHandler>,
 
-    /// Maximum duration allowed for `init_request_handler` to execute.
+    /// Maximum duration for `init_request_handler`.
     pub(crate) init_request_handler_timeout: Duration,
 
-    /// Optional server-side init-response handler for this namespace.
+    /// Optional server-side init-response handler.
     ///
-    /// When present, it receives the optional client response payload after
-    /// decoding and runs before middleware/on-connect processing continues.
+    /// When present, it receives the decoded optional client response payload and
+    /// runs before middleware and on-connect processing.
     pub(crate) init_response_handler: Option<InitResponseHandler>,
 
-    /// Maximum duration allowed for `init_response_handler` to execute.
+    /// Maximum duration for `init_response_handler`.
     pub(crate) init_response_handler_timeout: Duration,
 
-    /// Maximum duration to wait for the client to send its init-response packet.
+    /// Maximum duration for waiting for the client init-response packet.
     pub(crate) init_response_timeout: Duration,
 
-    /// Optional namespace middleware run during connection setup.
+    /// Optional namespace middleware for connection setup.
     ///
     /// Middleware runs after init-response handling and before the on-connect
-    /// handler. Returning an error rejects/aborts the connection setup.
+    /// handler. Returning an error aborts connection setup.
     pub(crate) middleware: Option<BoxAsyncUnaryResultHandler<WsIoServerConnection>>,
 
-    /// Maximum duration allowed for `middleware` execution.
+    /// Maximum duration for `middleware`.
     pub(crate) middleware_execution_timeout: Duration,
 
-    /// Maximum duration allowed for a connection's on-close handler to execute.
+    /// Maximum duration for a connection's on-close handler.
     pub(crate) on_close_handler_timeout: Duration,
 
     /// Optional namespace on-connect handler.
@@ -102,32 +98,30 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Runs during setup after middleware and before the ready packet is sent.
     pub(crate) on_connect_handler: Option<BoxAsyncUnaryResultHandler<WsIoServerConnection>>,
 
-    /// Maximum duration allowed for `on_connect_handler` execution.
+    /// Maximum duration for `on_connect_handler`.
     pub(crate) on_connect_handler_timeout: Duration,
 
     /// Optional namespace on-ready handler.
     ///
-    /// Runs asynchronously after the connection has completed setup and has been
-    /// marked ready. It is spawned instead of being awaited in the setup path.
+    /// Runs after connection setup completes and the connection is marked ready.
+    /// It is spawned instead of being awaited in the setup path.
     pub(crate) on_ready_handler: Option<ArcAsyncUnaryResultHandler<WsIoServerConnection>>,
 
-    /// Packet codec used by this namespace for protocol packets and init data.
+    /// Packet codec for this namespace's protocol packets and init data.
     pub(crate) packet_codec: WsIoPacketCodec,
 
-    /// Transformer used by this namespace for complete encoded WebSocket
-    /// packets.
+    /// Transformer for this namespace's complete encoded WebSocket packets.
     pub(crate) packet_transformer: WsIoPacketTransformer,
 
-    /// Namespace path used for routing clients from the `namespace` query
-    /// parameter after the server request path is matched.
+    /// Namespace path used to route clients from the `namespace` query parameter
+    /// after the server request path matches.
     pub(super) path: String,
 
-    /// Tungstenite WebSocket transport limits and buffer sizes for this namespace.
+    /// Tungstenite WebSocket transport limits and buffer sizes.
     ///
-    /// The namespace receives a copy of the server-level config when the builder is
-    /// created, then may override it independently. It is also used to size
-    /// internal connection channels from the configured max-write/write-buffer
-    /// ratio.
+    /// The namespace receives a copy of the server-level configuration and may
+    /// override it independently. It also derives internal connection channel
+    /// capacity from the configured max-write/write-buffer ratio.
     pub(crate) websocket_config: WebSocketConfig,
 }
 

@@ -108,22 +108,24 @@ impl WsIoPacketZstdTransformer {
 /// Configuration for the built-in zstd packet transformer.
 #[derive(Clone, Copy, Debug)]
 pub struct WsIoPacketZstdTransformerConfig {
-    /// Packets at least this many bytes are processed on Tokio's blocking
-    /// thread pool when zstd compression or decompression is required.
+    /// Minimum payload size for dispatching zstd work to Tokio's blocking thread
+    /// pool.
     ///
-    /// The larger of the encoded and original payload sizes is used for the
-    /// decode decision. Set this to `usize::MAX` to keep zstd processing on
-    /// the async worker. If no Tokio runtime is active, processing falls back
-    /// to the synchronous path.
+    /// Encoding uses the encoded payload size; decoding uses the larger of the
+    /// encoded and original sizes. Set this to `usize::MAX` to keep zstd work on
+    /// the async worker. Without an active Tokio runtime, processing is
+    /// synchronous.
     pub blocking_threshold: usize,
 
-    /// zstd compression level. Level `3` is the default low-latency setting.
+    /// Compression level used by zstd for encoding. Level `3` is the default
+    /// low-latency setting.
     pub compression_level: i32,
 
-    /// Packets smaller than this many bytes are sent with the raw payload flag.
+    /// Minimum packet size for zstd compression. Smaller packets use the raw
+    /// payload flag.
     pub compression_threshold: usize,
 
-    /// Maximum uncompressed packet size in bytes accepted for encoding and decoding.
+    /// Maximum uncompressed packet size accepted during encoding and decoding.
     ///
     /// The compression frame stores this length as a `u32`, so packets larger
     /// than `u32::MAX` cannot be encoded regardless of this setting.

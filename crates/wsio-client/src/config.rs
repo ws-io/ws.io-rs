@@ -47,85 +47,83 @@ type RequestModifier =
 
 // Structs
 pub(crate) struct WsIoClientConfig {
-    /// Maximum duration to wait for the WebSocket connection attempt.
+    /// Maximum duration for a WebSocket connection attempt.
     ///
-    /// This timeout covers the transport connection and WebSocket HTTP upgrade
-    /// handshake performed by `connect_async_with_config`. When unset, the
-    /// connection attempt is allowed to wait indefinitely.
+    /// This covers the transport connection and HTTP upgrade performed by
+    /// `connect_async_with_config`. `None` allows the attempt to wait
+    /// indefinitely.
     pub(crate) connect_timeout: Option<Duration>,
 
-    /// Maximum duration to wait for graceful WebSocket shutdown after
-    /// `disconnect` is requested.
+    /// Maximum duration for graceful WebSocket shutdown after `disconnect`.
     ///
-    /// If the read/write tasks do not finish before this timeout, they are
-    /// aborted so `disconnect().await` can complete.
+    /// If the read/write tasks do not finish in time, they are aborted.
     pub(crate) disconnect_timeout: Duration,
 
-    /// Optional client-side init handler used during the server handshake.
+    /// Optional client-side init handler for the server handshake.
     ///
-    /// When the server sends an init packet, this handler receives the optional
-    /// decoded payload and may return optional response data to encode and send
-    /// back to the server.
+    /// When the server sends an init packet, the handler receives its optional
+    /// decoded payload and may return optional response data.
     pub(crate) init_handler: Option<InitHandler>,
 
-    /// Maximum duration allowed for `init_handler` to execute.
+    /// Maximum duration for `init_handler`.
     pub(crate) init_handler_timeout: Duration,
 
-    /// Maximum duration to wait for the server to send the init packet.
+    /// Maximum duration for waiting for the server init packet.
     ///
-    /// This timeout starts after the WebSocket connection is established. If the
-    /// init packet is not received in time, the session setup fails.
+    /// This starts after the WebSocket connection is established. If the packet
+    /// is not received in time, session setup fails.
     pub(crate) init_packet_timeout: Duration,
 
-    /// Optional handler invoked when a session closes.
+    /// Optional handler invoked when a client session closes.
     ///
-    /// The handler is awaited with `on_session_close_handler_timeout`.
+    /// The handler runs during session cleanup and is bounded by
+    /// `on_session_close_handler_timeout`.
     pub(crate) on_session_close_handler: Option<BoxAsyncUnaryResultHandler<WsIoClientSession>>,
 
-    /// Maximum duration allowed for `on_session_close_handler` to execute.
+    /// Maximum duration for `on_session_close_handler`.
     pub(crate) on_session_close_handler_timeout: Duration,
 
-    /// Optional handler invoked after the session has become ready.
+    /// Optional handler invoked after a client session becomes ready.
     ///
-    /// This handler is spawned asynchronously after the ready state is reached; it
-    /// is not part of the blocking handshake path.
+    /// The handler is spawned after the ready state is reached and does not block
+    /// the handshake.
     pub(crate) on_session_ready_handler: Option<ArcAsyncUnaryResultHandler<WsIoClientSession>>,
 
-    /// Packet codec used to encode and decode ws.io protocol packets.
+    /// Packet codec for ws.io protocol packets.
     ///
-    /// It must match the server namespace codec. All supported codecs use
+    /// The codec must match the server namespace codec. All supported codecs use
     /// binary WebSocket messages.
     pub(crate) packet_codec: WsIoPacketCodec,
 
     /// Transformer applied to complete encoded WebSocket packets.
     pub(crate) packet_transformer: WsIoPacketTransformer,
 
-    /// Interval between client heartbeat frames sent after the WebSocket session
-    /// is created.
+    /// Interval between client heartbeat frames after the WebSocket session is
+    /// created.
     ///
-    /// The heartbeat is a one-byte binary WebSocket frame; the server ignores
-    /// single-byte binary frames before protocol packet decoding.
+    /// The heartbeat is a one-byte binary WebSocket frame. The server ignores
+    /// these frames before protocol packet decoding.
     pub(crate) ping_interval: Duration,
 
-    /// Maximum duration to wait for the ready packet from the server.
+    /// Maximum duration for waiting for the server ready packet.
     ///
     /// The client sends its init response first, then waits for the server to mark
-    /// the session ready. If the ready packet is not received in time, setup fails.
+    /// the session ready. If the packet is not received in time, setup fails.
     pub(crate) ready_packet_timeout: Duration,
 
-    /// Delay before attempting to reconnect after a disconnected session.
+    /// Delay before reconnecting after a connection attempt or session ends.
     pub(crate) reconnect_delay: Duration,
 
     /// Optional async modifier for the WebSocket HTTP request.
     ///
-    /// Use this to adjust headers or other request metadata before
+    /// The modifier can adjust headers or other request metadata before
     /// `connect_async_with_config` is called.
     pub(crate) request_modifier: Option<RequestModifier>,
 
     /// Tungstenite WebSocket transport limits and buffer sizes.
     ///
-    /// This config is passed into the client connection and is also used to size
-    /// internal session channels from the configured max-write/write-buffer ratio.
+    /// The configuration is passed to the client connection and derives internal
+    /// session channel capacity from the configured max-write/write-buffer ratio.
     pub(crate) websocket_config: WebSocketConfig,
 }
 

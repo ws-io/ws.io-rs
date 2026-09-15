@@ -94,11 +94,12 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     }
 
     // Public methods
-    /// Dispatches one event packet and waits for every registered handler to finish.
+    /// Dispatches one event packet and waits for all registered handlers to finish.
     ///
-    /// The handlers for this packet are started concurrently and all must finish
-    /// before this method returns. Handler failures are logged and do not fail the
-    /// dispatch; payload decoding failures are returned to the connection dispatcher.
+    /// Handlers start concurrently and must all finish before this method returns.
+    /// Handler errors do not fail dispatch and are logged when the `tracing`
+    /// feature is enabled. Payload decoding errors are returned to the connection
+    /// dispatcher.
     #[inline]
     pub async fn dispatch_event_packet(
         &self,

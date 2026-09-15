@@ -10,99 +10,99 @@ use crate::core::packet::{
 // Structs
 #[derive(Debug)]
 pub(crate) struct WsIoServerConfig {
-    /// Maximum number of namespace broadcast send operations to run at once.
+    /// Maximum number of concurrent namespace broadcast sends.
     ///
-    /// Higher values can improve fan-out throughput, but also increase the number of
-    /// in-flight connection sends and memory pressure. This is passed to
-    /// `StreamExt::for_each_concurrent`, where `0` is treated as no concurrency
-    /// limit.
+    /// Higher values can improve fan-out throughput but increase in-flight sends
+    /// and memory pressure. This is passed to
+    /// `StreamExt::for_each_concurrent`; `0` means unlimited concurrency.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) broadcast_concurrency_limit: usize,
 
-    /// Maximum duration allowed for an accepted HTTP request to finish the
-    /// WebSocket upgrade.
+    /// Maximum duration for an accepted HTTP request's WebSocket upgrade.
     ///
-    /// The timeout covers waiting on the HTTP adapter's upgrade future after the
-    /// request path has matched this server.
+    /// This covers the HTTP adapter's upgrade future after the request path
+    /// matches this server.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) http_request_upgrade_timeout: Duration,
 
-    /// Maximum duration allowed for the namespace init-request handler to execute.
+    /// Maximum duration for the namespace init-request handler.
     ///
-    /// The handler is configured with `WsIoServerNamespaceBuilder::with_init_request`
-    /// and may return optional data that is encoded and sent to the client during
-    /// the connection handshake.
+    /// The handler is configured with
+    /// `WsIoServerNamespaceBuilder::with_init_request` and may return optional
+    /// data for the connection handshake.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) init_request_handler_timeout: Duration,
 
-    /// Maximum duration allowed for the namespace init-response handler to execute.
+    /// Maximum duration for the namespace init-response handler.
     ///
-    /// The handler is configured with `WsIoServerNamespaceBuilder::with_init_response`
-    /// and receives the optional client response data after it is decoded with
-    /// `packet_codec`.
+    /// The handler is configured with
+    /// `WsIoServerNamespaceBuilder::with_init_response` and receives the optional
+    /// client response data decoded with `packet_codec`.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) init_response_handler_timeout: Duration,
 
-    /// Maximum duration to wait for the client to send the init-response packet.
+    /// Maximum duration for waiting for the client init-response packet.
     ///
-    /// This applies after the server sends its init packet. If the client does not
-    /// answer before the timeout, the handshake is treated as failed.
+    /// This starts after the server sends its init packet. If the client does not
+    /// answer in time, the handshake fails.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) init_response_timeout: Duration,
 
-    /// Maximum duration allowed for namespace middleware execution.
+    /// Maximum duration for namespace middleware execution.
     ///
-    /// Middleware is configured with `WsIoServerNamespaceBuilder::with_middleware`
-    /// and runs during connection setup before the on-connect handler.
+    /// Middleware is configured with
+    /// `WsIoServerNamespaceBuilder::with_middleware` and runs during connection
+    /// setup before the on-connect handler.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) middleware_execution_timeout: Duration,
 
-    /// Maximum duration allowed for a connection's on-close handler to execute.
+    /// Maximum duration for a connection's on-close handler.
     ///
-    /// This applies to handlers registered from `WsIoServerConnection::on_close`.
+    /// This applies to handlers registered with `WsIoServerConnection::on_close`.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) on_close_handler_timeout: Duration,
 
-    /// Maximum duration allowed for the namespace on-connect handler to execute.
+    /// Maximum duration for the namespace on-connect handler.
     ///
-    /// The on-connect handler is configured with
-    /// `WsIoServerNamespaceBuilder::on_connect` and runs during connection setup
-    /// after middleware.
+    /// The handler is configured with `WsIoServerNamespaceBuilder::on_connect`
+    /// and runs during connection setup after middleware.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) on_connect_handler_timeout: Duration,
 
-    /// Packet codec used to encode and decode ws.io protocol packets.
+    /// Packet codec for ws.io protocol packets.
     ///
-    /// The same codec must be understood by the client. All supported codecs use
-    /// binary WebSocket messages.
+    /// The codec must match the client. All supported codecs use binary WebSocket
+    /// messages.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) packet_codec: WsIoPacketCodec,
 
     /// Transformer applied to complete encoded WebSocket packets.
+    ///
+    /// Namespace builders may override this value.
     pub(crate) packet_transformer: WsIoPacketTransformer,
 
     /// HTTP request path handled by the server adapter.
     ///
-    /// Requests whose URI path does not match this value pass through to the
-    /// wrapped service. Client namespace selection is carried separately in the
-    /// `namespace` query parameter.
+    /// Requests with a different URI path pass through to the wrapped service.
+    /// Client namespace selection is carried separately in the `namespace` query
+    /// parameter.
     pub(crate) request_path: String,
 
     /// Tungstenite WebSocket transport limits and buffer sizes.
     ///
-    /// This config is passed to `WebSocketStream::from_raw_socket` and is also
-    /// used to size internal connection channels from the configured
+    /// The configuration is passed to `WebSocketStream::from_raw_socket` and
+    /// derives internal connection channel capacity from the configured
     /// max-write/write-buffer ratio.
     ///
-    /// Can be overridden by namespace-level configuration.
+    /// Namespace builders may override this value.
     pub(crate) websocket_config: WebSocketConfig,
 }

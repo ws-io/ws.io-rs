@@ -32,8 +32,8 @@ use crate::{
 
 /// Builder for configuring and creating a [`WsIoClient`].
 ///
-/// The URL passed to the client constructor selects the namespace from its path,
-/// while the actual WebSocket request path defaults to `/ws.io`.
+/// The input URL path selects the namespace. The WebSocket request path defaults
+/// to `/ws.io`.
 #[derive(Debug)]
 #[must_use]
 pub struct WsIoClientBuilder {
@@ -97,52 +97,53 @@ impl WsIoClientBuilder {
 
     // Public methods
 
-    /// Builds a [`WsIoClient`] with the accumulated configuration.
+    /// Builds a [`WsIoClient`] from this builder's configuration.
     pub fn build(self) -> WsIoClient {
         WsIoClient(WsIoClientRuntime::new(self.config, self.connect_url))
     }
 
-    /// Sets how long the client waits for the WebSocket connection attempt.
+    /// Sets the maximum duration for a WebSocket connection attempt.
     ///
-    /// This timeout covers the transport connection and WebSocket HTTP upgrade
-    /// handshake. It does not cover ws.io protocol initialization after the
-    /// WebSocket connection is established; use [`Self::init_packet_timeout`]
-    /// and [`Self::ready_packet_timeout`] for that phase. Pass `None` to disable
-    /// the connection-attempt timeout.
+    /// This covers the transport connection and HTTP upgrade, but not ws.io
+    /// protocol initialization. Use [`Self::init_packet_timeout`] and
+    /// [`Self::ready_packet_timeout`] for initialization. Pass `None` to disable
+    /// the timeout.
     pub fn connect_timeout(mut self, duration: impl Into<Option<Duration>>) -> Self {
         self.config.connect_timeout = duration.into();
         self
     }
 
-    /// Sets how long `disconnect().await` waits for graceful WebSocket
-    /// shutdown before aborting the connection read/write tasks.
+    /// Sets the maximum duration for graceful WebSocket shutdown.
+    ///
+    /// If the read/write tasks do not finish within this duration, they are
+    /// aborted.
     pub fn disconnect_timeout(mut self, duration: Duration) -> Self {
         self.config.disconnect_timeout = duration;
         self
     }
 
-    /// Sets the maximum duration allowed for the init handler to run.
+    /// Sets the maximum duration for the client init handler.
     ///
-    /// The init handler is registered with [`Self::with_init_handler`] and is
-    /// invoked after the server sends the init packet.
+    /// The handler is registered with [`Self::with_init_handler`] and runs after
+    /// the server sends the init packet.
     pub fn init_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.init_handler_timeout = duration;
         self
     }
 
-    /// Sets how long the client waits for the server init packet after the
-    /// WebSocket connection is established.
+    /// Sets the maximum duration for waiting for the server init packet.
     ///
-    /// If the init packet is not received before this timeout, the session is
-    /// closed and the runtime may reconnect according to [`Self::reconnect_delay`].
+    /// This starts after the WebSocket connection is established. If the packet
+    /// is not received in time, the session closes and the runtime may reconnect
+    /// according to [`Self::reconnect_delay`].
     pub fn init_packet_timeout(mut self, duration: Duration) -> Self {
         self.config.init_packet_timeout = duration;
         self
     }
 
-    /// Registers a handler that runs when a session closes.
+    /// Registers a handler that runs when a client session closes.
     ///
-    /// The handler is awaited during session cleanup and is bounded by
+    /// The handler runs during session cleanup and is bounded by
     /// [`Self::on_session_close_handler_timeout`].
     pub fn on_session_close<H, Fut>(mut self, handler: H) -> Self
     where
@@ -153,16 +154,16 @@ impl WsIoClientBuilder {
         self
     }
 
-    /// Sets the maximum duration allowed for the session-close handler to run.
+    /// Sets the maximum duration for the session-close handler.
     pub fn on_session_close_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.on_session_close_handler_timeout = duration;
         self
     }
 
-    /// Registers a handler that runs after a session becomes ready.
+    /// Registers a handler that runs after a client session becomes ready.
     ///
-    /// The handler is spawned asynchronously after the ready packet is received,
-    /// so it does not block the connection handshake.
+    /// The handler is spawned after the ready packet is received and does not
+    /// block the connection handshake.
     pub fn on_session_ready<H, Fut>(mut self, handler: H) -> Self
     where
         H: Fn(Arc<WsIoClientSession>) -> Fut + Send + Sync + 'static,
@@ -172,43 +173,43 @@ impl WsIoClientBuilder {
         self
     }
 
-    /// Sets the packet codec used to encode and decode ws.io protocol packets.
+    /// Sets the packet codec for ws.io protocol packets.
     ///
-    /// This must match the server namespace codec.
+    /// The codec must match the server namespace codec.
     pub fn packet_codec(mut self, packet_codec: WsIoPacketCodec) -> Self {
         self.config.packet_codec = packet_codec;
         self
     }
 
-    /// Sets the packet transformer used by this client for all protocol packets.
+    /// Sets the packet transformer for all client protocol packets.
     pub fn packet_transformer(mut self, packet_transformer: WsIoPacketTransformer) -> Self {
         self.config.packet_transformer = packet_transformer;
         self
     }
 
-    /// Sets the interval for client heartbeat frames.
+    /// Sets the interval between client heartbeat frames.
     ///
     /// After session initialization starts, the client periodically sends a
-    /// one-byte binary WebSocket frame. The server treats single-byte binary
-    /// frames as heartbeats and ignores them before packet decoding.
+    /// one-byte binary WebSocket frame. The server treats these frames as
+    /// heartbeats and ignores them before packet decoding.
     pub fn ping_interval(mut self, duration: Duration) -> Self {
         self.config.ping_interval = duration;
         self
     }
 
-    /// Sets how long the client waits for the server ready packet.
+    /// Sets the maximum duration for waiting for the server ready packet.
     ///
-    /// The ready timeout starts after the client handles the server init packet
-    /// and sends its init response.
+    /// This starts after the client handles the server init packet and sends its
+    /// init response.
     pub fn ready_packet_timeout(mut self, duration: Duration) -> Self {
         self.config.ready_packet_timeout = duration;
         self
     }
 
-    /// Sets the delay before the runtime attempts another connection.
+    /// Sets the delay before reconnecting.
     ///
-    /// This delay is used after a connection attempt/session ends while the client
-    /// runtime is still running.
+    /// The delay applies after a connection attempt or session ends while the
+    /// client runtime is still running.
     pub fn reconnect_delay(mut self, delay: Duration) -> Self {
         self.config.reconnect_delay = delay;
         self
@@ -216,9 +217,9 @@ impl WsIoClientBuilder {
 
     /// Registers an async modifier for the WebSocket HTTP request.
     ///
-    /// Use this to add headers or adjust request metadata before
+    /// The modifier can add headers or adjust request metadata before
     /// `connect_async_with_config` is called. An in-flight modifier future is
-    /// cancelled when the client disconnects and may run again on reconnect.
+    /// cancelled when the client disconnects and may run again after reconnect.
     pub fn request_modifier<M, Fut>(mut self, modifier: M) -> Self
     where
         M: Fn(Request<()>) -> Fut + Send + Sync + 'static,
@@ -230,9 +231,9 @@ impl WsIoClientBuilder {
 
     /// Sets the WebSocket HTTP request path.
     ///
-    /// Paths are normalized to a single leading slash with empty path segments
-    /// removed. This controls the request URI path, not the namespace query value
-    /// inferred from the original URL passed to the builder.
+    /// The path is normalized to one leading slash with empty segments removed.
+    /// This controls the request URI path, not the namespace query value derived
+    /// from the input URL.
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
         self.connect_url
             .set_path(&Self::normalize_url_path(request_path.as_ref()));
@@ -242,9 +243,8 @@ impl WsIoClientBuilder {
 
     /// Replaces the full Tungstenite WebSocket configuration.
     ///
-    /// This controls transport limits and buffer sizes passed to the WebSocket
-    /// connection. It is also used to derive internal channel capacity from the
-    /// configured max-write/write-buffer ratio.
+    /// The configuration controls transport limits and buffer sizes and derives
+    /// internal channel capacity from the configured max-write/write-buffer ratio.
     pub fn websocket_config(mut self, websocket_config: WebSocketConfig) -> Self {
         self.config.websocket_config = websocket_config;
         self
@@ -252,8 +252,7 @@ impl WsIoClientBuilder {
 
     /// Mutates the current Tungstenite WebSocket configuration in place.
     ///
-    /// Prefer this when you want to adjust one or two fields while keeping the
-    /// builder defaults for the rest.
+    /// Use this to adjust selected fields while keeping the remaining defaults.
     pub fn websocket_config_mut<F: FnOnce(&mut WebSocketConfig)>(mut self, f: F) -> Self {
         f(&mut self.config.websocket_config);
         self
@@ -262,8 +261,8 @@ impl WsIoClientBuilder {
     /// Registers the client-side init handler.
     ///
     /// The handler receives the session and the optional server init payload
-    /// decoded as `D`. Its optional return value is encoded as `R` and sent back
-    /// to the server as the client init response.
+    /// decoded as `D`. An optional `R` result is encoded and sent as the client
+    /// init response.
     pub fn with_init_handler<H, Fut, D, R>(mut self, handler: H) -> Self
     where
         H: Fn(Arc<WsIoClientSession>, Option<D>) -> Fut + Send + Sync + 'static,

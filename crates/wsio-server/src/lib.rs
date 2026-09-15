@@ -31,10 +31,10 @@ pub struct WsIoServer(Arc<WsIoServerRuntime>);
 
 impl WsIoServer {
     // Public methods
-    /// Creates a server builder using the no-op packet transformer by default.
+    /// Creates a server builder using the no-op packet transformer.
     ///
     /// Use [`WsIoServerBuilder::packet_transformer`] to configure the global
-    /// transformer. Namespace builders can override that default individually.
+    /// transformer. Namespace builders can override it individually.
     pub fn builder() -> WsIoServerBuilder {
         WsIoServerBuilder::new()
     }

@@ -16,9 +16,8 @@ use crate::{
 
 /// Builder for configuring and creating a [`WsIoServer`].
 ///
-/// Server-level settings become the defaults inherited by namespaces created
-/// from the server. Namespace builders may override most of these values per
-/// namespace.
+/// Server-level settings are inherited by namespaces created from the server.
+/// Namespace builders may override most settings per namespace.
 #[derive(Debug)]
 #[must_use]
 pub struct WsIoServerBuilder {
@@ -51,23 +50,22 @@ impl WsIoServerBuilder {
     }
 
     // Public methods
-    /// Sets the default maximum number of broadcast send operations to run at
-    /// once.
+    /// Sets the default maximum number of concurrent broadcast sends.
     ///
-    /// This value is inherited by namespace builders and passed to
-    /// `StreamExt::for_each_concurrent`; `0` is treated as no concurrency limit.
+    /// Namespace builders inherit this value. It is passed to
+    /// `StreamExt::for_each_concurrent`; `0` means unlimited concurrency.
     pub fn broadcast_concurrency_limit(mut self, broadcast_concurrency_limit: usize) -> Self {
         self.config.broadcast_concurrency_limit = broadcast_concurrency_limit;
         self
     }
 
-    /// Builds a [`WsIoServer`] with the accumulated configuration.
+    /// Builds a [`WsIoServer`] from this builder's configuration.
     pub fn build(self) -> WsIoServer {
         WsIoServer(WsIoServerRuntime::new(self.config))
     }
 
-    /// Sets the default timeout for a matched HTTP request to finish the
-    /// WebSocket upgrade.
+    /// Sets the default maximum duration for a matched HTTP request's WebSocket
+    /// upgrade.
     ///
     /// The timeout wraps the HTTP adapter's upgrade future. Namespace builders
     /// inherit this value and may override it.
@@ -76,55 +74,54 @@ impl WsIoServerBuilder {
         self
     }
 
-    /// Sets the default maximum duration allowed for init-request handlers.
+    /// Sets the default maximum duration for init-request handlers.
     ///
-    /// Init-request handlers are registered per namespace with
+    /// Namespace init-request handlers are registered with
     /// `WsIoServerNamespaceBuilder::with_init_request`.
     pub fn init_request_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.init_request_handler_timeout = duration;
         self
     }
 
-    /// Sets the default maximum duration allowed for init-response handlers.
+    /// Sets the default maximum duration for init-response handlers.
     ///
-    /// Init-response handlers are registered per namespace with
+    /// Namespace init-response handlers are registered with
     /// `WsIoServerNamespaceBuilder::with_init_response`.
     pub fn init_response_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_handler_timeout = duration;
         self
     }
 
-    /// Sets the default timeout for waiting on a client init-response packet.
+    /// Sets the default maximum duration for waiting for a client init response.
     ///
-    /// This timeout starts after the server sends its init packet. Namespace
-    /// builders inherit this value and may override it.
+    /// This starts after the server sends its init packet. Namespace builders
+    /// inherit this value and may override it.
     pub fn init_response_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_timeout = duration;
         self
     }
 
-    /// Sets the default maximum duration allowed for namespace middleware.
+    /// Sets the default maximum duration for namespace middleware.
     ///
-    /// Middleware is registered per namespace with
+    /// Namespace middleware is registered with
     /// `WsIoServerNamespaceBuilder::with_middleware`.
     pub fn middleware_execution_timeout(mut self, duration: Duration) -> Self {
         self.config.middleware_execution_timeout = duration;
         self
     }
 
-    /// Sets the default maximum duration allowed for per-connection close
-    /// handlers.
+    /// Sets the default maximum duration for per-connection close handlers.
     ///
-    /// This applies to handlers registered through `WsIoServerConnection::on_close`.
+    /// This applies to handlers registered through
+    /// `WsIoServerConnection::on_close`.
     pub fn on_close_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.on_close_handler_timeout = duration;
         self
     }
 
-    /// Sets the default maximum duration allowed for namespace on-connect
-    /// handlers.
+    /// Sets the default maximum duration for namespace on-connect handlers.
     ///
-    /// On-connect handlers are registered per namespace with
+    /// Namespace on-connect handlers are registered with
     /// `WsIoServerNamespaceBuilder::on_connect`.
     pub fn on_connect_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.on_connect_handler_timeout = duration;
@@ -133,16 +130,16 @@ impl WsIoServerBuilder {
 
     /// Sets the default packet codec for namespaces.
     ///
-    /// The codec is used for ws.io protocol packets and init payload data.
-    /// Namespace builders inherit this value and may override it.
+    /// The codec handles ws.io protocol packets and init payload data. Namespace
+    /// builders inherit this value and may override it.
     pub fn packet_codec(mut self, packet_codec: WsIoPacketCodec) -> Self {
         self.config.packet_codec = packet_codec;
         self
     }
 
-    /// Sets the default packet transformer inherited by namespaces.
+    /// Sets the default packet transformer for namespaces.
     ///
-    /// A namespace builder may override this value for that namespace only.
+    /// A namespace builder may override it for that namespace only.
     pub fn packet_transformer(mut self, packet_transformer: WsIoPacketTransformer) -> Self {
         self.config.packet_transformer = packet_transformer;
         self
@@ -150,9 +147,9 @@ impl WsIoServerBuilder {
 
     /// Sets the HTTP request path handled by the server adapter.
     ///
-    /// Requests whose URI path does not match this value pass through to the
-    /// wrapped service. Client namespace routing is carried separately in the
-    /// `namespace` query parameter.
+    /// Requests with a different URI path pass through to the wrapped service.
+    /// Client namespace selection is carried separately in the `namespace` query
+    /// parameter.
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
         request_path.as_ref().clone_into(&mut self.config.request_path);
         self
@@ -161,8 +158,8 @@ impl WsIoServerBuilder {
     /// Replaces the default Tungstenite WebSocket configuration.
     ///
     /// Namespace builders inherit this value. It controls transport limits and
-    /// buffer sizes and is also used to derive internal channel capacity from the
-    /// configured max-write/write-buffer ratio.
+    /// buffer sizes and derives internal channel capacity from the configured
+    /// max-write/write-buffer ratio.
     pub fn websocket_config(mut self, websocket_config: WebSocketConfig) -> Self {
         self.config.websocket_config = websocket_config;
         self
@@ -170,8 +167,7 @@ impl WsIoServerBuilder {
 
     /// Mutates the current default Tungstenite WebSocket configuration in place.
     ///
-    /// Prefer this when you want to adjust one or two fields while keeping the
-    /// builder defaults for the rest.
+    /// Use this to adjust selected fields while keeping the remaining defaults.
     pub fn websocket_config_mut<F: FnOnce(&mut WebSocketConfig)>(mut self, f: F) -> Self {
         f(&mut self.config.websocket_config);
         self

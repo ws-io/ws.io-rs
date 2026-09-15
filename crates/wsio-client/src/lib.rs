@@ -33,7 +33,7 @@ pub struct WsIoClient(Arc<WsIoClientRuntime>);
 
 impl WsIoClient {
     // Public methods
-    /// Creates a client builder using the no-op packet transformer by default.
+    /// Creates a client builder using the no-op packet transformer.
     ///
     /// Use [`WsIoClientBuilder::packet_transformer`] to configure a custom
     /// packet transformer.

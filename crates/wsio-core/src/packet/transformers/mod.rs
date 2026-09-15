@@ -38,14 +38,12 @@ enum WsIoPacketTransformerKind {
 
 // Structs
 
-/// The packet transformer used by a client or server.
+/// Selects packet transformation for a client or server.
 ///
-/// `WsIoPacketTransformer` owns both the selected strategy and any reusable
-/// execution state required by that strategy. `Default::default()` creates the
-/// no-op strategy, which keeps the input allocation without copying. `custom`
-/// delegates to the user-supplied transformer through an [`Arc`]. `zstd` is
-/// available with the `packet-transformer-zstd` feature and reuses built-in
-/// zstd contexts across calls and clones.
+/// `Default::default()` selects the no-op strategy and returns the input
+/// allocation unchanged. `custom` delegates to a user-supplied transformer
+/// through an [`Arc`]. `zstd` is available with the `packet-transformer-zstd`
+/// feature and reuses its zstd contexts across calls and clones.
 #[derive(Clone, Default)]
 pub struct WsIoPacketTransformer {
     kind: WsIoPacketTransformerKind,
@@ -64,7 +62,7 @@ impl FmtDebug for WsIoPacketTransformer {
 }
 
 impl WsIoPacketTransformer {
-    /// Creates a custom packet transformer.
+    /// Creates a packet transformer backed by a custom implementation.
     #[inline]
     pub fn custom(transformer: Arc<dyn WsIoPacketCustomTransformer>) -> Self {
         Self {
@@ -72,7 +70,7 @@ impl WsIoPacketTransformer {
         }
     }
 
-    /// Decodes one complete transformed packet.
+    /// Decodes one complete transformed WebSocket packet.
     #[inline]
     pub async fn decode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
@@ -84,7 +82,7 @@ impl WsIoPacketTransformer {
         }
     }
 
-    /// Encodes one complete codec packet.
+    /// Encodes one complete codec packet for WebSocket transmission.
     #[inline]
     pub async fn encode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
@@ -96,7 +94,7 @@ impl WsIoPacketTransformer {
         }
     }
 
-    /// Creates a built-in zstd packet transformer.
+    /// Creates a built-in zstd packet transformer with `config`.
     #[cfg(feature = "packet-transformer-zstd")]
     #[inline]
     pub fn zstd(config: WsIoPacketZstdTransformerConfig) -> Self {
