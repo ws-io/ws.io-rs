@@ -154,8 +154,25 @@ mod tests {
 
     use super::{
         super::WsIoPacketTransformer,
+        COMPRESSION_FRAME_HEADER_SIZE,
+        WsIoPacketCompressionAlgorithm,
+        WsIoPacketCompressionFrameHeader,
         WsIoPacketZstdTransformerConfig,
     };
+
+    fn synchronous_config() -> WsIoPacketZstdTransformerConfig {
+        WsIoPacketZstdTransformerConfig {
+            blocking_threshold: usize::MAX,
+            ..Default::default()
+        }
+    }
+
+    fn synchronous_zstd_transformer(compression_threshold: usize) -> WsIoPacketTransformer {
+        WsIoPacketTransformer::zstd(WsIoPacketZstdTransformerConfig {
+            compression_threshold,
+            ..synchronous_config()
+        })
+    }
 
     #[tokio::test]
     async fn blocking_threshold_round_trips_zstd_packets() {
@@ -169,5 +186,115 @@ mod tests {
         let decoded = transformer.decode(encoded).await.unwrap();
 
         assert_eq!(decoded, input);
+    }
+
+    #[tokio::test]
+    async fn compression_threshold_uses_raw_frame() {
+        let transformer = synchronous_zstd_transformer(usize::MAX);
+        let input = Bytes::from_static(b"small packet");
+
+        let encoded = transformer.encode(input.clone()).await.unwrap();
+        let header = WsIoPacketCompressionFrameHeader::decode(&encoded).unwrap();
+
+        assert_eq!(header.algorithm, WsIoPacketCompressionAlgorithm::Zstd);
+        assert!(!header.compressed);
+        assert_eq!(encoded.len(), COMPRESSION_FRAME_HEADER_SIZE + input.len());
+        assert_eq!(&encoded[COMPRESSION_FRAME_HEADER_SIZE..], &input[..]);
+        assert_eq!(transformer.decode(encoded).await.unwrap(), input);
+    }
+
+    #[tokio::test]
+    async fn compressible_payload_uses_compressed_frame() {
+        let transformer = synchronous_zstd_transformer(0);
+        let input = Bytes::from(vec![b'a'; 16 * 1024]);
+
+        let encoded = transformer.encode(input.clone()).await.unwrap();
+        let header = WsIoPacketCompressionFrameHeader::decode(&encoded).unwrap();
+
+        assert_eq!(header.algorithm, WsIoPacketCompressionAlgorithm::Zstd);
+        assert!(header.compressed);
+        assert!(encoded.len() < COMPRESSION_FRAME_HEADER_SIZE + input.len());
+        assert_eq!(transformer.decode(encoded).await.unwrap(), input);
+    }
+
+    #[tokio::test]
+    async fn incompressible_payload_falls_back_to_raw_frame() {
+        let transformer = synchronous_zstd_transformer(0);
+        let mut state = 0x9e37_79b9_u32;
+        let input = Bytes::from(
+            (0..4096)
+                .map(|_| {
+                    state ^= state << 13;
+                    state ^= state >> 17;
+                    state ^= state << 5;
+                    (state >> 24) as u8
+                })
+                .collect::<Vec<_>>(),
+        );
+
+        let encoded = transformer.encode(input.clone()).await.unwrap();
+        let header = WsIoPacketCompressionFrameHeader::decode(&encoded).unwrap();
+
+        assert!(!header.compressed);
+        assert_eq!(&encoded[COMPRESSION_FRAME_HEADER_SIZE..], &input[..]);
+        assert_eq!(transformer.decode(encoded).await.unwrap(), input);
+    }
+
+    #[tokio::test]
+    async fn decode_rejects_payload_over_configured_limit() {
+        let encoder = WsIoPacketTransformer::zstd(synchronous_config());
+        let encoded = encoder.encode(Bytes::from(vec![b'a'; 64])).await.unwrap();
+        let decoder = WsIoPacketTransformer::zstd(WsIoPacketZstdTransformerConfig {
+            max_decompressed_size: 32,
+            ..synchronous_config()
+        });
+
+        let error = decoder.decode(encoded).await.unwrap_err();
+
+        assert!(error.to_string().contains("maximum decompressed size"));
+    }
+
+    #[tokio::test]
+    async fn decode_rejects_truncated_raw_payload() {
+        let transformer = synchronous_zstd_transformer(usize::MAX);
+        let input = Bytes::from_static(b"truncated packet");
+        let mut encoded = transformer.encode(input).await.unwrap().to_vec();
+        encoded.pop();
+
+        let error = transformer.decode(encoded.into()).await.unwrap_err();
+
+        assert!(error.to_string().contains("raw zstd transformer payload length"));
+    }
+
+    #[tokio::test]
+    async fn decode_rejects_unsupported_frame_version() {
+        let transformer = synchronous_zstd_transformer(usize::MAX);
+        let mut encoded = transformer
+            .encode(Bytes::from_static(b"versioned packet"))
+            .await
+            .unwrap()
+            .to_vec();
+
+        encoded[0] = 0;
+
+        let error = transformer.decode(encoded.into()).await.unwrap_err();
+
+        assert!(error.to_string().contains("compression frame version"));
+    }
+
+    #[tokio::test]
+    async fn decode_rejects_unsupported_compression_algorithm() {
+        let transformer = synchronous_zstd_transformer(usize::MAX);
+        let mut encoded = transformer
+            .encode(Bytes::from_static(b"algorithm packet"))
+            .await
+            .unwrap()
+            .to_vec();
+
+        encoded[0] = 0x20 | (2 << 1);
+
+        let error = transformer.decode(encoded.into()).await.unwrap_err();
+
+        assert!(error.to_string().contains("compression algorithm"));
     }
 }

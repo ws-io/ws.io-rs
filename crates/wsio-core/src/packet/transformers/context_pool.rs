@@ -32,3 +32,64 @@ impl<Context> WsIoPacketContextCache<Context> {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+
+    #[test]
+    fn reuses_contexts_and_respects_the_cache_limit() {
+        let cache = WsIoPacketContextCache::new();
+        let created = Cell::new(0);
+        let create = || {
+            created.set(created.get() + 1);
+            Ok(0)
+        };
+
+        assert_eq!(
+            cache
+                .with_context(1, create, |context| {
+                    *context += 1;
+                    Ok(*context)
+                })
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(
+            cache
+                .with_context(1, create, |context| {
+                    *context += 1;
+                    Ok(*context)
+                })
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(created.get(), 1);
+
+        assert_eq!(
+            cache
+                .with_context(0, create, |context| {
+                    *context += 1;
+                    Ok(*context)
+                })
+                .unwrap(),
+            3
+        );
+
+        assert_eq!(
+            cache
+                .with_context(1, create, |context| {
+                    *context += 1;
+                    Ok(*context)
+                })
+                .unwrap(),
+            1
+        );
+
+        assert_eq!(created.get(), 2);
+    }
+}

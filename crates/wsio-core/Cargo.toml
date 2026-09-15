@@ -295,3 +295,9 @@ name = "packet_codecs"
 path = "benches/packet_codecs.rs"
 harness = false
 required-features = []
+
+[[bench]]
+name = "packet_transformers"
+path = "benches/packet_transformers.rs"
+harness = false
+required-features = ["packet-transformer-zstd"]
