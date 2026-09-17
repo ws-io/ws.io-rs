@@ -52,7 +52,7 @@ impl WsIoServerNamespaceBuilder {
                 on_close_handler_timeout: runtime.config.on_close_handler_timeout,
                 on_connect_handler_timeout: runtime.config.on_connect_handler_timeout,
                 on_ready_handler: None,
-                packet_codec: runtime.config.packet_codec,
+                packet_codec: runtime.config.packet_codec.clone(),
                 packet_transformer: runtime.config.packet_transformer.clone(),
                 path: path.to_owned(),
                 websocket_config: runtime.config.websocket_config,

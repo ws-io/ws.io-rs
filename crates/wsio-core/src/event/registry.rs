@@ -34,7 +34,7 @@ use tokio_util::sync::CancellationToken;
 use crate::packet::codecs::WsIoPacketCodec;
 
 // Types
-type DataDecoder = fn(&[u8], WsIoPacketCodec) -> Result<Arc<dyn Any + Send + Sync>>;
+type DataDecoder = fn(&[u8], &WsIoPacketCodec) -> Result<Arc<dyn Any + Send + Sync>>;
 type Handler<C> = Arc<
     dyn Fn(Arc<C>, Arc<dyn Any + Send + Sync>) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>
         + Send
@@ -115,8 +115,6 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
             tracing::trace!(event, "dropping event packet without registered handlers");
             return Ok(());
         };
-
-        let packet_codec = *packet_codec;
 
         #[cfg(feature = "tracing")]
         let event_name = event.to_owned();
@@ -257,7 +255,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
 #[inline]
 fn decode_data_as_any_arc<D: DeserializeOwned + Send + Sync + 'static>(
     bytes: &[u8],
-    packet_codec: WsIoPacketCodec,
+    packet_codec: &WsIoPacketCodec,
 ) -> Result<Arc<dyn Any + Send + Sync>> {
     Ok(Arc::new(packet_codec.decode_data::<D>(bytes)?))
 }

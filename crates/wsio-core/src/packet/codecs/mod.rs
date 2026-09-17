@@ -1,5 +1,15 @@
+use std::{
+    fmt::{
+        Debug as FmtDebug,
+        Formatter,
+        Result as FmtResult,
+    },
+    sync::Arc,
+};
+
 use anyhow::Result;
 use bytes::Bytes;
+use erased_serde::deserialize;
 use serde::{
     Serialize,
     de::DeserializeOwned,
@@ -7,26 +17,44 @@ use serde::{
 
 #[cfg(feature = "packet-codec-cbor")]
 mod cbor;
+pub mod custom;
 mod msgpack;
 #[cfg(feature = "packet-codec-postcard")]
 mod postcard;
 
 #[cfg(feature = "packet-codec-cbor")]
 use self::cbor::WsIoPacketCborCodec;
-use self::msgpack::WsIoPacketMsgpackCodec;
 #[cfg(feature = "packet-codec-postcard")]
 use self::postcard::WsIoPacketPostcardCodec;
+use self::{
+    custom::WsIoPacketCustomCodec,
+    msgpack::WsIoPacketMsgpackCodec,
+};
 use super::WsIoPacket;
 
 // Enums
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub enum WsIoPacketCodec {
     #[cfg(feature = "packet-codec-cbor")]
     Cbor,
+    Custom(Arc<dyn WsIoPacketCustomCodec>),
     Msgpack,
 
     #[cfg(feature = "packet-codec-postcard")]
     Postcard,
+}
+
+impl FmtDebug for WsIoPacketCodec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            #[cfg(feature = "packet-codec-cbor")]
+            Self::Cbor => f.write_str("WsIoPacketCodec::Cbor"),
+            Self::Msgpack => f.write_str("WsIoPacketCodec::Msgpack"),
+            Self::Custom(_) => f.write_str("WsIoPacketCodec::Custom(<codec>)"),
+            #[cfg(feature = "packet-codec-postcard")]
+            Self::Postcard => f.write_str("WsIoPacketCodec::Postcard"),
+        }
+    }
 }
 
 impl WsIoPacketCodec {
@@ -35,6 +63,7 @@ impl WsIoPacketCodec {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec::decode(bytes),
+            Self::Custom(codec) => codec.decode(bytes),
             Self::Msgpack => WsIoPacketMsgpackCodec::decode(bytes),
 
             #[cfg(feature = "packet-codec-postcard")]
@@ -47,6 +76,10 @@ impl WsIoPacketCodec {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec::decode_data(bytes),
+            Self::Custom(codec) => {
+                let mut deserializer = codec.decode_data(bytes)?;
+                Ok(deserialize(&mut *deserializer)?)
+            },
             Self::Msgpack => WsIoPacketMsgpackCodec::decode_data(bytes),
 
             #[cfg(feature = "packet-codec-postcard")]
@@ -59,6 +92,7 @@ impl WsIoPacketCodec {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec::encode(packet),
+            Self::Custom(codec) => codec.encode(packet),
             Self::Msgpack => WsIoPacketMsgpackCodec::encode(packet),
 
             #[cfg(feature = "packet-codec-postcard")]
@@ -71,6 +105,7 @@ impl WsIoPacketCodec {
         match self {
             #[cfg(feature = "packet-codec-cbor")]
             Self::Cbor => WsIoPacketCborCodec::encode_data(data),
+            Self::Custom(codec) => codec.encode_data(data),
             Self::Msgpack => WsIoPacketMsgpackCodec::encode_data(data),
 
             #[cfg(feature = "packet-codec-postcard")]

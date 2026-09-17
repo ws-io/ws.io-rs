@@ -758,8 +758,12 @@ mod tests {
         assert_eq!(connection.state.get(), ConnectionState::Created);
 
         // Sending an init packet when the connection is merely `Created` (not yet `AwaitingInit`) should throw an error
-        let packet_codec = connection.namespace.config.packet_codec;
-        let encoded = packet_codec.encode(&WsIoPacket::new_init(None)).unwrap();
+        let encoded = connection
+            .namespace
+            .config
+            .packet_codec
+            .encode(&WsIoPacket::new_init(None))
+            .unwrap();
 
         // This simulates a manual client Init push before server starts the handshake buffer
         let result = connection.handle_incoming_packet(encoded).await;
@@ -778,10 +782,11 @@ mod tests {
         // Force the connection into the Ready state so it accepts Event packets
         connection.state.store(ConnectionState::Ready);
 
-        let packet_codec = connection.namespace.config.packet_codec;
-
         for key in [None, Some("")] {
-            let encoded = packet_codec
+            let encoded = connection
+                .namespace
+                .config
+                .packet_codec
                 .encode(&WsIoPacket::new(WsIoPacketType::Event, key, None))
                 .unwrap();
 
@@ -811,10 +816,12 @@ mod tests {
         });
 
         connection.start_event_dispatcher(event_queue_rx).await;
-        let packet_codec = connection.namespace.config.packet_codec;
         for payload in ["first", "second"] {
-            let packet_data = packet_codec.encode_data(&payload).unwrap();
-            let encoded_packet = packet_codec
+            let packet_data = connection.namespace.config.packet_codec.encode_data(&payload).unwrap();
+            let encoded_packet = connection
+                .namespace
+                .config
+                .packet_codec
                 .encode(&WsIoPacket::new_event("ordered", Some(packet_data)))
                 .unwrap();
 
