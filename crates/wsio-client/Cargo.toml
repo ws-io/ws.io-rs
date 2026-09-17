@@ -87,7 +87,7 @@ anyhow = "1.0.104"
 arc-swap = "1.9.2"
 bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
-kikiutils = { version = "0.11.3", features = ["atomic-enum-cell"] }
+kikiutils = { version = "0.12.0", features = ["atomic-enum-cell"] }
 num_enum = "0.7.6"
 serde = "1.0.229"
 tokio = { version = "1.53.1", features = ["macros", "rt", "sync", "time"] }
