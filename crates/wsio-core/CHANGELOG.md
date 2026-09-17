@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.14.0 - 2026-09-17T07:09:21Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.13.1...wsio-core-v0.14.0)
+
+### 🎨 Styles
+
+- make Arc clones explicit ([3cb00bb](https://github.com/ws-io/ws.io-rs/commit/3cb00bb707f066e2a1c07a13a8334c46f76ff4c6))
+
+### 🏡 Chore
+
+- upgrade deps ([2017b74](https://github.com/ws-io/ws.io-rs/commit/2017b74cf3ee0a5876acfbaafca95e5acd15c21e))
+
+### 🚀 Enhancements
+
+- *(core)* add dynamic custom packet codec ([0e9b073](https://github.com/ws-io/ws.io-rs/commit/0e9b073d6c2024e592117f4dde0d9b9d1ac41c21))
+
 ## 0.13.1 - 2026-09-15T18:51:44Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.13.0...wsio-core-v0.13.1)

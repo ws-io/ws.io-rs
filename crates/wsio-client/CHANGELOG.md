@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.2 - 2026-09-17T07:09:21Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.9.1...wsio-client-v0.9.2)
+
+### 🎨 Styles
+
+- make Arc clones explicit ([3cb00bb](https://github.com/ws-io/ws.io-rs/commit/3cb00bb707f066e2a1c07a13a8334c46f76ff4c6))
+
+### 🏡 Chore
+
+- upgrade deps ([2017b74](https://github.com/ws-io/ws.io-rs/commit/2017b74cf3ee0a5876acfbaafca95e5acd15c21e))
+
 ## 0.9.1 - 2026-09-15T18:51:44Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.9.0...wsio-client-v0.9.1)
