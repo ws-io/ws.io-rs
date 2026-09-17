@@ -22,6 +22,6 @@ impl<S> Layer<S> for WsIoServerLayer {
 
     #[inline]
     fn layer(&self, inner: S) -> Self::Service {
-        WsIoServerService::new(inner, self.runtime.clone())
+        WsIoServerService::new(inner, Arc::clone(&self.runtime))
     }
 }

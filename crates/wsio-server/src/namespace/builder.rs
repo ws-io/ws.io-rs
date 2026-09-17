@@ -177,8 +177,8 @@ impl WsIoServerNamespaceBuilder {
     ///
     /// Returns an error if the path is already registered.
     pub fn register(self) -> Result<Arc<WsIoServerNamespace>> {
-        let namespace = WsIoServerNamespace::new(self.config, self.runtime.clone());
-        self.runtime.insert_namespace(namespace.clone())?;
+        let namespace = WsIoServerNamespace::new(self.config, Arc::clone(&self.runtime));
+        self.runtime.insert_namespace(Arc::clone(&namespace))?;
         Ok(namespace)
     }
 
@@ -224,7 +224,7 @@ impl WsIoServerNamespaceBuilder {
     {
         let handler = Arc::new(handler);
         self.config.init_request_handler = Some(Box::new(move |connection, packet_codec| {
-            let handler = handler.clone();
+            let handler = Arc::clone(&handler);
             Box::pin(async move {
                 handler(connection)
                     .await?
@@ -248,7 +248,7 @@ impl WsIoServerNamespaceBuilder {
     {
         let handler = Arc::new(handler);
         self.config.init_response_handler = Some(Box::new(move |connection, bytes, packet_codec| {
-            let handler = handler.clone();
+            let handler = Arc::clone(&handler);
             Box::pin(async move {
                 handler(
                     connection,
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_namespace_builder_configuration() {
         let server = Arc::new(WsIoServer::builder().build());
-        let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
+        let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0))
             .broadcast_concurrency_limit(42)
             .http_request_upgrade_timeout(Duration::from_millis(750))
             .init_request_handler_timeout(Duration::from_secs(1))
@@ -323,7 +323,7 @@ mod tests {
     fn test_namespace_builder_inherits_and_overrides_packet_transformer() {
         let global_transformer = WsIoPacketTransformer::custom(Arc::new(TestPacketTransformer));
         let server = Arc::new(WsIoServer::builder().packet_transformer(global_transformer).build());
-        let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone());
+        let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0));
 
         assert_eq!(
             format!("{:?}", builder.config.packet_transformer),
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn test_namespace_builder_registers_lifecycle_handlers() {
         let server = Arc::new(WsIoServer::builder().build());
-        let builder = WsIoServerNamespaceBuilder::new("/custom", server.0.clone())
+        let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0))
             .on_connect(|_connection| async { Ok(()) })
             .on_ready(|_connection| async { Ok(()) })
             .with_middleware(|_connection| async { Ok(()) })
@@ -358,7 +358,7 @@ mod tests {
     fn test_namespace_duplicate_registration_fails() {
         let server = Arc::new(WsIoServer::builder().build());
 
-        let builder1 = WsIoServerNamespaceBuilder::new("/socket", server.0.clone());
+        let builder1 = WsIoServerNamespaceBuilder::new("/socket", Arc::clone(&server.0));
         let register1_result = builder1.register();
         assert!(
             register1_result.is_ok(),
@@ -366,7 +366,7 @@ mod tests {
         );
 
         // Attempting to register the same path should yield an Err
-        let builder2 = WsIoServerNamespaceBuilder::new("/socket", server.0.clone());
+        let builder2 = WsIoServerNamespaceBuilder::new("/socket", Arc::clone(&server.0));
         let register2_result = builder2.register();
         assert!(
             register2_result.is_err(),

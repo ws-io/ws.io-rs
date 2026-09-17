@@ -150,7 +150,7 @@ impl WsIoClientRuntime {
         self.cancel_token.store(Arc::new(CancellationToken::new()));
 
         // Create connection loop task
-        let runtime = self.clone();
+        let runtime = Arc::clone(self);
         *self.connection_loop_task.lock().await = Some(spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
                 if let Err(_err) = runtime.run_connection().await {
@@ -177,7 +177,7 @@ impl WsIoClientRuntime {
         }));
 
         // Create send event message task
-        let runtime = self.clone();
+        let runtime = Arc::clone(self);
         *self.send_event_message_task.lock().await = Some(spawn(async move {
             let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
             while let Some(message) = send_event_message_rx.recv().await {
@@ -185,14 +185,14 @@ impl WsIoClientRuntime {
                 tracing::trace!("dequeued client event message for delivery");
                 loop {
                     if let Some(session) = runtime.session.load().as_ref()
-                        && session.emit_event_message(message.clone()).await.is_ok()
+                        && session.emit_event_message(Arc::clone(&message)).await.is_ok()
                     {
                         break;
                     }
 
                     let notified = runtime.wake_send_event_message_task_notify.notified();
                     if let Some(session) = runtime.session.load().as_ref()
-                        && session.emit_event_message(message.clone()).await.is_ok()
+                        && session.emit_event_message(Arc::clone(&message)).await.is_ok()
                     {
                         break;
                     }
@@ -302,13 +302,13 @@ impl WsIoClientRuntime {
         tracing::debug!("WebSocket connection established");
 
         // Create session and init
-        let (session, mut message_rx, event_queue_rx) = WsIoClientSession::new(self.clone());
+        let (session, mut message_rx, event_queue_rx) = WsIoClientSession::new(Arc::clone(self));
         session.init().await;
         session.start_event_dispatcher(event_queue_rx).await;
 
         // Create read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
-        let session_clone = session.clone();
+        let session_clone = Arc::clone(&session);
         let mut read_ws_stream_task = spawn(async move {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
@@ -354,7 +354,7 @@ impl WsIoClientRuntime {
             }
         });
 
-        self.session.store(Some(session.clone()));
+        self.session.store(Some(Arc::clone(&session)));
 
         // Wait for any of the tasks to finish or canceled
         select! {
@@ -393,14 +393,14 @@ impl WsIoClientRuntime {
 
     // Protected methods
     pub(crate) async fn connect(self: &Arc<Self>) {
-        let runtime = self.clone();
+        let runtime = Arc::clone(self);
         self.connect_completion
             .wait_or_spawn(move || async move { runtime.connect_inner().await })
             .await;
     }
 
     pub(crate) async fn disconnect(self: &Arc<Self>) {
-        let runtime = self.clone();
+        let runtime = Arc::clone(self);
         self.disconnect_completion
             .wait_or_spawn(move || async move { runtime.disconnect_inner().await })
             .await;
@@ -540,11 +540,11 @@ mod tests {
     #[tokio::test]
     async fn disconnect_cancels_pending_request_modifier() {
         let modifier_entered = Arc::new(Notify::new());
-        let modifier_entered_for_callback = modifier_entered.clone();
+        let modifier_entered_for_callback = Arc::clone(&modifier_entered);
         let client = WsIoClient::builder("ws://127.0.0.1/socket")
             .unwrap()
             .request_modifier(move |_request| {
-                let modifier_entered = modifier_entered_for_callback.clone();
+                let modifier_entered = Arc::clone(&modifier_entered_for_callback);
                 async move {
                     modifier_entered.notify_one();
                     pending().await

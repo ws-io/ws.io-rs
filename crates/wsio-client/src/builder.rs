@@ -272,7 +272,7 @@ impl WsIoClientBuilder {
     {
         let handler = Arc::new(handler);
         self.config.init_handler = Some(Box::new(move |session, bytes, packet_codec| {
-            let handler = handler.clone();
+            let handler = Arc::clone(&handler);
             Box::pin(async move {
                 handler(session, bytes.map(|bytes| packet_codec.decode_data(bytes)).transpose()?)
                     .await?

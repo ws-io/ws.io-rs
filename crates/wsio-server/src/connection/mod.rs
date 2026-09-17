@@ -267,7 +267,7 @@ impl WsIoServerConnection {
         if let Some(init_response_handler) = &self.namespace.config.init_response_handler {
             match timeout(
                 self.namespace.config.init_response_handler_timeout,
-                init_response_handler(self.clone(), packet_data, &self.namespace.config.packet_codec),
+                init_response_handler(Arc::clone(self), packet_data, &self.namespace.config.packet_codec),
             )
             .await
             {
@@ -293,7 +293,7 @@ impl WsIoServerConnection {
         if let Some(middleware) = &self.namespace.config.middleware {
             match timeout(
                 self.namespace.config.middleware_execution_timeout,
-                middleware(self.clone()),
+                middleware(Arc::clone(self)),
             )
             .await
             {
@@ -315,7 +315,7 @@ impl WsIoServerConnection {
         if let Some(on_connect_handler) = &self.namespace.config.on_connect_handler {
             match timeout(
                 self.namespace.config.on_connect_handler_timeout,
-                on_connect_handler(self.clone()),
+                on_connect_handler(Arc::clone(self)),
             )
             .await
             {
@@ -344,7 +344,7 @@ impl WsIoServerConnection {
         // Invoke on_ready_handler if configured
         if let Some(on_ready_handler) = self.namespace.config.on_ready_handler.clone() {
             // Run handler asynchronously in a detached task
-            self.spawn_task(on_ready_handler(self.clone()));
+            self.spawn_task(on_ready_handler(Arc::clone(self)));
         }
 
         Ok(())
@@ -391,7 +391,7 @@ impl WsIoServerConnection {
         if let Some(on_close_handler) = self.on_close_handler.lock().await.take()
             && let Err(_err) = timeout(
                 self.namespace.config.on_close_handler_timeout,
-                on_close_handler(self.clone()),
+                on_close_handler(Arc::clone(self)),
             )
             .await
         {
@@ -474,7 +474,7 @@ impl WsIoServerConnection {
         let init_request_data = if let Some(init_request_handler) = &self.namespace.config.init_request_handler {
             match timeout(
                 self.namespace.config.init_request_handler_timeout,
-                init_request_handler(self.clone(), &self.namespace.config.packet_codec),
+                init_request_handler(Arc::clone(self), &self.namespace.config.packet_codec),
             )
             .await
             {
@@ -499,7 +499,7 @@ impl WsIoServerConnection {
             .try_transition(ConnectionState::Created, ConnectionState::AwaitingInit)?;
 
         // Spawn init-response-timeout watchdog to close connection if init not received in time
-        let connection = self.clone();
+        let connection = Arc::clone(self);
         *self.init_timeout_task.lock().await = Some(spawn(async move {
             sleep(connection.namespace.config.init_response_timeout).await;
             if connection.state.is(ConnectionState::AwaitingInit) {
@@ -523,7 +523,7 @@ impl WsIoServerConnection {
 
     pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: Receiver<WsIoPacket>) {
         let cancel_token = self.cancel_token();
-        let connection = self.clone();
+        let connection = Arc::clone(self);
         *self.event_dispatcher_task.lock().await = Some(spawn(async move {
             let dispatcher = async {
                 loop {
@@ -544,7 +544,7 @@ impl WsIoServerConnection {
                     if let Err(_err) = connection
                         .event_registry
                         .dispatch_event_packet(
-                            connection.clone(),
+                            Arc::clone(&connection),
                             event,
                             &connection.namespace.config.packet_codec,
                             event_packet.data,
@@ -654,7 +654,7 @@ impl WsIoServerConnection {
 
     #[inline]
     pub fn namespace(&self) -> Arc<WsIoServerNamespace> {
-        self.namespace.clone()
+        Arc::clone(&self.namespace)
     }
 
     #[inline]

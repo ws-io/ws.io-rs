@@ -178,7 +178,7 @@ impl WsIoServerRuntime {
 
     #[inline]
     pub(crate) fn new_namespace_builder(self: &Arc<Self>, path: &str) -> WsIoServerNamespaceBuilder {
-        WsIoServerNamespaceBuilder::new(path, self.clone())
+        WsIoServerNamespaceBuilder::new(path, Arc::clone(self))
     }
 
     #[inline]
@@ -207,7 +207,7 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn shutdown(self: &Arc<Self>) {
-        let runtime = self.clone();
+        let runtime = Arc::clone(self);
         self.shutdown_completion
             .wait_or_spawn(move || async move { runtime.shutdown_inner().await })
             .await;

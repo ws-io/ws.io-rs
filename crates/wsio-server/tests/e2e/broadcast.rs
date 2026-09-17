@@ -27,7 +27,7 @@ use super::{
 
 fn register_unit_counter(client: &WsIoClient, event: &str, counter: Arc<AtomicUsize>) {
     client.on(event, move |_ctx, _data: Arc<()>| {
-        let counter = counter.clone();
+        let counter = Arc::clone(&counter);
         async move {
             counter.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -86,16 +86,16 @@ async fn test_e2e_broadcast_and_rooms() {
     let c_received_room = Arc::new(AtomicUsize::new(0));
 
     // Register handlers
-    register_unit_counter(&client_a, "broadcast_msg", a_received_broadcast.clone());
-    register_unit_counter(&client_b, "broadcast_msg", b_received_broadcast.clone());
-    register_unit_counter(&client_c, "broadcast_msg", c_received_broadcast.clone());
-    register_unit_counter(&client_a, "room_msg", a_received_room.clone());
-    register_unit_counter(&client_b, "room_msg", b_received_room.clone());
-    register_unit_counter(&client_c, "room_msg", c_received_room.clone());
+    register_unit_counter(&client_a, "broadcast_msg", Arc::clone(&a_received_broadcast));
+    register_unit_counter(&client_b, "broadcast_msg", Arc::clone(&b_received_broadcast));
+    register_unit_counter(&client_c, "broadcast_msg", Arc::clone(&c_received_broadcast));
+    register_unit_counter(&client_a, "room_msg", Arc::clone(&a_received_room));
+    register_unit_counter(&client_b, "room_msg", Arc::clone(&b_received_room));
+    register_unit_counter(&client_c, "room_msg", Arc::clone(&c_received_room));
 
     let joined = Arc::new(AtomicUsize::new(0));
-    register_unit_counter(&client_a, "joined", joined.clone());
-    register_unit_counter(&client_b, "joined", joined.clone());
+    register_unit_counter(&client_a, "joined", Arc::clone(&joined));
+    register_unit_counter(&client_b, "joined", Arc::clone(&joined));
 
     // A and B join "gaming" room
     client_a.emit("join_room", Some(&"gaming")).await.unwrap();
@@ -143,11 +143,11 @@ async fn test_e2e_emit_with_data() {
     let server_namespace = register_test_namespace(&server);
 
     let received = Arc::new(AtomicUsize::new(0));
-    let received_clone = received.clone();
+    let received_clone = Arc::clone(&received);
 
     let client = create_connected_client(&ws_url).await;
     client.on("data_event", move |_ctx, data: Arc<Payload>| {
-        let count = received_clone.clone();
+        let count = Arc::clone(&received_clone);
         async move {
             assert_eq!(data.message, "hello");
             assert_eq!(data.count, 42);
@@ -217,12 +217,12 @@ async fn test_e2e_on_ready_handler() {
     let (server_task, server, ws_url) = setup_server().await;
 
     let ready_called = Arc::new(AtomicUsize::new(0));
-    let ready_called_clone = ready_called.clone();
+    let ready_called_clone = Arc::clone(&ready_called);
 
     server
         .new_namespace_builder(TEST_NAMESPACE)
         .on_ready(move |_ctx| {
-            let c = ready_called_clone.clone();
+            let c = Arc::clone(&ready_called_clone);
             async move {
                 c.fetch_add(1, Ordering::SeqCst);
                 Ok(())
@@ -244,15 +244,15 @@ async fn test_e2e_on_close_handler() {
     let (server_task, server, ws_url) = setup_server().await;
 
     let close_called = Arc::new(AtomicUsize::new(0));
-    let close_called_clone = close_called.clone();
+    let close_called_clone = Arc::clone(&close_called);
 
     server
         .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(move |ctx| {
-            let c = close_called_clone.clone();
+            let c = Arc::clone(&close_called_clone);
             async move {
                 ctx.on_close(move |_ctx| {
-                    let c = c.clone();
+                    let c = Arc::clone(&c);
                     async move {
                         c.fetch_add(1, Ordering::SeqCst);
                         Ok(())

@@ -139,7 +139,7 @@ impl WsIoServerNamespace {
 
         // Create connection
         let (connection, mut message_rx, event_queue_rx) =
-            WsIoServerConnection::new(headers, self.clone(), request_uri);
+            WsIoServerConnection::new(headers, Arc::clone(self), request_uri);
 
         connection.start_event_dispatcher(event_queue_rx).await;
 
@@ -152,7 +152,7 @@ impl WsIoServerNamespace {
 
         // Split ws stream and spawn read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
-        let connection_clone = connection.clone();
+        let connection_clone = Arc::clone(&connection);
         let mut read_ws_stream_task = spawn(async move {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
@@ -299,7 +299,7 @@ impl WsIoServerNamespace {
             "spawning WebSocket upgrade task"
         );
 
-        let namespace = self.clone();
+        let namespace = Arc::clone(self);
         self.connection_task_tracker.spawn(async move {
             match timeout(namespace.config.http_request_upgrade_timeout, on_upgrade).await {
                 Ok(Ok(upgraded)) => {
@@ -328,7 +328,7 @@ impl WsIoServerNamespace {
 
     #[inline]
     pub(crate) fn insert_connection(&self, connection: &Arc<WsIoServerConnection>) {
-        self.connections.insert(connection.id(), connection.clone());
+        self.connections.insert(connection.id(), Arc::clone(connection));
         self.runtime.insert_connection_id(connection.id());
         self.connection_ids.rcu(|old_connection_ids| {
             let mut new_connection_ids = (**old_connection_ids).clone();
@@ -359,7 +359,9 @@ impl WsIoServerNamespace {
 
     // Public methods
     pub async fn close_all(self: &Arc<Self>) {
-        WsIoServerNamespaceBroadcastOperator::new(self.clone()).close().await;
+        WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self))
+            .close()
+            .await;
     }
 
     #[inline]
@@ -368,13 +370,13 @@ impl WsIoServerNamespace {
     }
 
     pub async fn disconnect_all(self: &Arc<Self>) -> Result<()> {
-        WsIoServerNamespaceBroadcastOperator::new(self.clone())
+        WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self))
             .disconnect()
             .await
     }
 
     pub async fn emit<D: Serialize>(self: &Arc<Self>, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
-        WsIoServerNamespaceBroadcastOperator::new(self.clone())
+        WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self))
             .emit(event, data)
             .await
     }
@@ -384,7 +386,7 @@ impl WsIoServerNamespace {
         self: &Arc<Self>,
         room_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
-        WsIoServerNamespaceBroadcastOperator::new(self.clone()).except(room_names)
+        WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self)).except(room_names)
     }
 
     #[inline]
@@ -394,11 +396,11 @@ impl WsIoServerNamespace {
 
     #[inline]
     pub fn server(&self) -> WsIoServer {
-        WsIoServer(self.runtime.clone())
+        WsIoServer(Arc::clone(&self.runtime))
     }
 
     pub async fn shutdown(self: &Arc<Self>) {
-        let namespace = self.clone();
+        let namespace = Arc::clone(self);
         self.shutdown_completion
             .wait_or_spawn(move || async move { namespace.shutdown_inner().await })
             .await;
@@ -409,7 +411,7 @@ impl WsIoServerNamespace {
         self: &Arc<Self>,
         room_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> WsIoServerNamespaceBroadcastOperator {
-        WsIoServerNamespaceBroadcastOperator::new(self.clone()).to(room_names)
+        WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self)).to(room_names)
     }
 }
 
@@ -475,7 +477,7 @@ mod tests {
     #[tokio::test]
     async fn test_namespace_shutdown_idempotent() {
         let namespace = create_test_namespace();
-        namespace.clone().shutdown().await;
+        Arc::clone(&namespace).shutdown().await;
         // Shutting down again should be safe
         namespace.shutdown().await;
     }
@@ -487,7 +489,7 @@ mod tests {
             sleep(Duration::from_millis(10)).await;
         });
 
-        let first = namespace.clone();
+        let first = Arc::clone(&namespace);
         let first_task = spawn(async move { first.shutdown().await });
         while !namespace.status.is(NamespaceStatus::Stopping) {
             yield_now().await;
@@ -507,7 +509,7 @@ mod tests {
     async fn test_broadcast_operator_emit_requires_running() {
         let namespace = create_test_namespace();
         // Shutdown to make status invalid
-        namespace.clone().shutdown().await;
+        Arc::clone(&namespace).shutdown().await;
 
         let err = namespace
             .to(["room1"])

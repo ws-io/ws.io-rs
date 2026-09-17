@@ -64,7 +64,7 @@ impl WsIoPacketZstdTransformer {
 
         if self.config.should_use_blocking(payload.len().max(original_length)) && Handle::try_current().is_ok() {
             let permit = self.context_pool.acquire_blocking_permit().await?;
-            let context_pool = self.context_pool.clone();
+            let context_pool = Arc::clone(&self.context_pool);
             return spawn_blocking(move || {
                 let result = context_pool.decompress(&payload, original_length);
                 drop(permit);
@@ -92,7 +92,7 @@ impl WsIoPacketZstdTransformer {
 
         if self.config.should_use_blocking(bytes.len()) && Handle::try_current().is_ok() {
             let permit = self.context_pool.acquire_blocking_permit().await?;
-            let context_pool = self.context_pool.clone();
+            let context_pool = Arc::clone(&self.context_pool);
             return spawn_blocking(move || {
                 let result = context_pool.compress(&bytes, raw_header);
                 drop(permit);

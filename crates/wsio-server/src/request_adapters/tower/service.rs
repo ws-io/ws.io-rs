@@ -51,7 +51,7 @@ where
     #[inline]
     fn call(&mut self, mut request: Request<ReqBody>) -> Self::Future {
         if request.uri().path() == self.runtime.config.request_path {
-            let runtime = self.runtime.clone();
+            let runtime = Arc::clone(&self.runtime);
             Box::pin(async move { dispatch_request(&mut request, &runtime) })
         } else {
             let inner = self.inner.clone();

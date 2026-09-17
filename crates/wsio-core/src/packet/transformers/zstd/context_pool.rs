@@ -54,7 +54,7 @@ impl WsIoPacketZstdContextPool {
 
     #[inline]
     pub(super) async fn acquire_blocking_permit(&self) -> Result<OwnedSemaphorePermit> {
-        Ok(self.blocking_semaphore.clone().acquire_owned().await?)
+        Ok(Arc::clone(&self.blocking_semaphore).acquire_owned().await?)
     }
 
     #[inline]

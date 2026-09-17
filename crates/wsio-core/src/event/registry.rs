@@ -141,8 +141,8 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
 
         let mut handler_tasks = JoinSet::new();
         for handler in handlers {
-            let ctx = ctx.clone();
-            let data = data.clone();
+            let ctx = Arc::clone(&ctx);
+            let data = Arc::clone(&data);
             let cancel_token = cancel_token.clone();
             handler_tasks.spawn(async move {
                 select! {
@@ -346,7 +346,13 @@ mod tests {
         let second_packet = packet_codec.encode_data(&"second").unwrap();
 
         registry
-            .dispatch_event_packet(ctx.clone(), "ordered", &packet_codec, Some(first_packet), &cancel_token)
+            .dispatch_event_packet(
+                Arc::clone(&ctx),
+                "ordered",
+                &packet_codec,
+                Some(first_packet),
+                &cancel_token,
+            )
             .await
             .expect("event dispatch should succeed");
 

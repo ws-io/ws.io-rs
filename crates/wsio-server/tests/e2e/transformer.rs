@@ -57,18 +57,20 @@ impl WsIoPacketCustomTransformer for CountingPrefixTransformer {
 #[tokio::test]
 async fn test_e2e_custom_packet_transformer_round_trip() {
     let transformer = Arc::new(CountingPrefixTransformer::default());
-    let packet_transformer = WsIoPacketTransformer::custom(transformer.clone());
+    let transformer_for_codec = Arc::clone(&transformer);
+    let transformer_for_codec: Arc<dyn WsIoPacketCustomTransformer> = transformer_for_codec;
+    let packet_transformer = WsIoPacketTransformer::custom(transformer_for_codec);
     let (server_task, server, ws_url) = setup_server_with_transformer(packet_transformer.clone()).await;
 
     let server_received = Arc::new(AtomicUsize::new(0));
-    let server_received_clone = server_received.clone();
+    let server_received_clone = Arc::clone(&server_received);
     let server_namespace = server
         .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(move |connection| {
-            let server_received = server_received_clone.clone();
+            let server_received = Arc::clone(&server_received_clone);
             async move {
                 connection.on("client_event", move |_ctx, _data: Arc<()>| {
-                    let server_received = server_received.clone();
+                    let server_received = Arc::clone(&server_received);
                     async move {
                         server_received.fetch_add(1, Ordering::SeqCst);
                         Ok(())
@@ -84,9 +86,9 @@ async fn test_e2e_custom_packet_transformer_round_trip() {
     let client = create_connected_client_with_transformer(&ws_url, packet_transformer).await;
 
     let client_received = Arc::new(AtomicUsize::new(0));
-    let client_received_clone = client_received.clone();
+    let client_received_clone = Arc::clone(&client_received);
     client.on("server_event", move |_ctx, _data: Arc<()>| {
-        let client_received = client_received_clone.clone();
+        let client_received = Arc::clone(&client_received_clone);
         async move {
             client_received.fetch_add(1, Ordering::SeqCst);
             Ok(())

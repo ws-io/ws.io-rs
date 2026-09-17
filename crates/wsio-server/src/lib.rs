@@ -58,7 +58,7 @@ impl WsIoServer {
 
     #[cfg(feature = "tower")]
     pub fn layer(&self) -> WsIoServerLayer {
-        WsIoServerLayer::new(self.0.clone())
+        WsIoServerLayer::new(Arc::clone(&self.0))
     }
 
     #[inline]

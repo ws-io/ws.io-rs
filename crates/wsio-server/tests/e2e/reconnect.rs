@@ -28,14 +28,14 @@ async fn test_e2e_client_reconnect() {
 
     // Register the default test namespace.
     let survivor_msg_count = Arc::new(AtomicUsize::new(0));
-    let survivor_msg_count_clone = survivor_msg_count.clone();
+    let survivor_msg_count_clone = Arc::clone(&survivor_msg_count);
     server
         .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(move |ctx| {
-            let survivor_msg_count_clone = survivor_msg_count_clone.clone();
+            let survivor_msg_count_clone = Arc::clone(&survivor_msg_count_clone);
             async move {
                 ctx.on("survivor_msg", move |_ctx, _data: Arc<()>| {
-                    let count = survivor_msg_count_clone.clone();
+                    let count = Arc::clone(&survivor_msg_count_clone);
                     async move {
                         count.fetch_add(1, Ordering::SeqCst);
                         Ok(())

@@ -30,7 +30,7 @@ impl WsIoLifecycleCompletionSlot {
                 let token = CancellationToken::new();
                 *token_slot = Some(token.clone());
 
-                let slot = self.clone();
+                let slot = Arc::clone(self);
                 let completion_token = token.clone();
                 drop(spawn(async move {
                     operation().await;

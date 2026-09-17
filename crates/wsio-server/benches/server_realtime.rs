@@ -82,9 +82,9 @@ async fn wait_for_client_ready(client: &WsIoClient) {
 
 fn register_ack_counter(client: &WsIoClient, acks: &Arc<Semaphore>) {
     for event in ACK_EVENTS {
-        let acks = acks.clone();
+        let acks = Arc::clone(acks);
         client.on(event, move |_session, _data: Arc<()>| {
-            let acks = acks.clone();
+            let acks = Arc::clone(&acks);
             async move {
                 acks.add_permits(1);
                 Ok(())

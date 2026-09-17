@@ -114,7 +114,7 @@ impl WsIoClientSession {
     fn handle_disconnect_packet(&self) {
         #[cfg(feature = "tracing")]
         tracing::debug!("received server disconnect packet");
-        let runtime = self.runtime.clone();
+        let runtime = Arc::clone(&self.runtime);
         spawn(async move { runtime.disconnect().await });
     }
 
@@ -156,7 +156,7 @@ impl WsIoClientSession {
         let response_data = if let Some(init_handler) = &self.runtime.config.init_handler {
             match timeout(
                 self.runtime.config.init_handler_timeout,
-                init_handler(self.clone(), packet_data, &self.runtime.config.packet_codec),
+                init_handler(Arc::clone(self), packet_data, &self.runtime.config.packet_codec),
             )
             .await
             {
@@ -176,7 +176,7 @@ impl WsIoClientSession {
             .try_transition(SessionState::Initiating, SessionState::AwaitingReady)?;
 
         // Spawn ready-timeout watchdog to close session if Ready is not received in time
-        let session = self.clone();
+        let session = Arc::clone(self);
         *self.ready_timeout_task.lock().await = Some(spawn(async move {
             sleep(session.runtime.config.ready_packet_timeout).await;
             if session.state.is(SessionState::AwaitingReady) {
@@ -213,7 +213,7 @@ impl WsIoClientSession {
         // Invoke on_session_ready_handler if configured
         if let Some(on_session_ready_handler) = self.runtime.config.on_session_ready_handler.clone() {
             // Run handler asynchronously in a detached task
-            self.spawn_task(on_session_ready_handler(self.clone()));
+            self.spawn_task(on_session_ready_handler(Arc::clone(self)));
         }
 
         Ok(())
@@ -254,7 +254,7 @@ impl WsIoClientSession {
         if let Some(on_session_close_handler) = &self.runtime.config.on_session_close_handler
             && let Err(_err) = timeout(
                 self.runtime.config.on_session_close_handler_timeout,
-                on_session_close_handler(self.clone()),
+                on_session_close_handler(Arc::clone(self)),
             )
             .await
         {
@@ -332,7 +332,7 @@ impl WsIoClientSession {
         self.state.store(SessionState::AwaitingInit);
         #[cfg(feature = "tracing")]
         tracing::debug!("client session awaiting server init packet");
-        let session = self.clone();
+        let session = Arc::clone(self);
 
         // Create init-timeout watchdog to close session if init not received in time
         *self.init_timeout_task.lock().await = Some(spawn(async move {
@@ -345,7 +345,7 @@ impl WsIoClientSession {
         }));
 
         // Create ping task to send 1-byte heartbeat frame to keep the connection alive
-        let session = self.clone();
+        let session = Arc::clone(self);
         *self.ping_task.lock().await = Some(spawn(async move {
             loop {
                 sleep(session.runtime.config.ping_interval).await;
@@ -360,7 +360,7 @@ impl WsIoClientSession {
 
     pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: Receiver<WsIoPacket>) {
         let cancel_token = self.cancel_token();
-        let session = self.clone();
+        let session = Arc::clone(self);
         *self.event_dispatcher_task.lock().await = Some(spawn(async move {
             let dispatcher = async {
                 loop {
@@ -382,7 +382,7 @@ impl WsIoClientSession {
                         .runtime
                         .event_registry
                         .dispatch_event_packet(
-                            session.clone(),
+                            Arc::clone(&session),
                             event,
                             &session.runtime.config.packet_codec,
                             event_packet.data,
@@ -409,7 +409,7 @@ impl WsIoClientSession {
     // Public methods
     #[inline]
     pub fn client(&self) -> WsIoClient {
-        WsIoClient(self.runtime.clone())
+        WsIoClient(Arc::clone(&self.runtime))
     }
 
     #[inline]

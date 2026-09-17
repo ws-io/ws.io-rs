@@ -46,7 +46,7 @@ async fn test_e2e_ping_pong() {
     let tx = Arc::new(Mutex::new(Some(tx)));
 
     client.on("pong", move |_ctx, _data: Arc<()>| {
-        let tx = tx.clone();
+        let tx = Arc::clone(&tx);
         async move {
             if let Some(sender) = tx.lock().await.take() {
                 let _ = sender.send(());

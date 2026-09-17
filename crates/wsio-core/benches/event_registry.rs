@@ -63,7 +63,7 @@ fn bench_event_dispatch(criterion: &mut Criterion) {
             |bencher, _| {
                 bencher.iter(|| {
                     let _ = runtime.block_on(registry.dispatch_event_packet(
-                        black_box(ctx.clone()),
+                        black_box(Arc::clone(&ctx)),
                         black_box(EVENT_NAME),
                         black_box(&packet_codec),
                         black_box(Some(packet_data.clone())),

@@ -59,7 +59,7 @@ impl WsIoServerNamespaceBroadcastOperator {
                     self.namespace
                         .connections
                         .get(&target_connection_id)
-                        .map(|entry| entry.value().clone()),
+                        .map(|entry| Arc::clone(entry.value())),
                 )
             })
             .for_each_concurrent(self.namespace.config.broadcast_concurrency_limit, |connection| async {
@@ -136,7 +136,7 @@ impl WsIoServerNamespaceBroadcastOperator {
             .await?;
 
         self.for_each_target_connections(move |connection| {
-            let message = message.clone();
+            let message = Arc::clone(&message);
             async move { connection.send_message(message).await }
         })
         .await;
@@ -168,7 +168,7 @@ impl WsIoServerNamespaceBroadcastOperator {
             .await?;
 
         self.for_each_target_connections(move |connection| {
-            let message = message.clone();
+            let message = Arc::clone(&message);
             async move { connection.emit_event_message(message).await }
         })
         .await;
