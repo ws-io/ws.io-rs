@@ -21,6 +21,10 @@ Cargo.lock
 
 ### Other ###
 
+# Caches and temps
+.cache/
+.temp/
+
 # Local AI agent and code-indexing files
 .omo/
 .omx/
@@ -31,6 +35,9 @@ CLAUDE.local.md
 .serena/cache/
 .serena/project.local.yml
 repomix-output.*
+
+# Local browsers
+.playwright-mcp/
 
 # Test-related files
 coverage/
