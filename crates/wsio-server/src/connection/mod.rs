@@ -333,7 +333,9 @@ impl WsIoServerConnection {
             .try_transition(ConnectionState::Activating, ConnectionState::Ready)?;
 
         // Insert connection into namespace
-        self.namespace.insert_connection(self);
+        if !self.namespace.insert_connection(self) {
+            bail!("Cannot initialize connection while namespace is shutting down");
+        }
 
         #[cfg(feature = "tracing")]
         tracing::debug!(connection_id = self.id, "server connection is ready");

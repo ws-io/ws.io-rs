@@ -327,7 +327,11 @@ impl WsIoServerNamespace {
     }
 
     #[inline]
-    pub(crate) fn insert_connection(&self, connection: &Arc<WsIoServerConnection>) {
+    pub(crate) fn insert_connection(&self, connection: &Arc<WsIoServerConnection>) -> bool {
+        if !self.status.is(NamespaceStatus::Running) {
+            return false;
+        }
+
         self.connections.insert(connection.id(), Arc::clone(connection));
         self.runtime.insert_connection_id(connection.id());
         self.connection_ids.rcu(|old_connection_ids| {
@@ -335,6 +339,15 @@ impl WsIoServerNamespace {
             new_connection_ids.insert(connection.id());
             new_connection_ids
         });
+
+        // Shutdown may have taken its close_all() snapshot while this connection
+        // was being registered. Remove it and let initialization close it if so.
+        if self.status.is(NamespaceStatus::Running) {
+            true
+        } else {
+            self.remove_connection(connection.id());
+            false
+        }
     }
 
     #[inline]
