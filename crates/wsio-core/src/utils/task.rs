@@ -18,7 +18,7 @@ mod tests {
 
     use tokio::{
         spawn,
-        sync::oneshot::channel,
+        sync::oneshot,
         time::timeout,
     };
 
@@ -26,8 +26,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_abort_locked_task() {
-        let (started_tx, started_rx) = channel();
-        let (dropped_tx, dropped_rx) = channel::<()>();
+        let (started_tx, started_rx) = oneshot::channel();
+        let (dropped_tx, dropped_rx) = oneshot::channel::<()>();
         let task = Mutex::new(Some(spawn(async move {
             let _drop_signal = dropped_tx;
             let _ = started_tx.send(());

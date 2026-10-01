@@ -6,7 +6,7 @@ use std::{
 use tokio::{
     sync::{
         Mutex,
-        oneshot::channel,
+        oneshot,
     },
     time::timeout,
 };
@@ -42,7 +42,7 @@ async fn test_e2e_ping_pong() {
     // 2. Setup Client
     let client = WsIoClient::builder(ws_url.as_str()).unwrap().build();
 
-    let (tx, rx) = channel();
+    let (tx, rx) = oneshot::channel();
     let tx = Arc::new(Mutex::new(Some(tx)));
 
     client.on("pong", move |_ctx, _data: Arc<()>| {

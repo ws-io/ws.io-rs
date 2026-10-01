@@ -265,7 +265,7 @@ mod tests {
     use std::time::Duration;
 
     use tokio::{
-        sync::mpsc::unbounded_channel,
+        sync::mpsc,
         time::{
             sleep,
             timeout,
@@ -284,7 +284,7 @@ mod tests {
 
         let ctx = Arc::new(DummyConnection);
 
-        let (handled_tx, mut handled_rx) = unbounded_channel();
+        let (handled_tx, mut handled_rx) = mpsc::unbounded_channel();
         let first_handler_tx = handled_tx.clone();
 
         registry.on("ping", move |_ctx, payload: Arc<String>| {
@@ -326,7 +326,7 @@ mod tests {
         let registry = WsIoEventRegistry::<DummyConnection>::new();
         let cancel_token = CancellationToken::new();
         let packet_codec = WsIoPacketCodec::Msgpack;
-        let (handled_tx, mut handled_rx) = unbounded_channel();
+        let (handled_tx, mut handled_rx) = mpsc::unbounded_channel();
 
         registry.on("ordered", move |_ctx, payload: Arc<String>| {
             let handled_tx = handled_tx.clone();

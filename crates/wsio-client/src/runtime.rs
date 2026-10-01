@@ -30,11 +30,7 @@ use tokio::{
     sync::{
         Mutex,
         Notify,
-        mpsc::{
-            Receiver,
-            Sender,
-            channel,
-        },
+        mpsc,
     },
     task::JoinHandle,
     time::{
@@ -90,9 +86,9 @@ pub(crate) struct WsIoClientRuntime {
     disconnect_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession>,
     lifecycle_lock: Mutex<()>,
-    send_event_message_rx: Mutex<Receiver<Arc<Message>>>,
+    send_event_message_rx: Mutex<mpsc::Receiver<Arc<Message>>>,
     send_event_message_task: Mutex<Option<JoinHandle<()>>>,
-    send_event_message_tx: Sender<Arc<Message>>,
+    send_event_message_tx: mpsc::Sender<Arc<Message>>,
     session: ArcSwapOption<WsIoClientSession>,
     status: AtomicEnumCell<RuntimeStatus>,
     pub(crate) wake_send_event_message_task_notify: Notify,
@@ -108,7 +104,7 @@ impl TaskSpawner for WsIoClientRuntime {
 impl WsIoClientRuntime {
     pub(crate) fn new(config: WsIoClientConfig, connect_url: Url) -> Arc<Self> {
         let channel_capacity = channel_capacity_from_websocket_config(&config.websocket_config);
-        let (send_event_message_tx, send_event_message_rx) = channel(channel_capacity);
+        let (send_event_message_tx, send_event_message_rx) = mpsc::channel(channel_capacity);
         Arc::new(Self {
             cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
             config,

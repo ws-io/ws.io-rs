@@ -23,11 +23,7 @@ use tokio::{
     spawn,
     sync::{
         Mutex,
-        mpsc::{
-            Receiver,
-            Sender,
-            channel,
-        },
+        mpsc,
     },
     task::JoinHandle,
     time::{
@@ -69,9 +65,9 @@ enum SessionState {
 pub struct WsIoClientSession {
     cancel_token: CancellationToken,
     event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
-    event_queue_tx: Sender<WsIoPacket>,
+    event_queue_tx: mpsc::Sender<WsIoPacket>,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
-    message_tx: Sender<Arc<Message>>,
+    message_tx: mpsc::Sender<Arc<Message>>,
     ping_task: Mutex<Option<JoinHandle<()>>>,
     ready_timeout_task: Mutex<Option<JoinHandle<()>>>,
     runtime: Arc<WsIoClientRuntime>,
@@ -87,10 +83,12 @@ impl TaskSpawner for WsIoClientSession {
 
 impl WsIoClientSession {
     #[inline]
-    pub(crate) fn new(runtime: Arc<WsIoClientRuntime>) -> (Arc<Self>, Receiver<Arc<Message>>, Receiver<WsIoPacket>) {
+    pub(crate) fn new(
+        runtime: Arc<WsIoClientRuntime>,
+    ) -> (Arc<Self>, mpsc::Receiver<Arc<Message>>, mpsc::Receiver<WsIoPacket>) {
         let channel_capacity = channel_capacity_from_websocket_config(&runtime.config.websocket_config);
-        let (event_queue_tx, event_queue_rx) = channel(channel_capacity);
-        let (message_tx, message_rx) = channel(channel_capacity);
+        let (event_queue_tx, event_queue_rx) = mpsc::channel(channel_capacity);
+        let (message_tx, message_rx) = mpsc::channel(channel_capacity);
 
         (
             Arc::new(Self {
@@ -363,7 +361,7 @@ impl WsIoClientSession {
         }));
     }
 
-    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: Receiver<WsIoPacket>) {
+    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: mpsc::Receiver<WsIoPacket>) {
         let cancel_token = self.cancel_token();
         let session = Arc::clone(self);
         *self.event_dispatcher_task.lock().await = Some(spawn(async move {
@@ -438,8 +436,8 @@ mod tests {
     };
 
     use tokio::sync::{
-        mpsc::unbounded_channel,
-        oneshot::channel,
+        mpsc,
+        oneshot,
     };
 
     use super::*;
@@ -449,8 +447,8 @@ mod tests {
         let client = WsIoClient::builder("ws://localhost/socket").unwrap().build();
         let (session, _message_rx, event_queue_rx) = WsIoClientSession::new(Arc::clone(&client.0));
         session.state.store(SessionState::Ready);
-        let (started_tx, mut started_rx) = unbounded_channel();
-        let (dropped_tx, dropped_rx) = channel::<()>();
+        let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+        let (dropped_tx, dropped_rx) = oneshot::channel::<()>();
         let dropped_tx = Arc::new(Mutex::new(Some(dropped_tx)));
         client.on("event", move |_session, _data: Arc<()>| {
             let started_tx = started_tx.clone();

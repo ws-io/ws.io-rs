@@ -43,11 +43,7 @@ use tokio::{
     spawn,
     sync::{
         Mutex,
-        mpsc::{
-            Receiver,
-            Sender,
-            channel,
-        },
+        mpsc,
     },
     task::JoinHandle,
     time::{
@@ -99,7 +95,7 @@ enum ConnectionState {
 pub struct WsIoServerConnection {
     cancel_token: CancellationToken,
     event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
-    event_queue_tx: Sender<WsIoPacket>,
+    event_queue_tx: mpsc::Sender<WsIoPacket>,
     event_registry: WsIoEventRegistry<WsIoServerConnection>,
     #[cfg(feature = "connection-extensions")]
     extensions: ConnectionExtensions,
@@ -107,7 +103,7 @@ pub struct WsIoServerConnection {
     id: u64,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
     joined_rooms: FxDashSet<String>,
-    message_tx: Sender<Arc<Message>>,
+    message_tx: mpsc::Sender<Arc<Message>>,
     namespace: Arc<WsIoServerNamespace>,
     on_close_handler: Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
     request_uri: Uri,
@@ -185,10 +181,10 @@ impl WsIoServerConnection {
         headers: HeaderMap,
         namespace: Arc<WsIoServerNamespace>,
         request_uri: Uri,
-    ) -> (Arc<Self>, Receiver<Arc<Message>>, Receiver<WsIoPacket>) {
+    ) -> (Arc<Self>, mpsc::Receiver<Arc<Message>>, mpsc::Receiver<WsIoPacket>) {
         let channel_capacity = channel_capacity_from_websocket_config(&namespace.config.websocket_config);
-        let (event_queue_tx, event_queue_rx) = channel(channel_capacity);
-        let (message_tx, message_rx) = channel(channel_capacity);
+        let (event_queue_tx, event_queue_rx) = mpsc::channel(channel_capacity);
+        let (message_tx, message_rx) = mpsc::channel(channel_capacity);
         let id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
 
         #[cfg(feature = "tracing")]
@@ -526,7 +522,7 @@ impl WsIoServerConnection {
         Ok(self.message_tx.send(message).await?)
     }
 
-    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: Receiver<WsIoPacket>) {
+    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: mpsc::Receiver<WsIoPacket>) {
         let cancel_token = self.cancel_token();
         let connection = Arc::clone(self);
         *self.event_dispatcher_task.lock().await = Some(spawn(async move {
@@ -749,7 +745,7 @@ mod tests {
         connection
     }
 
-    fn create_test_connection_with_event_queue_rx() -> (Arc<WsIoServerConnection>, Receiver<WsIoPacket>) {
+    fn create_test_connection_with_event_queue_rx() -> (Arc<WsIoServerConnection>, mpsc::Receiver<WsIoPacket>) {
         let server = Arc::new(WsIoServer::builder().build());
         let namespace = server.new_namespace_builder("/socket").register().unwrap();
         let (connection, _rx, event_queue_rx) =

@@ -35,7 +35,7 @@ mod tests {
     };
 
     use tokio::{
-        sync::oneshot::channel,
+        sync::oneshot,
         time::timeout,
     };
 
@@ -57,7 +57,7 @@ mod tests {
             cancel_token: CancellationToken::new(),
         };
 
-        let (completed_tx, completed_rx) = channel();
+        let (completed_tx, completed_rx) = oneshot::channel();
 
         spawner.spawn_task(async move {
             let _ = completed_tx.send(());
@@ -77,8 +77,8 @@ mod tests {
             cancel_token: cancel_token.clone(),
         };
 
-        let (started_tx, started_rx) = channel();
-        let (dropped_tx, dropped_rx) = channel::<()>();
+        let (started_tx, started_rx) = oneshot::channel();
+        let (dropped_tx, dropped_rx) = oneshot::channel::<()>();
 
         spawner.spawn_task(async move {
             let _drop_signal = dropped_tx;
