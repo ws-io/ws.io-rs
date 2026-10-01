@@ -10,13 +10,14 @@ profile-rustflags = true
 [alias]
 coverage = "llvm-cov --all-features --color always --quiet"
 coverage-generate = "llvm-cov --all-features --lcov --output-path ./lcov.info --quiet"
-dlint = "dylint --all -- --all-features --all-targets --message-format=short --quiet"
-dlint-fix = "dylint --all --fix -- --all-features --all-targets --message-format=short --quiet"
 format = "fmt --all -- --check"
 format-fix = "fmt --all"
 lint = "clippy --all-features --all-targets --message-format=short --quiet"
 lint-fix = "clippy --all-features --all-targets --fix --message-format=short --quiet"
 lint-strict = "clippy --all-features --all-targets --quiet -- -D warnings"
+# Optional Mordant checks; install with scripts/install-mordant.sh.
+mlint = "mordant --workspace --all-features --all-targets --message-format=short --quiet"
+mlint-fix = "mordant --workspace --all-features --all-targets --fix --message-format=short --quiet"
 
 [net]
 git-fetch-with-cli = true

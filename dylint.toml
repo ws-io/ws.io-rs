@@ -1,4 +1,0 @@
-[workspace.metadata.dylint]
-libraries = [{ git = "https://github.com/scarletindustries/mordant", rev = "c5e56d0d9ca6e2adbb3488b7677353f26cd99ba8" }]
-
-[mordant]
