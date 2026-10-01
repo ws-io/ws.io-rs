@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.14.2 - 2026-10-01T16:31:54Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.14.1...wsio-server-v0.14.2)
+
+### 🏡 Chore
+
+- update deps ([aac06d0](https://github.com/ws-io/ws.io-rs/commit/aac06d0a80594b8c6b75babe32c1f87372d1ff87))
+
+### 💅 Refactors
+
+- qualify Tokio channel types and constructors by module ([edb4c1a](https://github.com/ws-io/ws.io-rs/commit/edb4c1ab4e8f855223bc49b21344030e78735b9d))
+
+### 🩹 Fixes
+
+- *(lifecycle)* cancel connection work when closing ([9e87933](https://github.com/ws-io/ws.io-rs/commit/9e8793356dbadf2e2f8f44053e7a20e2994ab7ff))
+- *(server)* prevent late connections escaping namespace shutdown ([a00fa88](https://github.com/ws-io/ws.io-rs/commit/a00fa886ed953e27796e8a1f6b7a615b2cf607d2))
+
 ## 0.14.1 - 2026-09-17T07:09:21Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.14.0...wsio-server-v0.14.1)

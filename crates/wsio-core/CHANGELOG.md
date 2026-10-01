@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.1 - 2026-10-01T16:31:54Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.14.0...wsio-core-v0.14.1)
+
+### 💅 Refactors
+
+- qualify Tokio channel types and constructors by module ([edb4c1a](https://github.com/ws-io/ws.io-rs/commit/edb4c1ab4e8f855223bc49b21344030e78735b9d))
+
+### 🩹 Fixes
+
+- *(lifecycle)* cancel connection work when closing ([9e87933](https://github.com/ws-io/ws.io-rs/commit/9e8793356dbadf2e2f8f44053e7a20e2994ab7ff))
+
 ## 0.14.0 - 2026-09-17T07:09:21Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.13.1...wsio-core-v0.14.0)
