@@ -365,6 +365,9 @@ impl WsIoServerConnection {
         // Set connection state to Closing
         self.state.store(ConnectionState::Closing);
 
+        // Revoke work immediately, including when the transport closed independently.
+        self.cancel_token.cancel();
+
         // Stop event dispatch before mutating namespace and room membership.
         let event_dispatcher_task = self.event_dispatcher_task.lock().await.take();
         if let Some(event_dispatcher_task) = event_dispatcher_task {
@@ -385,9 +388,6 @@ impl WsIoServerConnection {
 
         // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
-
-        // Cancel all ongoing operations via cancel token
-        self.cancel_token.cancel();
 
         // Invoke on_close_handler with timeout protection if configured
         if let Some(on_close_handler) = self.on_close_handler.lock().await.take()
@@ -423,6 +423,9 @@ impl WsIoServerConnection {
                 self.state.store(ConnectionState::Closing);
             },
         }
+
+        // Revoke event dispatch and managed tasks before waiting for transport shutdown.
+        self.cancel_token.cancel();
 
         // Send websocket close frame to initiate graceful shutdown
         let _ = self.message_tx.try_send(Arc::new(Message::Close(None)));
@@ -538,6 +541,10 @@ impl WsIoServerConnection {
                     let Some(event_packet) = event_packet else {
                         break;
                     };
+
+                    if !connection.is_ready() {
+                        break;
+                    }
 
                     let Some(event) = event_packet.key else {
                         continue;
@@ -711,14 +718,20 @@ static NEXT_CONNECTION_ID: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        future::pending,
+        time::Duration,
+    };
 
     use http::{
         HeaderMap,
         Uri,
     };
     use tokio::{
-        sync::mpsc::unbounded_channel,
+        sync::{
+            mpsc,
+            oneshot,
+        },
         time::{
             sleep,
             timeout,
@@ -803,7 +816,7 @@ mod tests {
         let (connection, event_queue_rx) = create_test_connection_with_event_queue_rx();
         connection.state.store(ConnectionState::Ready);
 
-        let (handled_tx, mut handled_rx) = unbounded_channel();
+        let (handled_tx, mut handled_rx) = mpsc::unbounded_channel();
         connection.on("ordered", move |_connection, payload: Arc<String>| {
             let handled_tx = handled_tx.clone();
             async move {
@@ -852,10 +865,53 @@ mod tests {
 
         connection.close();
         assert_eq!(connection.state.get(), ConnectionState::Closing);
+        assert!(connection.cancel_token.is_cancelled());
 
         // Calling close again when Closing shouldn't alter anything
         connection.close();
         assert_eq!(connection.state.get(), ConnectionState::Closing);
+    }
+
+    #[tokio::test]
+    async fn test_close_cancels_handler_and_discards_queued_events() {
+        let (connection, event_queue_rx) = create_test_connection_with_event_queue_rx();
+        connection.state.store(ConnectionState::Ready);
+        let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+        let (dropped_tx, dropped_rx) = oneshot::channel::<()>();
+        let dropped_tx = Arc::new(Mutex::new(Some(dropped_tx)));
+        connection.on("event", move |_connection, _data: Arc<()>| {
+            let started_tx = started_tx.clone();
+            let dropped_tx = Arc::clone(&dropped_tx);
+            async move {
+                let _drop_signal = dropped_tx.lock().await.take().unwrap();
+                started_tx.send(()).unwrap();
+                pending::<Result<()>>().await
+            }
+        });
+
+        connection.start_event_dispatcher(event_queue_rx).await;
+        connection
+            .handle_event_packet(WsIoPacket::new_event("event", None))
+            .await
+            .unwrap();
+
+        timeout(Duration::from_secs(1), started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        connection
+            .handle_event_packet(WsIoPacket::new_event("event", None))
+            .await
+            .unwrap();
+
+        connection.close();
+        timeout(Duration::from_secs(1), dropped_rx).await.unwrap().unwrap_err();
+        let dispatcher = connection.event_dispatcher_task.lock().await.take().unwrap();
+        timeout(Duration::from_secs(1), dispatcher).await.unwrap().unwrap();
+        assert!(started_rx.try_recv().is_err());
+        assert!(connection.event_queue_tx.is_closed());
+        connection.cleanup().await;
     }
 
     #[tokio::test]

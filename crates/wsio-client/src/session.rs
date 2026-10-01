@@ -114,6 +114,8 @@ impl WsIoClientSession {
     fn handle_disconnect_packet(&self) {
         #[cfg(feature = "tracing")]
         tracing::debug!("received server disconnect packet");
+
+        self.close();
         let runtime = Arc::clone(&self.runtime);
         spawn(async move { runtime.disconnect().await });
     }
@@ -236,6 +238,9 @@ impl WsIoClientSession {
         // Set state to Closing
         self.state.store(SessionState::Closing);
 
+        // Revoke work immediately, including when the transport closed independently.
+        self.cancel_token.cancel();
+
         // Abort tasks
         let event_dispatcher_task = self.event_dispatcher_task.lock().await.take();
         if let Some(event_dispatcher_task) = event_dispatcher_task {
@@ -246,9 +251,6 @@ impl WsIoClientSession {
         abort_locked_task(&self.init_timeout_task).await;
         abort_locked_task(&self.ping_task).await;
         abort_locked_task(&self.ready_timeout_task).await;
-
-        // Cancel all ongoing operations via cancel token
-        self.cancel_token.cancel();
 
         // Invoke on_session_close_handler with timeout protection if configured
         if let Some(on_session_close_handler) = &self.runtime.config.on_session_close_handler
@@ -284,6 +286,9 @@ impl WsIoClientSession {
                 self.state.store(SessionState::Closing);
             },
         }
+
+        // Revoke event dispatch and managed tasks before waiting for transport shutdown.
+        self.cancel_token.cancel();
 
         // Send websocket close frame to initiate graceful shutdown
         let _ = self.message_tx.try_send(Arc::new(Message::Close(None)));
@@ -374,6 +379,10 @@ impl WsIoClientSession {
                         break;
                     };
 
+                    if !session.is_ready() {
+                        break;
+                    }
+
                     let Some(event) = event_packet.key else {
                         continue;
                     };
@@ -420,3 +429,76 @@ impl WsIoClientSession {
 
 // Constants/Statics
 static PING_MESSAGE: LazyLock<Arc<Message>> = LazyLock::new(|| Arc::new(Message::Binary(vec![0x01].into())));
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        future::pending,
+        time::Duration,
+    };
+
+    use tokio::sync::{
+        mpsc::unbounded_channel,
+        oneshot::channel,
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_close_cancels_handler_and_discards_queued_events() {
+        let client = WsIoClient::builder("ws://localhost/socket").unwrap().build();
+        let (session, _message_rx, event_queue_rx) = WsIoClientSession::new(Arc::clone(&client.0));
+        session.state.store(SessionState::Ready);
+        let (started_tx, mut started_rx) = unbounded_channel();
+        let (dropped_tx, dropped_rx) = channel::<()>();
+        let dropped_tx = Arc::new(Mutex::new(Some(dropped_tx)));
+        client.on("event", move |_session, _data: Arc<()>| {
+            let started_tx = started_tx.clone();
+            let dropped_tx = Arc::clone(&dropped_tx);
+            async move {
+                let _drop_signal = dropped_tx.lock().await.take().unwrap();
+                started_tx.send(()).unwrap();
+                pending::<Result<()>>().await
+            }
+        });
+
+        session.start_event_dispatcher(event_queue_rx).await;
+        session
+            .handle_event_packet(WsIoPacket::new_event("event", None))
+            .await
+            .unwrap();
+
+        timeout(Duration::from_secs(1), started_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+
+        session
+            .handle_event_packet(WsIoPacket::new_event("event", None))
+            .await
+            .unwrap();
+
+        session.close();
+        assert!(!session.is_ready());
+        assert!(session.cancel_token.is_cancelled());
+        timeout(Duration::from_secs(1), dropped_rx).await.unwrap().unwrap_err();
+        let dispatcher = session.event_dispatcher_task.lock().await.take().unwrap();
+        timeout(Duration::from_secs(1), dispatcher).await.unwrap().unwrap();
+        assert!(started_rx.try_recv().is_err());
+        assert!(session.event_queue_tx.is_closed());
+        session.cleanup().await;
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_packet_immediately_revokes_session() {
+        let client = WsIoClient::builder("ws://localhost/socket").unwrap().build();
+        let (session, _message_rx, _event_rx) = WsIoClientSession::new(Arc::clone(&client.0));
+        session.state.store(SessionState::Ready);
+
+        session.handle_disconnect_packet();
+
+        assert!(!session.is_ready());
+        assert!(session.cancel_token.is_cancelled());
+        session.cleanup().await;
+    }
+}

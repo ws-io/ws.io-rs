@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 pub trait TaskSpawner: Send + Sync + 'static {
     fn cancel_token(&self) -> CancellationToken;
 
+    /// Runs work until completion or cancellation, reporting errors with the `tracing` feature.
     #[inline]
     fn spawn_task<F: Future<Output = Result<()>> + Send + 'static>(&self, future: F) {
         let cancel_token = self.cancel_token();
@@ -15,7 +16,12 @@ pub trait TaskSpawner: Send + Sync + 'static {
             select! {
                 biased;
                 () = cancel_token.cancelled() => {},
-                _ = future => {},
+                result = future => {
+                    if let Err(_err) = result {
+                        #[cfg(feature = "tracing")]
+                        tracing::warn!(error = %_err, "managed background task failed");
+                    }
+                },
             }
         });
     }
