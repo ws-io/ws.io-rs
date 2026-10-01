@@ -1,1 +1,2 @@
 [mordant]
+disabled = ["unused_pub"]
