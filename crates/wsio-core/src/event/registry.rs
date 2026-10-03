@@ -94,12 +94,29 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     }
 
     // Public methods
-    /// Dispatches one event packet and waits for all registered handlers to finish.
+    /// Dispatches one event packet and waits until all selected handlers finish or are canceled.
     ///
-    /// Handlers start concurrently and must all finish before this method returns.
-    /// Handler errors do not fail dispatch and are logged when the `tracing`
-    /// feature is enabled. Payload decoding errors are returned to the connection
-    /// dispatcher.
+    /// When polled, decodes `packet_data` using `packet_codec` and invokes matching
+    /// handlers concurrently with shared `ctx` and decoded payload values. Handler
+    /// execution order is unspecified. Without payload data, only handlers
+    /// registered for `()` run. Events without registered handlers are ignored.
+    /// Handler errors and task failures do not fail dispatch and are logged when
+    /// the `tracing` feature is enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns a payload decoding error if the data cannot be decoded as the
+    /// registered payload type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if handlers are spawned outside a Tokio runtime.
+    ///
+    /// # Cancellation safety
+    ///
+    /// Canceling `cancel_token` drops unfinished handler futures. Dropping this
+    /// dispatch future aborts its handler tasks. Neither action rolls back
+    /// completed side effects; retrying may invoke handlers again.
     #[inline]
     pub async fn dispatch_event_packet(
         &self,

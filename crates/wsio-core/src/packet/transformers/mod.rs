@@ -38,11 +38,11 @@ enum WsIoPacketTransformerKind {
 
 // Structs
 
-/// Selects packet transformation for a client or server.
+/// A selectable packet transformation strategy for a client or server.
 ///
-/// `Default::default()` selects the no-op strategy and returns the input
-/// allocation unchanged. `custom` delegates to a user-supplied transformer
-/// through an [`Arc`]. `zstd` is available with the `packet-transformer-zstd`
+/// [`Default::default`] selects the no-op strategy, which returns the input
+/// allocation unchanged. [`Self::custom`] delegates to a user-supplied transformer
+/// through an [`Arc`]. The zstd strategy is available with the `packet-transformer-zstd`
 /// feature and reuses its zstd contexts across calls and clones.
 #[derive(Clone, Default)]
 pub struct WsIoPacketTransformer {
@@ -71,6 +71,22 @@ impl WsIoPacketTransformer {
     }
 
     /// Decodes one complete transformed WebSocket packet.
+    ///
+    /// Processing begins when the returned future is polled. This consumes `bytes`
+    /// and returns owned bytes; the no-op strategy preserves the input allocation.
+    ///
+    /// # Errors
+    ///
+    /// Propagates errors from a custom transformer. With `packet-transformer-zstd`,
+    /// returns an error for invalid compression headers or payloads, unsupported
+    /// frame versions or algorithms, or lengths exceeding the configured limit.
+    /// Decompression and blocking-task failures are also propagated.
+    ///
+    /// # Cancellation safety
+    ///
+    /// Dropping the future discards its result. Already submitted zstd blocking work
+    /// may continue to completion. A custom transformer defines its own surviving
+    /// side effects and reuse guarantees.
     #[inline]
     pub async fn decode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
@@ -83,6 +99,21 @@ impl WsIoPacketTransformer {
     }
 
     /// Encodes one complete codec packet for WebSocket transmission.
+    ///
+    /// Processing begins when the returned future is polled. This consumes `bytes`
+    /// and returns owned bytes; the no-op strategy preserves the input allocation.
+    ///
+    /// # Errors
+    ///
+    /// Propagates errors from a custom transformer. With `packet-transformer-zstd`,
+    /// returns an error if the input exceeds the configured size limit or
+    /// `u32::MAX` bytes. Compression and blocking-task failures are also propagated.
+    ///
+    /// # Cancellation safety
+    ///
+    /// Dropping the future discards its result. Already submitted zstd blocking work
+    /// may continue to completion. A custom transformer defines its own surviving
+    /// side effects and reuse guarantees.
     #[inline]
     pub async fn encode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
@@ -95,6 +126,14 @@ impl WsIoPacketTransformer {
     }
 
     /// Creates a built-in zstd packet transformer with `config`.
+    ///
+    /// Requires `packet-transformer-zstd`. Peers must use the same transformation
+    /// format. Frames contain a one-byte descriptor followed by a big-endian `u32`
+    /// original payload length in bytes, then the raw or zstd-compressed payload.
+    /// Descriptor bits 5 through 7 hold version `1`, bits 1 through 4 hold algorithm
+    /// `1` (zstd), and bit 0 indicates compression. Compression falls back to raw
+    /// payload data if it does not reduce the size. Encoding and decoding enforce
+    /// [`WsIoPacketZstdTransformerConfig::max_decompressed_size`].
     #[cfg(feature = "packet-transformer-zstd")]
     #[inline]
     pub fn zstd(config: WsIoPacketZstdTransformerConfig) -> Self {

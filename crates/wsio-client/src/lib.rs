@@ -33,10 +33,19 @@ pub struct WsIoClient(Arc<WsIoClientRuntime>);
 
 impl WsIoClient {
     // Public methods
+
     /// Creates a client builder using the no-op packet transformer.
+    ///
+    /// The path in `url` selects the namespace; the WebSocket request path defaults
+    /// to `/ws.io`. An existing `namespace` query parameter is replaced.
     ///
     /// Use [`WsIoClientBuilder::packet_transformer`] to configure a custom
     /// packet transformer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `url` cannot be parsed, its scheme is not `ws` or `wss`,
+    /// or its scheme is `wss` without an enabled TLS feature.
     pub fn builder(url: impl AsRef<str>) -> Result<WsIoClientBuilder> {
         let url = Url::parse(url.as_ref()).map_err(|err| anyhow!("Invalid URL: {err}"))?;
 

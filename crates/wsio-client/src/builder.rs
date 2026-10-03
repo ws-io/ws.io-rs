@@ -30,10 +30,16 @@ use crate::{
 
 // Structs
 
-/// Builder for configuring and creating a [`WsIoClient`].
+/// A builder for configuring and creating a [`WsIoClient`].
 ///
 /// The input URL path selects the namespace. The WebSocket request path defaults
 /// to `/ws.io`.
+///
+/// Configuration methods consume the builder and return the updated builder.
+/// Registering a callback replaces the previous callback of that kind. Callbacks
+/// return asynchronous work and may run concurrently for different sessions.
+/// No ordering is guaranteed across sessions. A timeout drops unfinished callback
+/// work without rolling back completed side effects.
 #[derive(Debug)]
 #[must_use]
 pub struct WsIoClientBuilder {
@@ -143,6 +149,10 @@ impl WsIoClientBuilder {
 
     /// Registers a handler that runs when a client session closes.
     ///
+    /// The handler receives the closing session once during cleanup. Its returned
+    /// future is awaited; returned errors are ignored. A timeout drops the future
+    /// and is logged when the `tracing` feature is enabled.
+    ///
     /// The handler runs during session cleanup and is bounded by
     /// [`Self::on_session_close_handler_timeout`].
     pub fn on_session_close<H, Fut>(mut self, handler: H) -> Self
@@ -161,6 +171,10 @@ impl WsIoClientBuilder {
     }
 
     /// Registers a handler that runs after a client session becomes ready.
+    ///
+    /// The handler receives the ready session once in a background task. Session
+    /// cancellation drops unfinished work. Returned errors are logged when the
+    /// `tracing` feature is enabled and do not fail the handshake.
     ///
     /// The handler is spawned after the ready packet is received and does not
     /// block the connection handshake.
@@ -199,8 +213,8 @@ impl WsIoClientBuilder {
 
     /// Sets the maximum duration for waiting for the server ready packet.
     ///
-    /// This starts after the client handles the server init packet and sends its
-    /// init response.
+    /// This starts after the client handles the server init packet, before its
+    /// init response is queued for sending.
     pub fn ready_packet_timeout(mut self, duration: Duration) -> Self {
         self.config.ready_packet_timeout = duration;
         self
@@ -217,9 +231,15 @@ impl WsIoClientBuilder {
 
     /// Registers an async modifier for the WebSocket HTTP request.
     ///
+    /// The modifier receives the owned request once per connection attempt and
+    /// returns the request to send. Its future is awaited before the transport
+    /// connection timeout starts. An error ends the attempt; the runtime may retry
+    /// after the configured reconnect delay. Cancellation does not undo completed
+    /// side effects.
+    ///
     /// The modifier can add headers or adjust request metadata before
-    /// `connect_async_with_config` is called. An in-flight modifier future is
-    /// cancelled when the client disconnects and may run again after reconnect.
+    /// [`tokio_tungstenite::connect_async_with_config`] is called. An in-flight modifier future is
+    /// canceled when the client disconnects and may run again after reconnect.
     pub fn request_modifier<M, Fut>(mut self, modifier: M) -> Self
     where
         M: Fn(Request<()>) -> Fut + Send + Sync + 'static,
@@ -252,13 +272,20 @@ impl WsIoClientBuilder {
 
     /// Mutates the current Tungstenite WebSocket configuration in place.
     ///
-    /// Use this to adjust selected fields while keeping the remaining defaults.
+    /// The closure `f` runs once synchronously with a mutable borrow of the configuration.
+    /// This preserves fields that the closure does not change.
     pub fn websocket_config_mut<F: FnOnce(&mut WebSocketConfig)>(mut self, f: F) -> Self {
         f(&mut self.config.websocket_config);
         self
     }
 
     /// Registers the client-side init handler.
+    ///
+    /// The handler runs once per server init packet accepted during session setup.
+    /// Its future is awaited within [`Self::init_handler_timeout`]. Missing payload
+    /// data is passed as `None`; returning `None` sends an init response without
+    /// payload data. Payload decoding, handler, or response encoding errors fail
+    /// session setup.
     ///
     /// The handler receives the session and the optional server init payload
     /// decoded as `D`. An optional `R` result is encoded and sent as the client

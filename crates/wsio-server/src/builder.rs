@@ -14,10 +14,12 @@ use crate::{
 
 // Structs
 
-/// Builder for configuring and creating a [`WsIoServer`].
+/// A builder for configuring and creating a [`WsIoServer`].
 ///
 /// Server-level settings are inherited by namespaces created from the server.
 /// Namespace builders may override most settings per namespace.
+///
+/// Configuration methods consume the builder and return the updated builder.
 #[derive(Debug)]
 #[must_use]
 pub struct WsIoServerBuilder {
@@ -52,8 +54,7 @@ impl WsIoServerBuilder {
     // Public methods
     /// Sets the default maximum number of concurrent broadcast sends.
     ///
-    /// Namespace builders inherit this value. It is passed to
-    /// `StreamExt::for_each_concurrent`; `0` means unlimited concurrency.
+    /// Namespace builders inherit this value. `0` means unlimited concurrency.
     pub fn broadcast_concurrency_limit(mut self, broadcast_concurrency_limit: usize) -> Self {
         self.config.broadcast_concurrency_limit = broadcast_concurrency_limit;
         self
@@ -76,8 +77,8 @@ impl WsIoServerBuilder {
 
     /// Sets the default maximum duration for init-request handlers.
     ///
-    /// Namespace init-request handlers are registered with
-    /// `WsIoServerNamespaceBuilder::with_init_request`.
+    /// This limits the init-request callback configured on namespace builders created
+    /// with [`WsIoServer::new_namespace_builder`].
     pub fn init_request_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.init_request_handler_timeout = duration;
         self
@@ -85,8 +86,8 @@ impl WsIoServerBuilder {
 
     /// Sets the default maximum duration for init-response handlers.
     ///
-    /// Namespace init-response handlers are registered with
-    /// `WsIoServerNamespaceBuilder::with_init_response`.
+    /// This limits the init-response callback configured on namespace builders created
+    /// with [`WsIoServer::new_namespace_builder`].
     pub fn init_response_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_handler_timeout = duration;
         self
@@ -94,7 +95,8 @@ impl WsIoServerBuilder {
 
     /// Sets the default maximum duration for waiting for a client init response.
     ///
-    /// This starts after the server sends its init packet. Namespace builders
+    /// This starts when the connection begins waiting for the client response,
+    /// before the server init packet is queued for sending. Namespace builders
     /// inherit this value and may override it.
     pub fn init_response_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_timeout = duration;
@@ -103,8 +105,8 @@ impl WsIoServerBuilder {
 
     /// Sets the default maximum duration for namespace middleware.
     ///
-    /// Namespace middleware is registered with
-    /// `WsIoServerNamespaceBuilder::with_middleware`.
+    /// This limits the middleware callback configured on namespace builders created
+    /// with [`WsIoServer::new_namespace_builder`].
     pub fn middleware_execution_timeout(mut self, duration: Duration) -> Self {
         self.config.middleware_execution_timeout = duration;
         self
@@ -113,7 +115,7 @@ impl WsIoServerBuilder {
     /// Sets the default maximum duration for per-connection close handlers.
     ///
     /// This applies to handlers registered through
-    /// `WsIoServerConnection::on_close`.
+    /// [`on_close`](crate::connection::WsIoServerConnection::on_close).
     pub fn on_close_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.on_close_handler_timeout = duration;
         self
@@ -121,8 +123,8 @@ impl WsIoServerBuilder {
 
     /// Sets the default maximum duration for namespace on-connect handlers.
     ///
-    /// Namespace on-connect handlers are registered with
-    /// `WsIoServerNamespaceBuilder::on_connect`.
+    /// This limits the on-connect callback configured on namespace builders created
+    /// with [`WsIoServer::new_namespace_builder`].
     pub fn on_connect_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.on_connect_handler_timeout = duration;
         self
@@ -167,7 +169,8 @@ impl WsIoServerBuilder {
 
     /// Mutates the current default Tungstenite WebSocket configuration in place.
     ///
-    /// Use this to adjust selected fields while keeping the remaining defaults.
+    /// The closure `f` runs once synchronously with a mutable borrow of the configuration.
+    /// This preserves fields that the closure does not change.
     pub fn websocket_config_mut<F: FnOnce(&mut WebSocketConfig)>(mut self, f: F) -> Self {
         f(&mut self.config.websocket_config);
         self

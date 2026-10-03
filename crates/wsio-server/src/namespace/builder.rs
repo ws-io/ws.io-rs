@@ -25,10 +25,16 @@ use crate::{
 
 // Structs
 
-/// Builder for configuring and registering a server namespace.
+/// A builder for configuring and registering a server namespace.
 ///
 /// Namespace builders inherit server-level defaults when created. Their methods
 /// override those values for this namespace only.
+///
+/// Configuration methods consume the builder and return the updated builder.
+/// Registering a callback replaces the previous callback of that kind. Callbacks
+/// return asynchronous work and may run concurrently for different connections.
+/// No ordering is guaranteed across connections. A timeout drops unfinished callback
+/// work without rolling back completed side effects.
 #[derive(Debug)]
 pub struct WsIoServerNamespaceBuilder {
     config: WsIoServerNamespaceConfig,
@@ -64,8 +70,7 @@ impl WsIoServerNamespaceBuilder {
     // Public methods
     /// Sets the maximum number of concurrent broadcast sends.
     ///
-    /// The value is passed to `StreamExt::for_each_concurrent`; `0` means
-    /// unlimited concurrency.
+    /// `0` means unlimited concurrency.
     pub fn broadcast_concurrency_limit(mut self, broadcast_concurrency_limit: usize) -> Self {
         self.config.broadcast_concurrency_limit = broadcast_concurrency_limit;
         self
@@ -100,7 +105,8 @@ impl WsIoServerNamespaceBuilder {
 
     /// Sets the maximum duration for waiting for the client init-response packet.
     ///
-    /// This starts after the server sends its init packet. If the client does not
+    /// This starts when the connection begins waiting for the client response,
+    /// before the server init packet is queued for sending. If the client does not
     /// respond in time, the connection closes.
     pub fn init_response_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_timeout = duration;
@@ -118,13 +124,17 @@ impl WsIoServerNamespaceBuilder {
 
     /// Sets the maximum duration for per-connection close handlers.
     ///
-    /// This applies to handlers registered with `WsIoServerConnection::on_close`.
+    /// This applies to handlers registered with [`on_close`](crate::connection::WsIoServerConnection::on_close).
     pub fn on_close_handler_timeout(mut self, duration: Duration) -> Self {
         self.config.on_close_handler_timeout = duration;
         self
     }
 
     /// Registers the namespace on-connect handler.
+    ///
+    /// The handler receives the connection once when setup reaches this stage. Its
+    /// future is awaited within [`Self::on_connect_handler_timeout`]. A returned
+    /// error or timeout aborts connection setup.
     ///
     /// The handler runs during connection setup after middleware and before the
     /// connection is inserted into the namespace and marked ready.
@@ -145,8 +155,12 @@ impl WsIoServerNamespaceBuilder {
 
     /// Registers the namespace on-ready handler.
     ///
+    /// The handler receives the ready connection once in a background task.
+    /// Connection cancellation drops unfinished work. Returned errors are logged
+    /// when the `tracing` feature is enabled and do not undo connection setup.
+    ///
     /// The handler is spawned after the connection is inserted, marked ready, and
-    /// the ready packet is sent.
+    /// the ready packet is queued for sending.
     pub fn on_ready<H, Fut>(mut self, handler: H) -> Self
     where
         H: Fn(Arc<WsIoServerConnection>) -> Fut + Send + Sync + 'static,
@@ -175,6 +189,10 @@ impl WsIoServerNamespaceBuilder {
 
     /// Registers the namespace with its server runtime.
     ///
+    /// Consumes the builder and returns a shared handle to the registered namespace.
+    ///
+    /// # Errors
+    ///
     /// Returns an error if the path is already registered.
     pub fn register(self) -> Result<Arc<WsIoServerNamespace>> {
         let namespace = WsIoServerNamespace::new(self.config, Arc::clone(&self.runtime));
@@ -193,13 +211,18 @@ impl WsIoServerNamespaceBuilder {
 
     /// Mutates the current Tungstenite WebSocket configuration in place.
     ///
-    /// Use this to adjust selected fields while keeping the remaining defaults.
+    /// The closure `f` runs once synchronously with a mutable borrow of the configuration.
+    /// This preserves fields that the closure does not change.
     pub fn websocket_config_mut<F: FnOnce(&mut WebSocketConfig)>(mut self, f: F) -> Self {
         f(&mut self.config.websocket_config);
         self
     }
 
     /// Registers namespace middleware for connection setup.
+    ///
+    /// The middleware receives the connection once when setup reaches this stage.
+    /// Its future is awaited within [`Self::middleware_execution_timeout`]. A timeout
+    /// also aborts connection setup.
     ///
     /// Middleware runs after init-response handling and before the on-connect
     /// handler. Returning an error aborts connection setup.
@@ -213,6 +236,11 @@ impl WsIoServerNamespaceBuilder {
     }
 
     /// Registers the server-side init-request handler.
+    ///
+    /// The handler runs once when connection initialization starts, before sending
+    /// the server init packet. Its future is awaited within
+    /// [`Self::init_request_handler_timeout`]. Returning `None` omits payload data.
+    /// Handler errors, encoding errors, or a timeout abort connection setup.
     ///
     /// The handler receives the connection and may return optional data to encode
     /// as `D` and send in the server init packet.
@@ -237,6 +265,11 @@ impl WsIoServerNamespaceBuilder {
     }
 
     /// Registers the server-side init-response handler.
+    ///
+    /// The handler runs once for the client init response accepted during setup,
+    /// before middleware and the on-connect handler. Its future is awaited within
+    /// [`Self::init_response_handler_timeout`]. Missing payload data is passed as
+    /// `None`. Decoding errors, handler errors, or a timeout abort connection setup.
     ///
     /// The handler receives the connection and the optional client init-response
     /// payload decoded as `D`.
