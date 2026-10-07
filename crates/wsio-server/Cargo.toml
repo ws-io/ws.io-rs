@@ -92,14 +92,14 @@ bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
 http = "1.5.0"
 http-body = "1.1.0"
-hyper = "1.11.1"
+hyper = "1.12.0"
 hyper-util = { version = "0.1.21", features = ["tokio"] }
 kikiutils = { version = "0.12.0", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
 parking_lot = "0.12.5"
 roaring = "0.11.5"
 serde = "1.0.229"
-tokio = { version = "1.53.1", features = ["macros", "rt", "sync", "time"] }
+tokio = { version = "1.53.2", features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
 tower-layer = { version = "0.3.3", optional = true }
