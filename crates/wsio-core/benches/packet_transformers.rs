@@ -66,7 +66,7 @@ fn bench_transformers(criterion: &mut Criterion) {
                 BenchmarkId::new(format!("{name}/encode"), payload_size),
                 &input,
                 |bencher, input| {
-                    bencher.to_async(&runtime).iter(|| async {
+                    bencher.to_async(&runtime).iter(async || {
                         black_box(
                             transformer
                                 .encode(input.clone())
@@ -82,7 +82,7 @@ fn bench_transformers(criterion: &mut Criterion) {
                 BenchmarkId::new(format!("{name}/decode"), payload_size),
                 &encoded,
                 |bencher, encoded| {
-                    bencher.to_async(&runtime).iter(|| async {
+                    bencher.to_async(&runtime).iter(async || {
                         black_box(
                             transformer
                                 .decode(encoded.clone())

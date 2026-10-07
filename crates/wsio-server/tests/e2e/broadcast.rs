@@ -61,8 +61,8 @@ async fn test_e2e_broadcast_and_rooms() {
 
     let server_namespace = server
         .new_namespace_builder(TEST_NAMESPACE)
-        .on_connect(|ctx| async move {
-            ctx.on("join_room", |event_ctx, room: Arc<String>| async move {
+        .on_connect(async |ctx| {
+            ctx.on("join_room", async |event_ctx, room: Arc<String>| {
                 event_ctx.join([room.as_str()]);
                 event_ctx.emit::<()>("joined", None).await.unwrap();
                 Ok(())

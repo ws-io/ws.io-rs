@@ -415,7 +415,7 @@ impl WsIoServerNamespace {
     pub async fn shutdown(self: &Arc<Self>) {
         let namespace = Arc::clone(self);
         self.shutdown_completion
-            .wait_or_spawn(move || async move { namespace.shutdown_inner().await })
+            .wait_or_spawn(async move || namespace.shutdown_inner().await)
             .await;
     }
 

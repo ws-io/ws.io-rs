@@ -209,7 +209,7 @@ impl WsIoServerRuntime {
     pub(crate) async fn shutdown(self: &Arc<Self>) {
         let runtime = Arc::clone(self);
         self.shutdown_completion
-            .wait_or_spawn(move || async move { runtime.shutdown_inner().await })
+            .wait_or_spawn(async move || runtime.shutdown_inner().await)
             .await;
     }
 }

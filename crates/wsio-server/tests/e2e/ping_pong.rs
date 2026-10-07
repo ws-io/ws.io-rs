@@ -27,8 +27,8 @@ async fn test_e2e_ping_pong() {
     // Register the default test namespace.
     let namespace_builder = server.new_namespace_builder(TEST_NAMESPACE);
     namespace_builder
-        .on_connect(|ctx| async move {
-            ctx.on("ping", |event_ctx, _data: Arc<()>| async move {
+        .on_connect(async |ctx| {
+            ctx.on("ping", async |event_ctx, _data: Arc<()>| {
                 // Echo back a pong
                 event_ctx.emit::<()>("pong", None).await.unwrap();
                 Ok(())

@@ -101,14 +101,14 @@ async fn setup_room_server(client_count: usize, joined_room_count: usize) -> Ben
     let server = Arc::new(WsIoServer::builder().build());
     let namespace = server
         .new_namespace_builder(TEST_NAMESPACE)
-        .on_connect(|connection| async move {
-            connection.on("join", |connection, room: Arc<String>| async move {
+        .on_connect(async |connection| {
+            connection.on("join", async |connection, room: Arc<String>| {
                 connection.join([room.as_str()]);
                 connection.emit::<()>("joined", None).await?;
                 Ok(())
             });
 
-            connection.on("leave", |connection, room: Arc<String>| async move {
+            connection.on("leave", async |connection, room: Arc<String>| {
                 connection.leave([room.as_str()]);
                 connection.emit::<()>("left", None).await?;
                 Ok(())
@@ -179,7 +179,7 @@ fn bench_broadcast_emit(criterion: &mut Criterion) {
             BenchmarkId::new("global", client_count),
             &server.namespace,
             |bencher, namespace| {
-                bencher.to_async(&runtime).iter(|| async {
+                bencher.to_async(&runtime).iter(async || {
                     namespace.emit::<()>(black_box("bench"), None).await.unwrap();
                 });
             },
@@ -189,7 +189,7 @@ fn bench_broadcast_emit(criterion: &mut Criterion) {
             BenchmarkId::new("room", client_count),
             &server.namespace,
             |bencher, namespace| {
-                bencher.to_async(&runtime).iter(|| async {
+                bencher.to_async(&runtime).iter(async || {
                     namespace
                         .to([black_box(ROOM_A)])
                         .emit::<()>(black_box("bench"), None)
@@ -226,7 +226,7 @@ fn bench_broadcast_payload(criterion: &mut Criterion) {
             BenchmarkId::new("global", payload_size),
             &payload,
             |bencher, payload| {
-                bencher.to_async(&runtime).iter(|| async {
+                bencher.to_async(&runtime).iter(async || {
                     server
                         .namespace
                         .emit(black_box("bench_payload"), Some(black_box(payload)))
@@ -237,7 +237,7 @@ fn bench_broadcast_payload(criterion: &mut Criterion) {
         );
 
         group.bench_with_input(BenchmarkId::new("room", payload_size), &payload, |bencher, payload| {
-            bencher.to_async(&runtime).iter(|| async {
+            bencher.to_async(&runtime).iter(async || {
                 server
                     .namespace
                     .to([black_box(ROOM_A)])

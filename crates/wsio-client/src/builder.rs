@@ -428,9 +428,9 @@ mod tests {
     #[test]
     fn test_builder_with_init_and_session_handlers_registers_callbacks() {
         let client = test_builder()
-            .with_init_handler(|_session, _data: Option<String>| async { Ok(Some("response".to_string())) })
-            .on_session_ready(|_session| async { Ok(()) })
-            .on_session_close(|_session| async { Ok(()) })
+            .with_init_handler(async |_session, _data: Option<String>| Ok(Some("response".to_string())))
+            .on_session_ready(async |_session| Ok(()))
+            .on_session_close(async |_session| Ok(()))
             .build();
 
         assert!(client.0.config.init_handler.is_some());
@@ -441,7 +441,7 @@ mod tests {
     #[test]
     fn test_builder_request_modifier_registers_async_callback() {
         let client = test_builder()
-            .request_modifier(|mut request| async move {
+            .request_modifier(async |mut request| {
                 request
                     .headers_mut()
                     .insert("x-wsio-test", HeaderValue::from_static("enabled"));

@@ -374,11 +374,11 @@ mod tests {
     fn test_namespace_builder_registers_lifecycle_handlers() {
         let server = Arc::new(WsIoServer::builder().build());
         let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0))
-            .on_connect(|_connection| async { Ok(()) })
-            .on_ready(|_connection| async { Ok(()) })
-            .with_middleware(|_connection| async { Ok(()) })
-            .with_init_request(|_connection| async { Ok(Some("request".to_string())) })
-            .with_init_response(|_connection, _data: Option<String>| async { Ok(()) });
+            .on_connect(async |_connection| Ok(()))
+            .on_ready(async |_connection| Ok(()))
+            .with_middleware(async |_connection| Ok(()))
+            .with_init_request(async |_connection| Ok(Some("request".to_string())))
+            .with_init_response(async |_connection, _data: Option<String>| Ok(()));
 
         assert!(builder.config.on_connect_handler.is_some());
         assert!(builder.config.on_ready_handler.is_some());

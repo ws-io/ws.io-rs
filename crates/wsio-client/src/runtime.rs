@@ -391,14 +391,14 @@ impl WsIoClientRuntime {
     pub(crate) async fn connect(self: &Arc<Self>) {
         let runtime = Arc::clone(self);
         self.connect_completion
-            .wait_or_spawn(move || async move { runtime.connect_inner().await })
+            .wait_or_spawn(async move || runtime.connect_inner().await)
             .await;
     }
 
     pub(crate) async fn disconnect(self: &Arc<Self>) {
         let runtime = Arc::clone(self);
         self.disconnect_completion
-            .wait_or_spawn(move || async move { runtime.disconnect_inner().await })
+            .wait_or_spawn(async move || runtime.disconnect_inner().await)
             .await;
     }
 

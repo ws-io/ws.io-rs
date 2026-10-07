@@ -38,9 +38,10 @@ fn registry_with_handlers(handler_count: usize) -> WsIoEventRegistry<DummyConnec
 }
 
 fn register_handler(registry: &WsIoEventRegistry<DummyConnection>) -> u32 {
-    registry.on(EVENT_NAME, |_ctx: Arc<DummyConnection>, _data: Arc<String>| async {
-        Ok(())
-    })
+    registry.on(
+        EVENT_NAME,
+        async |_ctx: Arc<DummyConnection>, _data: Arc<String>| Ok(()),
+    )
 }
 
 fn bench_event_dispatch(criterion: &mut Criterion) {

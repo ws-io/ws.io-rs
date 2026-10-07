@@ -392,7 +392,7 @@ mod tests {
         let cancel_token = CancellationToken::new();
         let packet_codec = WsIoPacketCodec::Msgpack;
 
-        registry.on("ping", |_ctx, _payload: Arc<String>| async { Ok(()) });
+        registry.on("ping", async |_ctx, _payload: Arc<String>| Ok(()));
 
         let result = registry
             .dispatch_event_packet(
@@ -411,7 +411,7 @@ mod tests {
     fn test_registry_on_off() {
         let registry = WsIoEventRegistry::<DummyConnection>::new();
 
-        let handler_id = registry.on("test_event", |_ctx, _data: Arc<String>| async { Ok(()) });
+        let handler_id = registry.on("test_event", async |_ctx, _data: Arc<String>| Ok(()));
 
         // Verify the handler was registered
         assert_eq!(handler_id, 0);
@@ -435,8 +435,8 @@ mod tests {
         assert!(!registry.event_entries.read().contains_key("test_event"));
 
         // Register multiple and test full off
-        registry.on("multi_event", |_ctx, _data: Arc<String>| async { Ok(()) });
-        registry.on("multi_event", |_ctx, _data: Arc<String>| async { Ok(()) });
+        registry.on("multi_event", async |_ctx, _data: Arc<String>| Ok(()));
+        registry.on("multi_event", async |_ctx, _data: Arc<String>| Ok(()));
 
         assert_eq!(
             registry
@@ -458,6 +458,6 @@ mod tests {
     #[should_panic(expected = "Event key cannot be empty")]
     fn test_registry_rejects_empty_event_key() {
         let registry = WsIoEventRegistry::<DummyConnection>::new();
-        registry.on("", |_ctx, _data: Arc<()>| async { Ok(()) });
+        registry.on("", async |_ctx, _data: Arc<()>| Ok(()));
     }
 }

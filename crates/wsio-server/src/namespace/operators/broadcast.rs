@@ -62,7 +62,7 @@ impl WsIoServerNamespaceBroadcastOperator {
                         .map(|entry| Arc::clone(entry.value())),
                 )
             })
-            .for_each_concurrent(self.namespace.config.broadcast_concurrency_limit, |connection| async {
+            .for_each_concurrent(self.namespace.config.broadcast_concurrency_limit, async |connection| {
                 let _ = f(connection).await;
             })
             .await;
@@ -116,7 +116,7 @@ impl WsIoServerNamespaceBroadcastOperator {
             "broadcasting close to namespace targets"
         );
 
-        self.for_each_target_connections(|connection| async move {
+        self.for_each_target_connections(async |connection| {
             connection.close();
             Ok(())
         })
