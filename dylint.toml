@@ -1,0 +1,4 @@
+[workspace.metadata.dylint]
+libraries = [
+  { git = "https://github.com/kikiutils/rs-dylint-rules", branch = "main" },
+]

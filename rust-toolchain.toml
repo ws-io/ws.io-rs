@@ -2,8 +2,9 @@
 channel = "nightly-2026-10-01"
 components = [
   "clippy",
-  "rust-src",
   "rust-analyzer",
+  "rust-src",
+  "rustc-dev",
   "rustfmt",
 ]
 

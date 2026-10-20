@@ -1,2 +1,5 @@
 [mordant]
-disabled = ["unused_pub"]
+disabled = [
+  # Uncomment it if this is a lib crate
+  "unused_pub",
+]
