@@ -99,4 +99,5 @@ fn bench_transformers(criterion: &mut Criterion) {
 }
 
 criterion_group!(benches, bench_transformers);
+
 criterion_main!(benches);

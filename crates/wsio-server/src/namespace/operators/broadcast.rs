@@ -22,7 +22,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 #[must_use]
 pub struct WsIoServerNamespaceBroadcastOperator {
     exclude_connection_ids: HashSet<u64>,
@@ -148,6 +148,7 @@ impl WsIoServerNamespaceBroadcastOperator {
         self.namespace.status.ensure(NamespaceStatus::Running, |status| {
             format!("Cannot emit in invalid status: {status:?}")
         })?;
+
         let event = event.as_ref();
 
         #[cfg(feature = "tracing")]

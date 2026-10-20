@@ -17,7 +17,7 @@ pub mod transformers;
 
 // Enums
 #[repr(u8)]
-#[derive(Clone, Debug, Deserialize_repr, Serialize_repr)]
+#[derive(Debug, Clone, Serialize_repr, Deserialize_repr)]
 pub enum WsIoPacketType {
     Disconnect = 0,
     Event = 1,
@@ -32,7 +32,7 @@ struct InnerPacket(WsIoPacketType, Option<String>, Option<Bytes>);
 #[derive(Serialize)]
 struct InnerPacketRef<'a>(&'a WsIoPacketType, &'a Option<String>, &'a Option<Bytes>);
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct WsIoPacket {
     pub data: Option<Bytes>,
     pub key: Option<String>,

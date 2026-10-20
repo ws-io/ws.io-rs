@@ -20,13 +20,13 @@ pub(super) const COMPRESSION_FRAME_HEADER_SIZE: usize = ORIGINAL_LENGTH_OFFSET +
 
 // Enums
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WsIoPacketCompressionAlgorithm {
     Zstd = 1,
 }
 
 // Structs
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(super) struct WsIoPacketCompressionFrameHeader {
     pub(super) algorithm: WsIoPacketCompressionAlgorithm,
     pub(super) compressed: bool,

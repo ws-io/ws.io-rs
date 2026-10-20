@@ -353,6 +353,7 @@ mod tests {
             builder.connect_url.query(),
             Some("token=a%26b&scope=a%3Db&namespace=%2Fsocket"),
         );
+
         assert_eq!(
             builder.connect_url.query_pairs().collect::<Vec<_>>(),
             vec![
@@ -428,7 +429,7 @@ mod tests {
     #[test]
     fn test_builder_with_init_and_session_handlers_registers_callbacks() {
         let client = test_builder()
-            .with_init_handler(async |_session, _data: Option<String>| Ok(Some("response".to_string())))
+            .with_init_handler(async |_session, _data: Option<String>| Ok(Some("response".to_owned())))
             .on_session_ready(async |_session| Ok(()))
             .on_session_close(async |_session| Ok(()))
             .build();

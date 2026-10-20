@@ -15,8 +15,8 @@ pub mod request_adapters;
 mod runtime;
 
 #[cfg(feature = "tower")]
-use crate::request_adapters::tower::layer::WsIoServerLayer;
-use crate::{
+use self::request_adapters::tower::layer::WsIoServerLayer;
+use self::{
     builder::WsIoServerBuilder,
     namespace::{
         WsIoServerNamespace,
@@ -26,7 +26,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct WsIoServer(Arc<WsIoServerRuntime>);
 
 impl WsIoServer {

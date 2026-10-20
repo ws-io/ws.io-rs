@@ -98,6 +98,7 @@ pub(super) fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
 
         return respond(StatusCode::BAD_REQUEST);
     };
+
     let namespace_path = namespace_path.into_owned();
 
     // Get namespace

@@ -294,4 +294,5 @@ fn bench_room_churn(criterion: &mut Criterion) {
 }
 
 criterion_group!(benches, bench_broadcast_emit, bench_broadcast_payload, bench_room_churn);
+
 criterion_main!(benches);

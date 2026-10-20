@@ -122,13 +122,15 @@ mod tests {
         Serialize,
     };
 
-    use super::*;
-    use crate::packet::{
-        WsIoPacket,
-        WsIoPacketType,
+    use super::{
+        super::{
+            WsIoPacket,
+            WsIoPacketType,
+        },
+        *,
     };
 
-    #[derive(Debug, Deserialize, PartialEq, Serialize)]
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct TestPayload {
         id: u32,
         message: String,
@@ -190,6 +192,7 @@ mod tests {
 
     #[cfg(feature = "packet-codec-cbor")]
     test_codec!(WsIoPacketCodec::Cbor, test_cbor_codec);
+
     test_codec!(WsIoPacketCodec::Msgpack, test_msgpack_codec);
 
     #[test]
@@ -205,6 +208,7 @@ mod tests {
         let decoded_packet = WsIoPacketCodec::Msgpack
             .decode(&encoded_packet)
             .expect("Failed to decode packet");
+
         assert_eq!(decoded_packet.data.as_deref(), Some(&payload[..]));
     }
 

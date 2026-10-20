@@ -23,7 +23,7 @@ const EVENT_NAME: &str = "benchmark_event";
 const PAYLOAD_SIZES: [usize; 3] = [0, 256, 4096];
 
 // Structs
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize, Deserialize)]
 struct BenchPayload {
     id: u32,
     message: String,
@@ -34,7 +34,7 @@ struct BenchPayload {
 fn payload(bytes: usize) -> BenchPayload {
     BenchPayload {
         id: 12345,
-        message: "This is a performance test for packet codecs".to_string(),
+        message: "This is a performance test for packet codecs".to_owned(),
         data: vec![0; bytes],
     }
 }
@@ -111,4 +111,5 @@ fn bench_codecs(criterion: &mut Criterion) {
 }
 
 criterion_group!(benches, bench_codecs);
+
 criterion_main!(benches);

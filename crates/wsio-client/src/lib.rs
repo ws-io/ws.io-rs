@@ -20,7 +20,7 @@ mod config;
 mod runtime;
 pub mod session;
 
-use crate::{
+use self::{
     builder::WsIoClientBuilder,
     core::traits::task::spawner::TaskSpawner,
     runtime::WsIoClientRuntime,
@@ -28,7 +28,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct WsIoClient(Arc<WsIoClientRuntime>);
 
 impl WsIoClient {
@@ -113,7 +113,7 @@ impl WsIoClient {
 mod tests {
     use std::borrow::Cow;
 
-    use super::*;
+    use crate::*;
 
     fn assert_builder_accepts(url: impl AsRef<str>) {
         assert!(WsIoClient::builder(url).is_ok());

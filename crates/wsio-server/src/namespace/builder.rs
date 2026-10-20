@@ -377,7 +377,7 @@ mod tests {
             .on_connect(async |_connection| Ok(()))
             .on_ready(async |_connection| Ok(()))
             .with_middleware(async |_connection| Ok(()))
-            .with_init_request(async |_connection| Ok(Some("request".to_string())))
+            .with_init_request(async |_connection| Ok(Some("request".to_owned())))
             .with_init_response(async |_connection, _data: Option<String>| Ok(()));
 
         assert!(builder.config.on_connect_handler.is_some());

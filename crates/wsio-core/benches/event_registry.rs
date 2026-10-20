@@ -117,4 +117,5 @@ fn bench_event_registry_mutation(criterion: &mut Criterion) {
 }
 
 criterion_group!(benches, bench_event_dispatch, bench_event_registry_mutation);
+
 criterion_main!(benches);

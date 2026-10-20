@@ -67,6 +67,7 @@ async fn test_e2e_broadcast_and_rooms() {
                 event_ctx.emit::<()>("joined", None).await.unwrap();
                 Ok(())
             });
+
             Ok(())
         })
         .register()
@@ -127,12 +128,13 @@ async fn test_e2e_broadcast_and_rooms() {
         1,
     )
     .await;
+
     cleanup_e2e(vec![client_a, client_b, client_c], server_task).await;
 }
 
 #[tokio::test]
 async fn test_e2e_emit_with_data() {
-    #[derive(Debug, Deserialize, Serialize)]
+    #[derive(Debug, Serialize, Deserialize)]
     struct Payload {
         message: String,
         count: u32,
@@ -259,6 +261,7 @@ async fn test_e2e_on_close_handler() {
                     }
                 })
                 .await;
+
                 Ok(())
             }
         })

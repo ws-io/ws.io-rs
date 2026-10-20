@@ -106,7 +106,7 @@ impl WsIoPacketZstdTransformer {
 }
 
 /// Configuration for the built-in zstd packet transformer.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct WsIoPacketZstdTransformerConfig {
     /// The minimum payload size in bytes for dispatching zstd work to Tokio's
     /// blocking thread pool.
@@ -189,6 +189,7 @@ mod tests {
             blocking_threshold: 1,
             ..Default::default()
         });
+
         let input = Bytes::from(vec![b'a'; 4096]);
 
         let encoded = transformer.encode(input.clone()).await.unwrap();

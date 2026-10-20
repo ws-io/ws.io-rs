@@ -22,7 +22,7 @@ use crate::{
 };
 
 // Structs
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct WsIoServerService<S> {
     inner: S,
     runtime: Arc<WsIoServerRuntime>,

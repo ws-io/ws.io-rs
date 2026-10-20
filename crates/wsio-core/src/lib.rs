@@ -22,7 +22,7 @@ pub fn channel_capacity_from_websocket_config(websocket_config: &WebSocketConfig
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::*;
 
     #[test]
     fn test_channel_capacity_from_websocket_config() {
