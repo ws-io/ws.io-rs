@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.14.2 - 2026-10-20T10:08:01Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.14.1...wsio-core-v0.14.2)
+
+### 🏡 Chore
+
+- lint code ([c80422b](https://github.com/ws-io/ws.io-rs/commit/c80422b3a01f243927f5116c93ee8ae4b3f5a653))
+- upgrade deps ([f04738d](https://github.com/ws-io/ws.io-rs/commit/f04738d609a6ee300ed6597fb91d38d13776e9ed))
+- upgrade deps ([a86568a](https://github.com/ws-io/ws.io-rs/commit/a86568a70dc8121b6782274c88f61c04028264cc))
+
+### 💅 Refactors
+
+- adopt async closures across lifecycle callbacks and tests ([1896e16](https://github.com/ws-io/ws.io-rs/commit/1896e1696943be4615b9ae8b454b0f28d4ef44ac))
+
+### 📖 Documentation
+
+- align Rustdoc with API documentation standards ([54c103b](https://github.com/ws-io/ws.io-rs/commit/54c103b9522698dd899324619a000c931969fdf9))
+
 ## 0.14.1 - 2026-10-01T16:31:54Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.14.0...wsio-core-v0.14.1)
