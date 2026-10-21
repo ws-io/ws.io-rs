@@ -7,7 +7,6 @@ use std::{
     panic::AssertUnwindSafe,
     sync::{
         Arc,
-        LazyLock,
         atomic::{
             AtomicU64,
             Ordering,
@@ -710,7 +709,7 @@ impl WsIoServerConnection {
 }
 
 // Constants/Statics
-static NEXT_CONNECTION_ID: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(0));
+static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(test)]
 mod tests {
