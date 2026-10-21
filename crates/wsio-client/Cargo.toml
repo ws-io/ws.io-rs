@@ -217,7 +217,7 @@ wsio-core.workspace = true
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
-
+tokio = { version = "1.54.0", features = ["test-util"] }
 
 # -----------------------------------------------------------------------------
 # Target-specific development dependencies

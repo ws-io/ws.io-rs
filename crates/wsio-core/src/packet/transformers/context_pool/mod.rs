@@ -32,3 +32,6 @@ impl<Context> WsIoPacketContextCache<Context> {
         result
     }
 }
+
+#[cfg(test)]
+mod tests;

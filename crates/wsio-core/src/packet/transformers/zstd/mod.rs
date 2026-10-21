@@ -156,3 +156,6 @@ impl WsIoPacketZstdTransformerConfig {
         payload_size >= self.blocking_threshold
     }
 }
+
+#[cfg(test)]
+mod tests;

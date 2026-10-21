@@ -45,3 +45,6 @@ impl WsIoLifecycleCompletionSlot {
         completion_token.cancelled().await;
     }
 }
+
+#[cfg(test)]
+mod tests;

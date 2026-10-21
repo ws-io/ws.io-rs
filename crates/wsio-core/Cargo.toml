@@ -214,7 +214,8 @@ zstd = { version = "0.14.3", default-features = false, optional = true }
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
-
+futures-util = { version = "0.3.34", default-features = false, features = ["async-await"] }
+tokio = { version = "1.54.0", features = ["test-util"] }
 
 # -----------------------------------------------------------------------------
 # Target-specific development dependencies

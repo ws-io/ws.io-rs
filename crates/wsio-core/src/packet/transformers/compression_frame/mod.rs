@@ -119,3 +119,6 @@ impl WsIoPacketCompressionFrameHeader {
         self
     }
 }
+
+#[cfg(test)]
+mod tests;

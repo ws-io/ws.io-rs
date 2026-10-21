@@ -113,3 +113,6 @@ impl WsIoPacketCodec {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

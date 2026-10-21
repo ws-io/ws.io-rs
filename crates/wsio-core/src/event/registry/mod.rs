@@ -331,3 +331,6 @@ async fn run_handler<C>(
         result = AssertUnwindSafe(async move { handler(ctx, data).await }).catch_unwind() => Some(result),
     }
 }
+
+#[cfg(test)]
+mod tests;

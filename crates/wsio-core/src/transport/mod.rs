@@ -125,3 +125,6 @@ pub fn validate_transport_config(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

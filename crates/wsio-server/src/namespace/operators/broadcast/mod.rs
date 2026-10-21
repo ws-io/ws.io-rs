@@ -193,3 +193,6 @@ impl WsIoServerNamespaceBroadcastOperator {
         self
     }
 }
+
+#[cfg(test)]
+mod tests;

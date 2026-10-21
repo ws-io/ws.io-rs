@@ -426,3 +426,6 @@ impl WsIoClientSession {
 
 // Constants/Statics
 static PING_MESSAGE: LazyLock<Arc<Message>> = LazyLock::new(|| Arc::new(Message::Binary(vec![0x01].into())));
+
+#[cfg(test)]
+mod tests;

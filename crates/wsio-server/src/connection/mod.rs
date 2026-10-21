@@ -750,3 +750,6 @@ impl WsIoServerConnection {
 
 // Constants/Statics
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+mod tests;
