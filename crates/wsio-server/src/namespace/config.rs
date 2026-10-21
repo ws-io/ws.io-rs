@@ -58,6 +58,13 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Defaults to the value inherited from the server builder.
     pub(crate) broadcast_concurrency_limit: usize,
 
+    /// Maximum duration for waiting for the next WebSocket message on a ready connection.
+    ///
+    /// Packet processing time is excluded. `None` disables the timeout.
+    /// `Some(Duration::ZERO)` does not disable the timeout.
+    /// Defaults to the value inherited from the server builder.
+    pub(super) connection_idle_timeout: Option<Duration>,
+
     /// Maximum duration for a matched HTTP request's WebSocket upgrade.
     pub(super) http_request_upgrade_timeout: Duration,
 
@@ -160,6 +167,7 @@ impl FmtDebug for WsIoServerNamespaceConfig {
         f.debug_struct("WsIoServerNamespaceConfig")
             .field("path", &self.path)
             .field("broadcast_concurrency_limit", &self.broadcast_concurrency_limit)
+            .field("connection_idle_timeout", &self.connection_idle_timeout)
             .field("http_request_upgrade_timeout", &self.http_request_upgrade_timeout)
             .field(
                 "init_request_handler",

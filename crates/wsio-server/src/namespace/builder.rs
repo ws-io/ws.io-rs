@@ -46,6 +46,7 @@ impl WsIoServerNamespaceBuilder {
         Self {
             config: WsIoServerNamespaceConfig {
                 broadcast_concurrency_limit: runtime.config.broadcast_concurrency_limit,
+                connection_idle_timeout: runtime.config.connection_idle_timeout,
                 http_request_upgrade_timeout: runtime.config.http_request_upgrade_timeout,
                 init_request_handler: None,
                 init_request_handler_timeout: runtime.config.init_request_handler_timeout,
@@ -73,6 +74,15 @@ impl WsIoServerNamespaceBuilder {
     /// `0` means unlimited concurrency.
     pub fn broadcast_concurrency_limit(mut self, broadcast_concurrency_limit: usize) -> Self {
         self.config.broadcast_concurrency_limit = broadcast_concurrency_limit;
+        self
+    }
+
+    /// Sets the maximum duration for waiting for the next WebSocket message on a ready connection.
+    ///
+    /// Packet processing time is excluded. `None` disables the timeout.
+    /// `Some(Duration::ZERO)` does not disable the timeout.
+    pub fn connection_idle_timeout(mut self, duration: Option<Duration>) -> Self {
+        self.config.connection_idle_timeout = duration;
         self
     }
 

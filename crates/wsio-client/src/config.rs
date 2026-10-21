@@ -125,8 +125,10 @@ pub(crate) struct WsIoClientConfig {
     /// Interval between client heartbeat frames after the WebSocket session is
     /// created.
     ///
-    /// The heartbeat is a one-byte binary WebSocket frame. The server ignores
-    /// these frames before protocol packet decoding.
+    /// The heartbeat is a one-byte binary WebSocket frame. The server skips
+    /// these frames before protocol packet decoding, but receiving them keeps the
+    /// server's connection idle timeout from expiring. Keep this interval well
+    /// below that timeout (90 seconds by default).
     ///
     /// Defaults to 25 seconds.
     /// `Duration::ZERO` introduces no intentional delay.

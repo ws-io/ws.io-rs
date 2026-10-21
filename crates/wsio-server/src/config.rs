@@ -20,6 +20,13 @@ pub(crate) struct WsIoServerConfig {
     /// Defaults to `512`.
     pub(crate) broadcast_concurrency_limit: usize,
 
+    /// Maximum duration for waiting for the next WebSocket message on a ready connection.
+    ///
+    /// Packet processing time is excluded. Namespace builders may override this value.
+    /// Defaults to 90 seconds. `None` disables the timeout.
+    /// `Some(Duration::ZERO)` does not disable the timeout.
+    pub(crate) connection_idle_timeout: Option<Duration>,
+
     /// Maximum duration for an accepted HTTP request's WebSocket upgrade.
     ///
     /// This covers the HTTP adapter's upgrade future after the request path

@@ -205,7 +205,9 @@ impl WsIoClientBuilder {
     ///
     /// After session initialization starts, the client periodically sends a
     /// one-byte binary WebSocket frame. The server treats these frames as
-    /// heartbeats and ignores them before packet decoding.
+    /// heartbeats: they are skipped before packet decoding but keep the server's
+    /// connection idle timeout (90 seconds by default) from expiring, so keep
+    /// this interval well below it.
     pub fn ping_interval(mut self, duration: Duration) -> Self {
         self.config.ping_interval = duration;
         self

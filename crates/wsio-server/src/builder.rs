@@ -31,6 +31,7 @@ impl WsIoServerBuilder {
         Self {
             config: WsIoServerConfig {
                 broadcast_concurrency_limit: 512,
+                connection_idle_timeout: Some(Duration::from_secs(90)),
                 http_request_upgrade_timeout: Duration::from_secs(3),
                 init_request_handler_timeout: Duration::from_secs(3),
                 init_response_handler_timeout: Duration::from_secs(3),
@@ -63,6 +64,16 @@ impl WsIoServerBuilder {
     /// Builds a [`WsIoServer`] from this builder's configuration.
     pub fn build(self) -> WsIoServer {
         WsIoServer(WsIoServerRuntime::new(self.config))
+    }
+
+    /// Sets the default maximum duration for waiting for the next WebSocket message on a ready connection.
+    ///
+    /// Packet processing time is excluded. Defaults to 90 seconds; `None` disables the timeout.
+    /// `Some(Duration::ZERO)` does not disable the timeout.
+    /// Namespace builders inherit this value and may override it.
+    pub fn connection_idle_timeout(mut self, duration: Option<Duration>) -> Self {
+        self.config.connection_idle_timeout = duration;
+        self
     }
 
     /// Sets the default maximum duration for a matched HTTP request's WebSocket

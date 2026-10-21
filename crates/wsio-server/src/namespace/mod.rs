@@ -153,11 +153,31 @@ impl WsIoServerNamespace {
         // Split ws stream and spawn read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
         let connection_clone = Arc::clone(&connection);
+        let connection_idle_timeout = self.config.connection_idle_timeout;
         let mut read_ws_stream_task = spawn(async move {
-            while let Some(message) = ws_stream_reader.next().await {
+            loop {
+                let message = if let Some(idle_timeout) = connection_idle_timeout
+                    && connection_clone.is_ready()
+                {
+                    if let Ok(message) = timeout(idle_timeout, ws_stream_reader.next()).await {
+                        message
+                    } else {
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(connection_id = connection_clone.id(), "server connection idle timeout");
+                        break;
+                    }
+                } else {
+                    ws_stream_reader.next().await
+                };
+
+                let Some(message) = message else {
+                    break;
+                };
+
                 if match message {
                     Ok(Message::Binary(bytes)) => {
-                        // Treat any single-byte binary frame as a client heartbeat and ignore it
+                        // Treat any single-byte binary frame as a client heartbeat and ignore it;
+                        // receiving it still refreshes the idle timeout
                         if bytes.len() == 1 {
                             continue;
                         }
