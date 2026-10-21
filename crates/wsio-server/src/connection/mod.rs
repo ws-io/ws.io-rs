@@ -4,6 +4,7 @@ use std::{
         Formatter,
         Result as FmtResult,
     },
+    mem::take,
     panic::AssertUnwindSafe,
     sync::{
         Arc,
@@ -27,12 +28,13 @@ use http::{
 };
 use kikiutils::{
     atomic::enum_cell::AtomicEnumCell,
-    types::fx_collections::FxDashSet,
+    types::fx_collections::FxHashSet,
 };
 use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
+use parking_lot::Mutex as ParkingLotMutex;
 use serde::{
     Serialize,
     de::DeserializeOwned,
@@ -101,7 +103,7 @@ pub struct WsIoServerConnection {
     headers: HeaderMap,
     id: u64,
     init_timeout_task: Mutex<Option<JoinHandle<()>>>,
-    joined_rooms: FxDashSet<String>,
+    joined_rooms: ParkingLotMutex<FxHashSet<String>>,
     message_tx: mpsc::Sender<Arc<Message>>,
     namespace: Arc<WsIoServerNamespace>,
     on_close_handler: Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
@@ -150,7 +152,6 @@ impl FmtDebug for WsIoServerConnection {
             .field("state", &self.state)
             .field("request_uri", &self.request_uri)
             .field("headers", &self.headers)
-            .field("joined_rooms_len", &self.joined_rooms.len())
             .field("message_tx", &self.message_tx)
             .field("event_queue_tx", &self.event_queue_tx)
             .field("event_dispatcher_task", &event_dispatcher_task)
@@ -159,6 +160,11 @@ impl FmtDebug for WsIoServerConnection {
             .field("event_registry", &self.event_registry)
             .field("init_timeout_task", &init_timeout_task)
             .field("on_close_handler", &on_close_handler);
+
+        match self.joined_rooms.try_lock() {
+            Some(rooms) => debug.field("joined_rooms_len", &rooms.len()),
+            None => debug.field("joined_rooms_len", &"<locked>"),
+        };
 
         #[cfg(feature = "connection-extensions")]
         debug.field("extensions", &self.extensions);
@@ -205,7 +211,7 @@ impl WsIoServerConnection {
                 headers,
                 id,
                 init_timeout_task: Mutex::new(None),
-                joined_rooms: FxDashSet::default(),
+                joined_rooms: ParkingLotMutex::new(FxHashSet::default()),
                 message_tx,
                 namespace,
                 on_close_handler: Mutex::new(None),
@@ -374,12 +380,10 @@ impl WsIoServerConnection {
         self.namespace.remove_connection(self.id);
 
         // Leave all joined rooms
-        let joined_rooms = self.joined_rooms.iter().map(|entry| entry.clone()).collect::<Vec<_>>();
+        let joined_rooms = take(&mut *self.joined_rooms.lock());
         for room_name in &joined_rooms {
             self.namespace.remove_connection_id_from_room(room_name, self.id);
         }
-
-        self.joined_rooms.clear();
 
         // Abort init-timeout task
         abort_locked_task(&self.init_timeout_task).await;
@@ -639,7 +643,7 @@ impl WsIoServerConnection {
 
             #[cfg(feature = "tracing")]
             tracing::trace!(connection_id = self.id, room = %room_name, "connection joined room");
-            self.joined_rooms.insert(room_name);
+            self.joined_rooms.lock().insert(room_name);
         }
     }
 
@@ -649,7 +653,7 @@ impl WsIoServerConnection {
             let room_name = room_name.into();
             self.namespace.remove_connection_id_from_room(&room_name, self.id);
 
-            self.joined_rooms.remove(&room_name);
+            self.joined_rooms.lock().remove(&room_name);
 
             #[cfg(feature = "tracing")]
             tracing::trace!(connection_id = self.id, room = %room_name, "connection left room");
@@ -919,12 +923,12 @@ mod tests {
         assert_eq!(namespace.connection_count(), 1);
 
         connection.join(["room_a", "room_b"]);
-        assert!(connection.joined_rooms.contains("room_a"));
+        assert!(connection.joined_rooms.lock().contains("room_a"));
 
         connection.cleanup().await;
 
         assert_eq!(connection.state.get(), ConnectionState::Closed);
-        assert!(connection.joined_rooms.is_empty());
+        assert!(connection.joined_rooms.lock().is_empty());
         assert_eq!(namespace.connection_count(), 0);
     }
 }
