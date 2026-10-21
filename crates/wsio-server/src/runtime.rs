@@ -235,6 +235,7 @@ mod tests {
             broadcast_concurrency_limit: 16,
             channel_capacity: 2048,
             connection_idle_timeout: Some(Duration::from_secs(90)),
+            disconnect_timeout: Duration::from_secs(5),
             http_request_upgrade_timeout: Duration::from_secs(3),
             init_request_handler_timeout: Duration::from_secs(3),
             init_response_handler_timeout: Duration::from_secs(3),

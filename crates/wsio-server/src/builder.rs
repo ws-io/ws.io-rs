@@ -42,6 +42,7 @@ impl WsIoServerBuilder {
                 broadcast_concurrency_limit: 512,
                 channel_capacity: DEFAULT_CHANNEL_CAPACITY,
                 connection_idle_timeout: Some(Duration::from_secs(90)),
+                disconnect_timeout: Duration::from_secs(5),
                 http_request_upgrade_timeout: Duration::from_secs(3),
                 init_request_handler_timeout: Duration::from_secs(3),
                 init_response_handler_timeout: Duration::from_secs(3),
@@ -100,6 +101,17 @@ impl WsIoServerBuilder {
     /// Namespace builders inherit this value and may override it.
     pub fn connection_idle_timeout(mut self, duration: Option<Duration>) -> Self {
         self.config.connection_idle_timeout = duration;
+        self
+    }
+
+    /// Sets the default timeout for each disconnect phase: preparing and queueing the
+    /// protocol packet, then waiting for transport shutdown after cancellation.
+    ///
+    /// Defaults to 5 seconds. Cleanup callbacks have their own timeouts.
+    /// A disconnect may take up to two phases; zero requests no grace period.
+    /// Namespace builders inherit this value and may override it.
+    pub fn disconnect_timeout(mut self, duration: Duration) -> Self {
+        self.config.disconnect_timeout = duration;
         self
     }
 
@@ -266,6 +278,7 @@ mod tests {
     fn test_builder_configuration_chaining() {
         let server = WsIoServer::builder()
             .broadcast_concurrency_limit(1024)
+            .disconnect_timeout(Duration::from_millis(700))
             .http_request_upgrade_timeout(Duration::from_millis(750))
             .init_request_handler_timeout(Duration::from_secs(1))
             .init_response_handler_timeout(Duration::from_secs(2))
@@ -284,6 +297,16 @@ mod tests {
         // Access internal config through the built runtime
         let config = &server.0.config;
         assert_eq!(config.broadcast_concurrency_limit, 1024);
+        assert_eq!(config.disconnect_timeout, Duration::from_millis(700));
+        let namespace = server.new_namespace_builder("/inherited").register().unwrap();
+        assert_eq!(namespace.config.disconnect_timeout, config.disconnect_timeout);
+        let namespace = server
+            .new_namespace_builder("/overridden")
+            .disconnect_timeout(Duration::from_millis(300))
+            .register()
+            .unwrap();
+
+        assert_eq!(namespace.config.disconnect_timeout, Duration::from_millis(300));
         assert_eq!(config.http_request_upgrade_timeout, Duration::from_millis(750));
         assert_eq!(config.init_request_handler_timeout, Duration::from_secs(1));
         assert_eq!(config.init_response_handler_timeout, Duration::from_secs(2));

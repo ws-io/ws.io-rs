@@ -29,7 +29,6 @@ use num_enum::{
 use roaring::RoaringTreemap;
 use serde::Serialize;
 use tokio::{
-    join,
     select,
     spawn,
     time::timeout,
@@ -56,6 +55,8 @@ use crate::{
     connection::WsIoServerConnection,
     core::{
         packet::WsIoPacket,
+        traits::task::spawner::TaskSpawner,
+        transport::shutdown_websocket_stream_tasks,
         utils::lifecycle::WsIoLifecycleCompletionSlot,
     },
     runtime::{
@@ -227,34 +228,43 @@ impl WsIoServerNamespace {
             }
         });
 
-        // Try to init connection
-        match connection.init().await {
-            Ok(()) => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(connection_id = connection.id(), "server connection initialized");
-                // Wait for either read or write task to finish
-                select! {
-                    _ = &mut read_ws_stream_task => {
-                        #[cfg(feature = "tracing")]
-                        tracing::debug!(connection_id = connection.id(), "server read task finished; aborting write task");
-                        write_ws_stream_task.abort();
-                        let _ = write_ws_stream_task.await;
-                    },
-                    _ = &mut write_ws_stream_task => {
-                        #[cfg(feature = "tracing")]
-                        tracing::debug!(connection_id = connection.id(), "server write task finished; aborting read task");
-                        read_ws_stream_task.abort();
-                        let _ = read_ws_stream_task.await;
-                    },
-                }
+        // Initialization must also yield to close requests (including stalled transformers).
+        let cancel_token = connection.cancel_token();
+        let init_result = select! {
+            biased;
+            () = cancel_token.cancelled() => Err(anyhow!("connection closed during initialization")),
+            result = connection.init() => result,
+        };
+
+        if let Err(_err) = init_result {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(connection_id = connection.id(), error = %_err, "server connection initialization failed");
+            connection.close();
+        } else {
+            #[cfg(feature = "tracing")]
+            tracing::debug!(connection_id = connection.id(), "server connection initialized");
+        }
+
+        select! {
+            biased;
+            () = cancel_token.cancelled() => {
+                shutdown_websocket_stream_tasks(
+                    read_ws_stream_task,
+                    write_ws_stream_task,
+                    self.config.disconnect_timeout,
+                ).await;
             },
-            Err(_err) => {
+            _ = &mut read_ws_stream_task => {
                 #[cfg(feature = "tracing")]
-                tracing::debug!(connection_id = connection.id(), error = %_err, "server connection initialization failed");
-                // Close connection
+                tracing::debug!(connection_id = connection.id(), "server read task finished; aborting write task");
+                write_ws_stream_task.abort();
+                let _ = write_ws_stream_task.await;
+            },
+            _ = &mut write_ws_stream_task => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = connection.id(), "server write task finished; aborting read task");
                 read_ws_stream_task.abort();
-                connection.close();
-                let _ = join!(read_ws_stream_task, write_ws_stream_task);
+                let _ = read_ws_stream_task.await;
             },
         }
 

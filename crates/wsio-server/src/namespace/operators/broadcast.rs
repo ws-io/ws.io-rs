@@ -130,14 +130,9 @@ impl WsIoServerNamespaceBroadcastOperator {
             "broadcasting disconnect to namespace targets"
         );
 
-        let message = self
-            .namespace
-            .encode_packet_to_message(&WsIoPacket::new_disconnect())
-            .await?;
-
-        self.for_each_target_connections(move |connection| {
-            let message = Arc::clone(&message);
-            async move { connection.send_message(message).await }
+        self.for_each_target_connections(async |connection| {
+            connection.disconnect().await;
+            Ok(())
         })
         .await;
 
@@ -201,15 +196,27 @@ impl WsIoServerNamespaceBroadcastOperator {
 
 #[cfg(test)]
 mod tests {
-    use std::array::from_fn;
+    use std::{
+        array::from_fn,
+        time::Duration,
+    };
 
+    use bytes::Bytes;
     use http::{
         HeaderMap,
         Uri,
     };
+    use tokio::{
+        sync::mpsc::error::TryRecvError,
+        time::timeout,
+    };
+    use tokio_tungstenite::tungstenite::Message;
 
     use super::*;
-    use crate::WsIoServer;
+    use crate::{
+        WsIoServer,
+        core::traits::task::spawner::TaskSpawner,
+    };
 
     fn namespace_with_rooms() -> (Arc<WsIoServerNamespace>, [u64; 3]) {
         let namespace = WsIoServer::builder()
@@ -232,6 +239,48 @@ mod tests {
         namespace.add_connection_id_to_room("excluded", ids[1]);
         namespace.add_connection_id_to_room("excluded", ids[2]);
         (namespace, ids)
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_all_closes_full_queues_and_reaches_later_targets() {
+        let namespace = WsIoServer::builder()
+            .channel_capacity(1)
+            .build()
+            .unwrap()
+            .new_namespace_builder("/test")
+            .broadcast_concurrency_limit(1)
+            .disconnect_timeout(Duration::ZERO)
+            .register()
+            .unwrap();
+
+        let mut receivers = Vec::new();
+        for _ in 0..3 {
+            let (connection, messages, _) =
+                WsIoServerConnection::new(HeaderMap::new(), Arc::clone(&namespace), Uri::from_static("/ws.io"));
+
+            connection
+                .send_message(Arc::new(Message::Binary(Bytes::from_static(b"queued"))))
+                .await
+                .unwrap();
+
+            assert!(namespace.insert_connection(&connection));
+            receivers.push(messages);
+        }
+
+        timeout(Duration::from_secs(1), namespace.disconnect_all())
+            .await
+            .unwrap()
+            .unwrap();
+
+        for connection in &namespace.connections {
+            assert!(connection.cancel_token().is_cancelled());
+        }
+
+        // A zero timeout cannot wait for queue space, so only the pre-filled message remains.
+        for mut messages in receivers {
+            assert!(matches!(&*messages.try_recv().unwrap(), Message::Binary(bytes) if bytes == "queued"));
+            assert!(matches!(messages.try_recv(), Err(TryRecvError::Empty)));
+        }
     }
 
     #[test]

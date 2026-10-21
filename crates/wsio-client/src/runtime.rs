@@ -1,7 +1,4 @@
-use std::{
-    sync::Arc,
-    time::Duration,
-};
+use std::sync::Arc;
 
 use anyhow::{
     Result,
@@ -55,16 +52,11 @@ use crate::{
         event::registry::WsIoEventRegistry,
         packet::WsIoPacket,
         traits::task::spawner::TaskSpawner,
+        transport::shutdown_websocket_stream_tasks,
         utils::lifecycle::WsIoLifecycleCompletionSlot,
     },
     session::WsIoClientSession,
 };
-
-// Enums
-enum CompletedWebSocketTask {
-    Read,
-    Write,
-}
 
 // Structs
 #[repr(u8)]
@@ -351,13 +343,22 @@ impl WsIoClientRuntime {
 
         self.session.store(Some(Arc::clone(&session)));
 
+        // Session cancellation ends this transport without stopping the reconnect loop.
+        let session_cancel_token = session.cancel_token();
+        let shutdown_requested = async {
+            select! {
+                () = cancel_token.cancelled() => {},
+                () = session_cancel_token.cancelled() => {},
+            }
+        };
+
         // Wait for any of the tasks to finish or canceled
         select! {
-            () = cancel_token.cancelled() => {
+            () = shutdown_requested => {
                 #[cfg(feature = "tracing")]
                 tracing::debug!("client connection cancellation requested");
                 session.close();
-                shutdown_websocket_tasks(
+                shutdown_websocket_stream_tasks(
                     read_ws_stream_task,
                     write_ws_stream_task,
                     self.config.disconnect_timeout,
@@ -462,44 +463,6 @@ impl WsIoClientRuntime {
     }
 }
 
-// Functions
-async fn shutdown_websocket_tasks(
-    mut read_task: JoinHandle<()>,
-    mut write_task: JoinHandle<()>,
-    shutdown_timeout: Duration,
-) {
-    let graceful_shutdown = timeout(shutdown_timeout, async {
-        select! {
-            _ = &mut read_task => CompletedWebSocketTask::Read,
-            _ = &mut write_task => CompletedWebSocketTask::Write,
-        }
-    })
-    .await;
-
-    match graceful_shutdown {
-        Ok(CompletedWebSocketTask::Read) => {
-            write_task.abort();
-            let _ = write_task.await;
-        },
-        Ok(CompletedWebSocketTask::Write) => {
-            read_task.abort();
-            let _ = read_task.await;
-        },
-        Err(_) => {
-            #[cfg(feature = "tracing")]
-            tracing::warn!(
-                timeout_ms = u64::try_from(shutdown_timeout.as_millis()).unwrap_or(u64::MAX),
-                "graceful WebSocket shutdown timed out; aborting tasks"
-            );
-
-            read_task.abort();
-            write_task.abort();
-            let _ = read_task.await;
-            let _ = write_task.await;
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -514,6 +477,7 @@ mod tests {
             sleep as thread_sleep,
             spawn as thread_spawn,
         },
+        time::Duration,
     };
 
     use bytes::Bytes;
@@ -529,18 +493,6 @@ mod tests {
 
     use super::*;
     use crate::WsIoClient;
-
-    async fn pending_task_with_drop_signal(drop_signal: oneshot::Sender<()>) {
-        let _drop_signal = drop_signal;
-        pending::<()>().await;
-    }
-
-    async fn assert_task_dropped(drop_signal: oneshot::Receiver<()>) {
-        timeout(Duration::from_secs(1), drop_signal)
-            .await
-            .expect("task should be dropped before timeout")
-            .expect_err("task sender should be dropped");
-    }
 
     #[tokio::test]
     async fn oversized_emit_does_not_enqueue_or_stop_runtime() {
@@ -654,46 +606,5 @@ mod tests {
 
         disconnect_result.expect("disconnect should cancel the pending WebSocket handshake");
         assert!(client.0.status.is(RuntimeStatus::Stopped));
-    }
-
-    #[tokio::test]
-    async fn shutdown_websocket_tasks_handles_read_completion() {
-        let (write_task_drop_signal, write_task_dropped) = oneshot::channel();
-        shutdown_websocket_tasks(
-            spawn(async {}),
-            spawn(pending_task_with_drop_signal(write_task_drop_signal)),
-            Duration::from_secs(1),
-        )
-        .await;
-
-        assert_task_dropped(write_task_dropped).await;
-    }
-
-    #[tokio::test]
-    async fn shutdown_websocket_tasks_handles_write_completion() {
-        let (read_task_drop_signal, read_task_dropped) = oneshot::channel();
-        shutdown_websocket_tasks(
-            spawn(pending_task_with_drop_signal(read_task_drop_signal)),
-            spawn(async {}),
-            Duration::from_secs(1),
-        )
-        .await;
-
-        assert_task_dropped(read_task_dropped).await;
-    }
-
-    #[tokio::test]
-    async fn shutdown_websocket_tasks_aborts_both_on_timeout() {
-        let (read_task_drop_signal, read_task_dropped) = oneshot::channel();
-        let (write_task_drop_signal, write_task_dropped) = oneshot::channel();
-        shutdown_websocket_tasks(
-            spawn(pending_task_with_drop_signal(read_task_drop_signal)),
-            spawn(pending_task_with_drop_signal(write_task_drop_signal)),
-            Duration::ZERO,
-        )
-        .await;
-
-        assert_task_dropped(read_task_dropped).await;
-        assert_task_dropped(write_task_dropped).await;
     }
 }

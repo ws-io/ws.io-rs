@@ -73,6 +73,10 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 
 ## Runtime and Lifecycle Changes
 
+- Server connections now finish within the new `disconnect_timeout` (default 5 seconds, namespace-overridable) after `close()`/`disconnect()`, even when the outbound queue is full or the peer stops reading. Delivery of queued messages and the Close frame is best-effort.
+- `WsIoServerConnection::disconnect()` waits at most `disconnect_timeout` to queue the Disconnect packet, then always closes the connection.
+- Namespace `disconnect()` / `disconnect_all()` now also close the server-side connections instead of only sending the Disconnect packet.
+- Client session closes that do not stop the runtime, such as a ready-packet timeout, now end the transport within `disconnect_timeout`; reconnection continues as before.
 - Client request modifiers and the WebSocket handshake now observe cancellation, so cancelling connection setup no longer waits for the modifier or handshake to finish. The existing `connect_timeout` behavior is preserved.
 - The server namespace uses `TaskTracker` to reap completed connection tasks; shutdown closes the tracker and waits for remaining tasks.
 - Server runtime and namespace shutdown operations are serialized by asynchronous operation locks, preventing concurrent state transitions from racing.

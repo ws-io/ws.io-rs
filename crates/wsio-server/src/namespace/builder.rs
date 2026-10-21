@@ -51,6 +51,7 @@ impl WsIoServerNamespaceBuilder {
                 broadcast_concurrency_limit: runtime.config.broadcast_concurrency_limit,
                 channel_capacity: runtime.config.channel_capacity,
                 connection_idle_timeout: runtime.config.connection_idle_timeout,
+                disconnect_timeout: runtime.config.disconnect_timeout,
                 http_request_upgrade_timeout: runtime.config.http_request_upgrade_timeout,
                 init_request_handler: None,
                 init_request_handler_timeout: runtime.config.init_request_handler_timeout,
@@ -98,6 +99,16 @@ impl WsIoServerNamespaceBuilder {
     /// `Some(Duration::ZERO)` does not disable the timeout.
     pub fn connection_idle_timeout(mut self, duration: Option<Duration>) -> Self {
         self.config.connection_idle_timeout = duration;
+        self
+    }
+
+    /// Sets the timeout for each disconnect phase: preparing and queueing the protocol
+    /// packet, then waiting for transport shutdown after cancellation.
+    ///
+    /// Inherits the server default of 5 seconds. Cleanup callbacks have their own timeouts.
+    /// A disconnect may take up to two phases; zero requests no grace period.
+    pub fn disconnect_timeout(mut self, duration: Duration) -> Self {
+        self.config.disconnect_timeout = duration;
         self
     }
 

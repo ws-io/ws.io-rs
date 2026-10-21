@@ -587,10 +587,26 @@ impl WsIoServerConnection {
     }
 
     // Public methods
+
+    /// Attempts to queue a protocol Disconnect within `disconnect_timeout`, then requests closure.
+    ///
+    /// Packet transformation and queue backpressure share this timeout. Transport shutdown has
+    /// a separate grace period of the same duration. Peer receipt is not guaranteed.
     pub async fn disconnect(&self) {
         #[cfg(feature = "tracing")]
         tracing::debug!(connection_id = self.id, "disconnecting server connection");
-        let _ = self.send_packet(&WsIoPacket::new_disconnect()).await;
+
+        let disconnect_packet = WsIoPacket::new_disconnect();
+        let cancel_token = self.cancel_token();
+        select! {
+            biased;
+            () = cancel_token.cancelled() => {},
+            _ = timeout(
+                self.namespace.config.disconnect_timeout,
+                self.send_packet(&disconnect_packet),
+            ) => {},
+        }
+
         self.close();
     }
 
@@ -739,9 +755,12 @@ static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
 mod tests {
     use std::{
         future::pending,
+        pin::pin,
         time::Duration,
     };
 
+    use async_trait::async_trait;
+    use futures_util::poll;
     use http::{
         HeaderMap,
         Uri,
@@ -759,7 +778,13 @@ mod tests {
             timeout,
         },
     };
-    use wsio_core::packet::codecs::WsIoPacketCodec;
+    use wsio_core::packet::{
+        codecs::WsIoPacketCodec,
+        transformers::{
+            WsIoPacketTransformer,
+            custom::WsIoPacketCustomTransformer,
+        },
+    };
 
     use super::*;
 
@@ -779,6 +804,96 @@ mod tests {
             WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
 
         (connection, event_queue_rx)
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_waits_for_transient_backpressure_and_preserves_packet_order() {
+        let namespace = WsIoServer::builder()
+            .channel_capacity(1)
+            .build()
+            .unwrap()
+            .new_namespace_builder("/socket")
+            .register()
+            .unwrap();
+
+        let (connection, mut messages, _) =
+            WsIoServerConnection::new(HeaderMap::new(), Arc::clone(&namespace), Uri::from_static("/ws.io"));
+
+        let queued = Arc::new(Message::Binary(Bytes::from_static(b"queued")));
+        connection.message_tx.try_send(Arc::clone(&queued)).unwrap();
+
+        let mut disconnect = pin!(connection.disconnect());
+        assert!(poll!(&mut disconnect).is_pending());
+        assert!(!connection.cancel_token.is_cancelled());
+        assert_eq!(messages.try_recv().unwrap(), queued);
+
+        timeout(Duration::from_secs(1), disconnect).await.unwrap();
+        assert!(connection.cancel_token.is_cancelled());
+        let message = messages.try_recv().unwrap();
+        let Message::Binary(bytes) = &*message else {
+            panic!("expected Disconnect packet")
+        };
+
+        assert!(matches!(
+            namespace.config.packet_codec.decode(bytes).unwrap().r#type,
+            WsIoPacketType::Disconnect
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_closes_even_when_queue_never_drains() {
+        let namespace = WsIoServer::builder()
+            .channel_capacity(1)
+            .build()
+            .unwrap()
+            .new_namespace_builder("/socket")
+            .disconnect_timeout(Duration::ZERO)
+            .register()
+            .unwrap();
+
+        let (connection, mut messages, _) =
+            WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("/ws.io"));
+
+        let queued = Arc::new(Message::Binary(Bytes::from_static(b"queued")));
+        connection.message_tx.try_send(Arc::clone(&queued)).unwrap();
+
+        timeout(Duration::from_secs(1), connection.disconnect()).await.unwrap();
+        assert!(connection.cancel_token.is_cancelled());
+        assert!(connection.state.is(ConnectionState::Closing));
+        assert_eq!(messages.try_recv().unwrap(), queued);
+        assert!(matches!(messages.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_bounds_a_stalled_packet_transformer() {
+        struct StalledTransformer;
+
+        #[async_trait]
+        impl WsIoPacketCustomTransformer for StalledTransformer {
+            async fn encode(&self, _: &[u8]) -> Result<Bytes> {
+                pending().await
+            }
+
+            async fn decode(&self, _: &[u8]) -> Result<Bytes> {
+                pending().await
+            }
+        }
+
+        let namespace = WsIoServer::builder()
+            .build()
+            .unwrap()
+            .new_namespace_builder("/socket")
+            .disconnect_timeout(Duration::ZERO)
+            .packet_transformer(WsIoPacketTransformer::custom(Arc::new(StalledTransformer)))
+            .register()
+            .unwrap();
+
+        let (connection, mut messages, _) =
+            WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("/ws.io"));
+
+        timeout(Duration::from_secs(1), connection.disconnect()).await.unwrap();
+        assert!(connection.cancel_token.is_cancelled());
+        assert!(matches!(&*messages.try_recv().unwrap(), Message::Close(None)));
     }
 
     #[tokio::test]

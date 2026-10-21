@@ -70,6 +70,12 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Defaults to the value inherited from the server builder.
     pub(super) connection_idle_timeout: Option<Duration>,
 
+    /// Maximum duration of each disconnect phase: preparing/queueing the protocol packet,
+    /// then waiting for transport shutdown after cancellation. Cleanup callbacks are excluded.
+    ///
+    /// Defaults to the value inherited from the server builder.
+    pub(crate) disconnect_timeout: Duration,
+
     /// Maximum duration for a matched HTTP request's WebSocket upgrade.
     pub(super) http_request_upgrade_timeout: Duration,
 
@@ -178,6 +184,7 @@ impl FmtDebug for WsIoServerNamespaceConfig {
             .field("broadcast_concurrency_limit", &self.broadcast_concurrency_limit)
             .field("channel_capacity", &self.channel_capacity)
             .field("connection_idle_timeout", &self.connection_idle_timeout)
+            .field("disconnect_timeout", &self.disconnect_timeout)
             .field("http_request_upgrade_timeout", &self.http_request_upgrade_timeout)
             .field(
                 "init_request_handler",

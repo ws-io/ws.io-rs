@@ -1,13 +1,25 @@
+use std::time::Duration;
+
 use anyhow::{
     Result,
     anyhow,
     ensure,
 };
-use tokio::sync::Semaphore;
+use tokio::{
+    select,
+    sync::Semaphore,
+    task::JoinHandle,
+    time::timeout,
+};
 use tungstenite::protocol::WebSocketConfig;
 
-// Constants/Statics
+// Enums
+enum CompletedWebSocketTask {
+    Read,
+    Write,
+}
 
+// Constants/Statics
 const DEFAULT_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Default message capacity of each internal channel.
@@ -36,6 +48,45 @@ pub fn default_websocket_config() -> WebSocketConfig {
         .max_write_buffer_size(DEFAULT_BUFFER_SIZE + DEFAULT_MAX_OUTGOING_MESSAGE_SIZE + OUTGOING_FRAME_OVERHEAD)
         .read_buffer_size(DEFAULT_BUFFER_SIZE)
         .write_buffer_size(DEFAULT_BUFFER_SIZE)
+}
+
+/// Waits for either transport task to finish, then stops its sibling.
+/// If neither finishes within the grace period, aborts and joins both tasks.
+pub async fn shutdown_websocket_stream_tasks(
+    mut read_task: JoinHandle<()>,
+    mut write_task: JoinHandle<()>,
+    shutdown_timeout: Duration,
+) {
+    let graceful_shutdown = timeout(shutdown_timeout, async {
+        select! {
+            _ = &mut read_task => CompletedWebSocketTask::Read,
+            _ = &mut write_task => CompletedWebSocketTask::Write,
+        }
+    })
+    .await;
+
+    match graceful_shutdown {
+        Ok(CompletedWebSocketTask::Read) => {
+            write_task.abort();
+            let _ = write_task.await;
+        },
+        Ok(CompletedWebSocketTask::Write) => {
+            read_task.abort();
+            let _ = read_task.await;
+        },
+        Err(_) => {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                timeout_ms = u64::try_from(shutdown_timeout.as_millis()).unwrap_or(u64::MAX),
+                "graceful WebSocket shutdown timed out; aborting tasks"
+            );
+
+            read_task.abort();
+            write_task.abort();
+            let _ = read_task.await;
+            let _ = write_task.await;
+        },
+    }
 }
 
 /// Validates queue capacity and outgoing WebSocket buffer requirements.
@@ -77,8 +128,15 @@ pub fn validate_transport_config(
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{
+        future::pending,
+        io::Cursor,
+    };
 
+    use tokio::{
+        spawn,
+        sync::oneshot,
+    };
     use tungstenite::{
         Message,
         WebSocket,
@@ -86,6 +144,59 @@ mod tests {
     };
 
     use super::*;
+
+    async fn pending_task_with_drop_signal(drop_signal: oneshot::Sender<()>) {
+        let _drop_signal = drop_signal;
+        pending::<()>().await;
+    }
+
+    async fn assert_task_dropped(drop_signal: oneshot::Receiver<()>) {
+        timeout(Duration::from_secs(1), drop_signal)
+            .await
+            .expect("task should be dropped before timeout")
+            .expect_err("task sender should be dropped");
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_websocket_stream_tasks_handles_read_completion() {
+        let (write_task_drop_signal, write_task_dropped) = oneshot::channel();
+        shutdown_websocket_stream_tasks(
+            spawn(async {}),
+            spawn(pending_task_with_drop_signal(write_task_drop_signal)),
+            Duration::from_secs(1),
+        )
+        .await;
+
+        assert_task_dropped(write_task_dropped).await;
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_websocket_stream_tasks_handles_write_completion() {
+        let (read_task_drop_signal, read_task_dropped) = oneshot::channel();
+        shutdown_websocket_stream_tasks(
+            spawn(pending_task_with_drop_signal(read_task_drop_signal)),
+            spawn(async {}),
+            Duration::from_secs(1),
+        )
+        .await;
+
+        assert_task_dropped(read_task_dropped).await;
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_websocket_stream_tasks_aborts_both_on_timeout() {
+        let (read_task_drop_signal, read_task_dropped) = oneshot::channel();
+        let (write_task_drop_signal, write_task_dropped) = oneshot::channel();
+        shutdown_websocket_stream_tasks(
+            spawn(pending_task_with_drop_signal(read_task_drop_signal)),
+            spawn(pending_task_with_drop_signal(write_task_drop_signal)),
+            Duration::ZERO,
+        )
+        .await;
+
+        assert_task_dropped(read_task_dropped).await;
+        assert_task_dropped(write_task_dropped).await;
+    }
 
     #[test]
     fn test_default_websocket_config_is_valid() {

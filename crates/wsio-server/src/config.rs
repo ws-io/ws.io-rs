@@ -34,6 +34,12 @@ pub(crate) struct WsIoServerConfig {
     /// `Some(Duration::ZERO)` does not disable the timeout.
     pub(crate) connection_idle_timeout: Option<Duration>,
 
+    /// Maximum duration of each disconnect phase: preparing/queueing the protocol packet,
+    /// then waiting for transport shutdown after cancellation. Cleanup callbacks are excluded.
+    ///
+    /// Defaults to 5 seconds. Namespace builders may override this value.
+    pub(crate) disconnect_timeout: Duration,
+
     /// Maximum duration for an accepted HTTP request's WebSocket upgrade.
     ///
     /// This covers the HTTP adapter's upgrade future after the request path
