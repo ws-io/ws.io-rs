@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.10.0 - 2026-10-21T07:28:21Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.9.4...wsio-client-v0.10.0)
+
+### ✅ Tests
+
+- cover transformer routing and outgoing message limits ([ffb0b0e](https://github.com/ws-io/ws.io-rs/commit/ffb0b0e8f03315569c82a3c86560d5a9c51c9ebf))
+- enable futures-util async-await for client and server tests ([5f3c935](https://github.com/ws-io/ws.io-rs/commit/5f3c9350fc57b75fbbe08fe91a3f1bb2540ab274))
+- add focused protocol and lifecycle unit tests ([a80f1ca](https://github.com/ws-io/ws.io-rs/commit/a80f1ca5c303ba67e088d27ca8953ce2371cb7f0))
+
+### 🏡 Chore
+
+- remove all test units, e2e, benches ([9db3d01](https://github.com/ws-io/ws.io-rs/commit/9db3d0101e4c018657cd7b8e740fb417bfaab33b))
+
+### 🚀 Enhancements
+
+- *(transport)* [**breaking**] validate outgoing message limits before queueing ([0f0672b](https://github.com/ws-io/ws.io-rs/commit/0f0672b42c17416eb383fd8c17420e3b02567cb0))
+- *(server)* add configurable connection idle timeout ([a995552](https://github.com/ws-io/ws.io-rs/commit/a99555204bf1c2c560b2823a4f4708ca770b0c70))
+
+### 🩹 Fixes
+
+- bound connection shutdown when close cannot be queued ([9b6c325](https://github.com/ws-io/ws.io-rs/commit/9b6c32581834b3b28271d7e11c2e6ff476b61adc))
+
 ## 0.9.4 - 2026-10-20T10:08:01Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.9.3...wsio-client-v0.9.4)

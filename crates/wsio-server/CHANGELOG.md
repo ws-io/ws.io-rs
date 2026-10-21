@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.15.0 - 2026-10-21T07:28:21Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.14.3...wsio-server-v0.15.0)
+
+### ✅ Tests
+
+- cover transformer routing and outgoing message limits ([ffb0b0e](https://github.com/ws-io/ws.io-rs/commit/ffb0b0e8f03315569c82a3c86560d5a9c51c9ebf))
+- enable futures-util async-await for client and server tests ([5f3c935](https://github.com/ws-io/ws.io-rs/commit/5f3c9350fc57b75fbbe08fe91a3f1bb2540ab274))
+- add focused protocol and lifecycle unit tests ([a80f1ca](https://github.com/ws-io/ws.io-rs/commit/a80f1ca5c303ba67e088d27ca8953ce2371cb7f0))
+
+### 🏡 Chore
+
+- remove all test units, e2e, benches ([9db3d01](https://github.com/ws-io/ws.io-rs/commit/9db3d0101e4c018657cd7b8e740fb417bfaab33b))
+
+### 💅 Refactors
+
+- *(server)* initialize connection ID counter directly ([6fda5ee](https://github.com/ws-io/ws.io-rs/commit/6fda5ee414d88aacf6a0e8c6548778f0c2341b72))
+
+### 🔥 Performance
+
+- *(server)* eliminate copy-on-write connection ID indexes ([0067004](https://github.com/ws-io/ws.io-rs/commit/00670048cc05b860d03e5a6b1a77d8008356cb94))
+- *(server)* reduce per-connection collection overhead ([874b8a4](https://github.com/ws-io/ws.io-rs/commit/874b8a44963d93af6f950ad6bb2f3786f51b9523))
+- *(server)* move request headers and URI into upgrade handling ([0d46485](https://github.com/ws-io/ws.io-rs/commit/0d46485b82dca1603c9db6c32fe04337fff3c3d3))
+
+### 🚀 Enhancements
+
+- *(transport)* [**breaking**] validate outgoing message limits before queueing ([0f0672b](https://github.com/ws-io/ws.io-rs/commit/0f0672b42c17416eb383fd8c17420e3b02567cb0))
+- *(server)* add configurable connection idle timeout ([a995552](https://github.com/ws-io/ws.io-rs/commit/a99555204bf1c2c560b2823a4f4708ca770b0c70))
+
+### 🩹 Fixes
+
+- bound connection shutdown when close cannot be queued ([9b6c325](https://github.com/ws-io/ws.io-rs/commit/9b6c32581834b3b28271d7e11c2e6ff476b61adc))
+- *(server)* release on-close handler lock before invoking handler ([c2cf5cf](https://github.com/ws-io/ws.io-rs/commit/c2cf5cf8f27a718a9af81f1fd1d7919478da29ff))
+- *(server)* synchronize room membership with connection cleanup ([4935f27](https://github.com/ws-io/ws.io-rs/commit/4935f2730139d344245ae0c35a6f03145198a073))
+
 ## 0.14.3 - 2026-10-20T10:08:01Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.14.2...wsio-server-v0.14.3)

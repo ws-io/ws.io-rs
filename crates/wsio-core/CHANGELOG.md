@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.15.0 - 2026-10-21T07:28:21Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.14.2...wsio-core-v0.15.0)
+
+### ✅ Tests
+
+- cover transformer routing and outgoing message limits ([ffb0b0e](https://github.com/ws-io/ws.io-rs/commit/ffb0b0e8f03315569c82a3c86560d5a9c51c9ebf))
+- add focused protocol and lifecycle unit tests ([a80f1ca](https://github.com/ws-io/ws.io-rs/commit/a80f1ca5c303ba67e088d27ca8953ce2371cb7f0))
+
+### 🏡 Chore
+
+- remove all test units, e2e, benches ([9db3d01](https://github.com/ws-io/ws.io-rs/commit/9db3d0101e4c018657cd7b8e740fb417bfaab33b))
+- lint code ([af92280](https://github.com/ws-io/ws.io-rs/commit/af92280f6f70bdfbf80179f999f8d1a30acdb688))
+
+### 🔥 Performance
+
+- *(core)* run single event handlers inline ([82e33bd](https://github.com/ws-io/ws.io-rs/commit/82e33bd6a7a014363d3377c88b7c167dd8f5cdd7))
+
+### 🚀 Enhancements
+
+- *(transport)* [**breaking**] validate outgoing message limits before queueing ([0f0672b](https://github.com/ws-io/ws.io-rs/commit/0f0672b42c17416eb383fd8c17420e3b02567cb0))
+
+### 🩹 Fixes
+
+- bound connection shutdown when close cannot be queued ([9b6c325](https://github.com/ws-io/ws.io-rs/commit/9b6c32581834b3b28271d7e11c2e6ff476b61adc))
+
 ## 0.14.2 - 2026-10-20T10:08:01Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.14.1...wsio-core-v0.14.2)
