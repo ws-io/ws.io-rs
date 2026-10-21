@@ -1,49 +1,24 @@
 use std::time::Duration;
 
-use http::{
-    HeaderMap,
-    Uri,
-};
-use tokio::{
-    sync::mpsc,
-    time::timeout,
-};
+use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
-use super::*;
+use super::{
+    super::super::test_support::ready_connection,
+    *,
+};
 use crate::{
     WsIoServer,
     core::packet::WsIoPacketType,
 };
 
-async fn connection(namespace: &Arc<WsIoServerNamespace>) -> (Arc<WsIoServerConnection>, mpsc::Receiver<Arc<Message>>) {
-    let (connection, mut messages, _events) =
-        WsIoServerConnection::new(HeaderMap::new(), Arc::clone(namespace), Uri::from_static("/ws.io"));
-
-    connection.init().await.unwrap();
-    messages.try_recv().unwrap();
-    connection
-        .handle_incoming_packet(
-            namespace
-                .config
-                .packet_codec
-                .encode(&WsIoPacket::new_init(None))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    messages.try_recv().unwrap();
-    (connection, messages)
-}
-
 #[tokio::test]
 async fn room_union_exclusion_and_delivery_are_exactly_once_per_target() {
     let server = WsIoServer::builder().build().unwrap();
     let ns = server.new_namespace_builder("/test").register().unwrap();
-    let (a, mut arx) = connection(&ns).await;
-    let (b, mut brx) = connection(&ns).await;
-    let (c, mut crx) = connection(&ns).await;
+    let (a, mut arx) = ready_connection(&ns).await;
+    let (b, mut brx) = ready_connection(&ns).await;
+    let (c, mut crx) = ready_connection(&ns).await;
     a.join(["red", "blue"]);
     b.join(["red"]);
     c.join(["blue", "excluded"]);
@@ -112,8 +87,8 @@ async fn room_union_exclusion_and_delivery_are_exactly_once_per_target() {
 async fn membership_indexes_survive_duplicate_join_leave_and_cleanup() {
     let server = WsIoServer::builder().build().unwrap();
     let ns = server.new_namespace_builder("/test").register().unwrap();
-    let (a, _arx) = connection(&ns).await;
-    let (b, _brx) = connection(&ns).await;
+    let (a, _arx) = ready_connection(&ns).await;
+    let (b, _brx) = ready_connection(&ns).await;
     a.join(["shared", "shared", "solo"]);
     b.join(["shared"]);
     assert_eq!(ns.rooms.get("shared").unwrap().len(), 2);

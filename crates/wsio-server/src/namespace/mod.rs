@@ -460,3 +460,8 @@ impl WsIoServerNamespace {
         WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self)).to(room_names)
     }
 }
+
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod tests;

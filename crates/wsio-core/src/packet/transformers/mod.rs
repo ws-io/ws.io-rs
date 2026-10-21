@@ -142,3 +142,6 @@ impl WsIoPacketTransformer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
