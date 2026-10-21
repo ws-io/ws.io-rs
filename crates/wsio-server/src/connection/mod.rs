@@ -390,7 +390,8 @@ impl WsIoServerConnection {
         abort_locked_task(&self.init_timeout_task).await;
 
         // Invoke on_close_handler with timeout protection if configured
-        if let Some(on_close_handler) = self.on_close_handler.lock().await.take()
+        let on_close_handler = self.on_close_handler.lock().await.take();
+        if let Some(on_close_handler) = on_close_handler
             && let Err(_err) = timeout(
                 self.namespace.config.on_close_handler_timeout,
                 on_close_handler(Arc::clone(self)),
