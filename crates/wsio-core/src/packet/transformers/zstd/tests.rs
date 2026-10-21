@@ -8,6 +8,7 @@ use tokio::{
     task::JoinSet,
     time::timeout,
 };
+use zstd::bulk::compress;
 
 use super::*;
 
@@ -45,6 +46,24 @@ async fn thresholds_and_raw_fallback_preserve_payload() {
             let encoded = transformer.encode(input.clone()).await.unwrap();
             assert_eq!(encoded[0], 0x22, "non-beneficial compression must use raw framing");
             assert_eq!(&encoded[5..], input.as_ref());
+            assert_eq!(transformer.decode(encoded).await.unwrap(), input);
+        }
+    }
+}
+
+#[tokio::test]
+async fn encoded_frames_preserve_headers_and_contain_no_unused_buffer_bytes() {
+    for blocking in [0, usize::MAX] {
+        let transformer = make_transformer(blocking, 0, 1024);
+        for input in [Bytes::new(), Bytes::from_static(b"x"), Bytes::from(vec![b'a'; 1024])] {
+            let compressed = compress(&input, WsIoPacketZstdTransformerConfig::default().compression_level).unwrap();
+            let use_compressed = compressed.len() < input.len();
+            let mut expected = vec![if use_compressed { 0x23 } else { 0x22 }];
+            expected.extend_from_slice(&u32::try_from(input.len()).unwrap().to_be_bytes());
+            expected.extend_from_slice(if use_compressed { &compressed } else { &input });
+
+            let encoded = transformer.encode(input.clone()).await.unwrap();
+            assert_eq!(encoded.as_ref(), expected.as_slice());
             assert_eq!(transformer.decode(encoded).await.unwrap(), input);
         }
     }

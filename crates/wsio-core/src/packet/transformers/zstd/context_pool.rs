@@ -1,5 +1,5 @@
 use std::{
-    slice::from_raw_parts_mut,
+    io::Cursor,
     sync::Arc,
     thread::available_parallelism,
 };
@@ -73,29 +73,16 @@ impl WsIoPacketZstdContextPool {
         let compression_bound = compress_bound(bytes.len());
         let payload_capacity = compression_bound.max(bytes.len());
         let mut output = compressed_header.allocate(payload_capacity)?;
-
-        let destination = unsafe {
-            // SAFETY: The pointer and length cover exactly the Vec spare
-            // capacity. zstd writes only within the supplied destination and
-            // returns the initialized byte count.
-            from_raw_parts_mut(output.spare_capacity_mut().as_mut_ptr().cast::<u8>(), payload_capacity)
+        let compressed_len = {
+            let mut cursor = Cursor::new(&mut output);
+            cursor.set_position(COMPRESSION_FRAME_HEADER_SIZE as u64);
+            compressor.compress_to_buffer(bytes, &mut cursor)?
         };
 
-        let compressed_len = compressor.compress_to_buffer(bytes, destination)?;
-
         if compressed_len >= bytes.len() {
-            destination[..bytes.len()].copy_from_slice(bytes);
+            output.truncate(COMPRESSION_FRAME_HEADER_SIZE);
+            output.extend_from_slice(bytes);
             WsIoPacketCompressionFrameHeader::set_compressed_flag(&mut output, false);
-            unsafe {
-                // SAFETY: The header and raw payload have been initialized.
-                output.set_len(COMPRESSION_FRAME_HEADER_SIZE + bytes.len());
-            }
-        } else {
-            unsafe {
-                // SAFETY: The header and zstd-reported compressed payload have
-                // been initialized.
-                output.set_len(COMPRESSION_FRAME_HEADER_SIZE + compressed_len);
-            }
         }
 
         Ok(output.into())
@@ -121,25 +108,11 @@ impl WsIoPacketZstdContextPool {
         payload: &[u8],
         original_length: usize,
     ) -> Result<Bytes> {
-        let mut output = Vec::with_capacity(original_length);
-        let destination = unsafe {
-            // SAFETY: The pointer and length cover exactly the Vec spare
-            // capacity. zstd writes only within the supplied destination and
-            // returns the initialized byte count.
-            from_raw_parts_mut(output.spare_capacity_mut().as_mut_ptr().cast::<u8>(), original_length)
-        };
-
-        let decoded_length = decompressor.decompress_to_buffer(payload, destination)?;
+        let output = decompressor.decompress(payload, original_length)?;
         ensure!(
-            decoded_length == original_length,
+            output.len() == original_length,
             "zstd transformer decoded length does not match the frame"
         );
-
-        unsafe {
-            // SAFETY: zstd reported that exactly `decoded_length` bytes were
-            // written to the destination buffer.
-            output.set_len(decoded_length);
-        }
 
         Ok(output.into())
     }
