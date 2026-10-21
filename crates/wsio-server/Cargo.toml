@@ -227,10 +227,7 @@ wsio-core.workspace = true
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
-async-trait = "0.1.92"
-axum = { version = "0.8.9", features = ["ws"] }
-criterion = { version = "0.8.2", features = ["async_tokio"] }
-wsio-client = { workspace = true, features = ["full"] }
+
 
 # -----------------------------------------------------------------------------
 # Target-specific development dependencies
@@ -300,9 +297,3 @@ wsio-client = { workspace = true, features = ["full"] }
 # name = "integration"
 # path = "tests/integration.rs"
 # required-features = []
-
-[[bench]]
-name = "server_realtime"
-path = "benches/server_realtime.rs"
-harness = false
-required-features = []

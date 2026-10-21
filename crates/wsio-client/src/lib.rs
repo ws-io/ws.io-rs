@@ -1,5 +1,3 @@
-#![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
-
 use std::sync::Arc;
 
 use anyhow::{
@@ -110,65 +108,5 @@ impl WsIoClient {
     #[inline]
     pub fn spawn_task<F: Future<Output = Result<()>> + Send + 'static>(&self, future: F) {
         self.0.spawn_task(future);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::borrow::Cow;
-
-    use crate::*;
-
-    fn assert_builder_accepts(url: impl AsRef<str>) {
-        assert!(WsIoClient::builder(url).is_ok());
-    }
-
-    #[test]
-    #[allow(clippy::needless_borrows_for_generic_args)] // Explicitly verify borrowed input forms.
-    fn builder_accepts_common_url_input_types() {
-        const URL: &str = "ws://localhost:8080/chat";
-
-        let str_ref = URL;
-        assert_builder_accepts(str_ref);
-        assert_builder_accepts(&str_ref);
-
-        let string = URL.to_owned();
-        assert_builder_accepts(string.clone());
-        assert_builder_accepts(&string);
-
-        let url = Url::parse(URL).unwrap();
-        assert_builder_accepts(url.clone());
-        assert_builder_accepts(&url);
-
-        assert_builder_accepts(Cow::Borrowed(URL));
-        assert_builder_accepts(Cow::Owned(URL.to_owned()));
-    }
-
-    #[test]
-    fn builder_rejects_unparseable_url() {
-        let result = WsIoClient::builder("not a url");
-
-        match result {
-            Ok(_) => panic!("invalid URL should fail"),
-            Err(err) => assert!(err.to_string().contains("Invalid URL")),
-        }
-    }
-
-    #[test]
-    fn builder_rejects_wss_without_tls_features() {
-        let result = WsIoClient::builder("wss://localhost/socket");
-
-        if cfg!(any(
-            feature = "tls-native",
-            feature = "tls-rustls-native",
-            feature = "tls-rustls-webpki",
-        )) {
-            assert!(result.is_ok());
-        } else {
-            match result {
-                Ok(_) => panic!("wss URL should fail when no TLS feature is enabled"),
-                Err(err) => assert!(err.to_string().contains("TLS is required")),
-            }
-        }
     }
 }

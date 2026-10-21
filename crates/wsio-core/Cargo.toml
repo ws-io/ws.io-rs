@@ -214,8 +214,7 @@ zstd = { version = "0.14.3", default-features = false, optional = true }
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
-criterion = { version = "0.8.2", features = ["async_tokio"] }
-tokio = { version = "1.54.0", features = ["time"] }
+
 
 # -----------------------------------------------------------------------------
 # Target-specific development dependencies
@@ -285,21 +284,3 @@ tokio = { version = "1.54.0", features = ["time"] }
 # name = "integration"
 # path = "tests/integration.rs"
 # required-features = []
-
-[[bench]]
-name = "event_registry"
-path = "benches/event_registry.rs"
-harness = false
-required-features = []
-
-[[bench]]
-name = "packet_codecs"
-path = "benches/packet_codecs.rs"
-harness = false
-required-features = []
-
-[[bench]]
-name = "packet_transformers"
-path = "benches/packet_transformers.rs"
-harness = false
-required-features = ["packet-transformer-zstd"]
