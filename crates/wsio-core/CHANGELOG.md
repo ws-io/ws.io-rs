@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.1 - 2026-10-21T08:26:49Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.15.0...wsio-core-v0.15.1)
+
+### 🩹 Fixes
+
+- *(zstd)* replace uninitialized slices with safe buffer APIs ([af121b2](https://github.com/ws-io/ws.io-rs/commit/af121b25e355d336d46455a3ae93a8bc6e142a67))
+
 ## 0.15.0 - 2026-10-21T07:28:21Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.14.2...wsio-core-v0.15.0)
