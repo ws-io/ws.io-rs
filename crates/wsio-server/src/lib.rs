@@ -52,6 +52,11 @@ impl WsIoServer {
         self.0.disconnect_all().await;
     }
 
+    /// Encodes and queues an event without waiting for peer receipt.
+    ///
+    /// The transformed packet must fit the configured outgoing message limit.
+    /// Success is not a delivery acknowledgement; disconnected broadcast targets may be skipped.
+    /// An error from one namespace does not roll back sends accepted by other namespaces.
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         self.0.emit(event.as_ref(), data).await
     }

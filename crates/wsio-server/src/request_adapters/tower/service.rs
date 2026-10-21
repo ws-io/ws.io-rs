@@ -106,7 +106,7 @@ mod tests {
 
     #[tokio::test]
     async fn request_path_mismatch_delegates_to_inner_service() {
-        let server = WsIoServer::builder().request_path("/ws.io").build();
+        let server = WsIoServer::builder().request_path("/ws.io").build().unwrap();
         let mut service = WsIoServerService::new(
             DummyService {
                 status: StatusCode::IM_A_TEAPOT,

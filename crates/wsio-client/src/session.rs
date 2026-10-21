@@ -37,7 +37,6 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     WsIoClient,
     core::{
-        channel_capacity_from_websocket_config,
         packet::{
             WsIoPacket,
             WsIoPacketType,
@@ -86,7 +85,7 @@ impl WsIoClientSession {
     pub(crate) fn new(
         runtime: Arc<WsIoClientRuntime>,
     ) -> (Arc<Self>, mpsc::Receiver<Arc<Message>>, mpsc::Receiver<WsIoPacket>) {
-        let channel_capacity = channel_capacity_from_websocket_config(&runtime.config.websocket_config);
+        let channel_capacity = runtime.config.channel_capacity;
         let (event_queue_tx, event_queue_rx) = mpsc::channel(channel_capacity);
         let (message_tx, message_rx) = mpsc::channel(channel_capacity);
 
@@ -444,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_close_cancels_handler_and_discards_queued_events() {
-        let client = WsIoClient::builder("ws://localhost/socket").unwrap().build();
+        let client = WsIoClient::builder("ws://localhost/socket").unwrap().build().unwrap();
         let (session, _message_rx, event_queue_rx) = WsIoClientSession::new(Arc::clone(&client.0));
         session.state.store(SessionState::Ready);
         let (started_tx, mut started_rx) = mpsc::unbounded_channel();
@@ -489,7 +488,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_disconnect_packet_immediately_revokes_session() {
-        let client = WsIoClient::builder("ws://localhost/socket").unwrap().build();
+        let client = WsIoClient::builder("ws://localhost/socket").unwrap().build().unwrap();
         let (session, _message_rx, _event_rx) = WsIoClientSession::new(Arc::clone(&client.0));
         session.state.store(SessionState::Ready);
 

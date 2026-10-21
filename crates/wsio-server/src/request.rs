@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_non_get_method() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         let request = Request::builder()
             .method(Method::POST)
             .uri("/ws.io?namespace=/socket")
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_missing_upgrade_headers() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         let request = Request::builder()
             .method(Method::GET)
             .uri("/ws.io?namespace=/socket")
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_missing_sec_websocket_key() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         let request = Request::builder()
             .method(Method::GET)
             .uri("/ws.io?namespace=/socket")
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_invalid_sec_websocket_key() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         server.new_namespace_builder("/socket").register().unwrap();
         let mut request = valid_upgrade_request("/ws.io?namespace=/socket");
         request
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_http_2_upgrade() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         let mut request = valid_upgrade_request("/ws.io?namespace=/socket");
         *request.version_mut() = Version::HTTP_2;
 
@@ -257,7 +257,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_accepts_repeated_connection_headers() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         server.new_namespace_builder("/socket").register().unwrap();
         let mut request = valid_upgrade_request("/ws.io?namespace=/socket");
         let headers = request.headers_mut();
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_missing_namespace_query() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
 
         assert_eq!(
             dispatch_status(valid_upgrade_request("/ws.io"), &server),
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_rejects_unknown_namespace() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
 
         assert_eq!(
             dispatch_status(valid_upgrade_request("/ws.io?namespace=/missing"), &server),
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn dispatch_request_requires_hyper_on_upgrade_extension() {
-        let server = WsIoServer::builder().build();
+        let server = WsIoServer::builder().build().unwrap();
         server.new_namespace_builder("/socket").register().unwrap();
 
         assert_eq!(

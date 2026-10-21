@@ -6,7 +6,7 @@ mod e2e;
 
 #[test]
 fn test_multiple_namespaces() {
-    let server = WsIoServer::builder().build();
+    let server = WsIoServer::builder().build().unwrap();
 
     server.new_namespace_builder("/namespace1").register().unwrap();
     server.new_namespace_builder("/namespace2").register().unwrap();
@@ -16,7 +16,7 @@ fn test_multiple_namespaces() {
 
 #[tokio::test]
 async fn test_remove_namespace() {
-    let server = WsIoServer::builder().build();
+    let server = WsIoServer::builder().build().unwrap();
 
     server.new_namespace_builder("/test").register().unwrap();
     assert_eq!(server.namespace_count(), 1);

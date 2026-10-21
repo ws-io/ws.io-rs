@@ -50,7 +50,12 @@ async fn setup_server_with_transformer(
     let local_addr = listener.local_addr().unwrap();
     let ws_url = format!("ws://{local_addr}{TEST_NAMESPACE}");
 
-    let server = Arc::new(WsIoServer::builder().packet_transformer(packet_transformer).build());
+    let server = Arc::new(
+        WsIoServer::builder()
+            .packet_transformer(packet_transformer)
+            .build()
+            .unwrap(),
+    );
 
     // Create Axum Router and attach the WsIoServer Layer
     let app = Router::new().layer(server.layer());
@@ -78,7 +83,8 @@ async fn create_connected_client_with_transformer(
     let client = WsIoClient::builder(ws_url)
         .unwrap()
         .packet_transformer(packet_transformer)
-        .build();
+        .build()
+        .unwrap();
 
     client.connect().await;
     wait_for_client_ready(&client).await;

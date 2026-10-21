@@ -20,9 +20,17 @@ use url::Url;
 use crate::{
     WsIoClient,
     config::WsIoClientConfig,
-    core::packet::{
-        codecs::WsIoPacketCodec,
-        transformers::WsIoPacketTransformer,
+    core::{
+        packet::{
+            codecs::WsIoPacketCodec,
+            transformers::WsIoPacketTransformer,
+        },
+        transport::{
+            DEFAULT_CHANNEL_CAPACITY,
+            DEFAULT_MAX_OUTGOING_MESSAGE_SIZE,
+            default_websocket_config,
+            validate_transport_config,
+        },
     },
     runtime::WsIoClientRuntime,
     session::WsIoClientSession,
@@ -68,11 +76,13 @@ impl WsIoClientBuilder {
         url.set_path("ws.io");
         Ok(Self {
             config: WsIoClientConfig {
+                channel_capacity: DEFAULT_CHANNEL_CAPACITY,
                 connect_timeout: Some(Duration::from_secs(10)),
                 disconnect_timeout: Duration::from_secs(5),
                 init_handler: None,
                 init_handler_timeout: Duration::from_secs(3),
                 init_packet_timeout: Duration::from_secs(5),
+                max_outgoing_message_size: DEFAULT_MAX_OUTGOING_MESSAGE_SIZE,
                 on_session_close_handler: None,
                 on_session_close_handler_timeout: Duration::from_secs(2),
                 on_session_ready_handler: None,
@@ -82,12 +92,7 @@ impl WsIoClientBuilder {
                 ready_packet_timeout: Duration::from_secs(5),
                 reconnect_delay: Duration::from_secs(1),
                 request_modifier: None,
-                websocket_config: WebSocketConfig::default()
-                    .max_frame_size(Some(8 * 1024 * 1024))
-                    .max_message_size(Some(16 * 1024 * 1024))
-                    .max_write_buffer_size(2 * 1024 * 1024)
-                    .read_buffer_size(8 * 1024)
-                    .write_buffer_size(8 * 1024),
+                websocket_config: default_websocket_config(),
             },
             connect_url: url,
         })
@@ -104,8 +109,28 @@ impl WsIoClientBuilder {
     // Public methods
 
     /// Builds a [`WsIoClient`] from this builder's configuration.
-    pub fn build(self) -> WsIoClient {
-        WsIoClient(WsIoClientRuntime::new(self.config, self.connect_url))
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if channel capacity is invalid, the outgoing limit is zero,
+    /// or the write buffer cannot accommodate the outgoing limit and required overhead.
+    pub fn build(self) -> Result<WsIoClient> {
+        validate_transport_config(
+            &self.config.websocket_config,
+            self.config.channel_capacity,
+            self.config.max_outgoing_message_size,
+        )?;
+
+        Ok(WsIoClient(WsIoClientRuntime::new(self.config, self.connect_url)))
+    }
+
+    /// Sets the message capacity of each internal channel.
+    ///
+    /// Defaults to `2048`. Must be between 1 and [`tokio::sync::Semaphore::MAX_PERMITS`].
+    /// This limits message count, not bytes, and is independent of WebSocket buffer sizes.
+    pub fn channel_capacity(mut self, channel_capacity: usize) -> Self {
+        self.config.channel_capacity = channel_capacity;
+        self
     }
 
     /// Sets the maximum duration for a WebSocket connection attempt.
@@ -144,6 +169,18 @@ impl WsIoClientBuilder {
     /// according to [`Self::reconnect_delay`].
     pub fn init_packet_timeout(mut self, duration: Duration) -> Self {
         self.config.init_packet_timeout = duration;
+        self
+    }
+
+    /// Sets the maximum outgoing Binary payload size after packet transformation, excluding frame headers.
+    ///
+    /// Defaults to 2 MiB; zero is rejected. The limit applies after codec encoding
+    /// and transformation, before queueing. The write buffer must fit this limit
+    /// plus its configured write threshold and [`OUTGOING_FRAME_OVERHEAD`](crate::core::transport::OUTGOING_FRAME_OVERHEAD) bytes.
+    /// Messages are not fragmented; the peer must accept a frame of this size.
+    /// Large messages can leave a large retained write buffer on the connection.
+    pub fn max_outgoing_message_size(mut self, max_outgoing_message_size: usize) -> Self {
+        self.config.max_outgoing_message_size = max_outgoing_message_size;
         self
     }
 
@@ -265,8 +302,8 @@ impl WsIoClientBuilder {
 
     /// Replaces the full Tungstenite WebSocket configuration.
     ///
-    /// The configuration controls transport limits and buffer sizes and derives
-    /// internal channel capacity from the configured max-write/write-buffer ratio.
+    /// The configuration controls transport limits and buffer sizes independently
+    /// of [`Self::channel_capacity`].
     pub fn websocket_config(mut self, websocket_config: WebSocketConfig) -> Self {
         self.config.websocket_config = websocket_config;
         self
@@ -324,6 +361,29 @@ mod tests {
 
     fn test_builder() -> WsIoClientBuilder {
         WsIoClientBuilder::new(Url::parse(TEST_URL).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn test_builder_rejects_invalid_outgoing_settings() {
+        assert!(test_builder().channel_capacity(0).build().is_err());
+        assert!(test_builder().max_outgoing_message_size(0).build().is_err());
+        assert!(test_builder().max_outgoing_message_size(usize::MAX).build().is_err());
+        let transport = WebSocketConfig::default()
+            .write_buffer_size(8 * 1024)
+            .max_write_buffer_size(4 * 1024 * 1024);
+
+        for client in [
+            test_builder()
+                .max_outgoing_message_size(3 * 1024 * 1024)
+                .websocket_config(transport)
+                .build(),
+            test_builder()
+                .websocket_config(transport)
+                .max_outgoing_message_size(3 * 1024 * 1024)
+                .build(),
+        ] {
+            assert_eq!(client.unwrap().0.config.channel_capacity, 2048);
+        }
     }
 
     #[test]
@@ -388,7 +448,7 @@ mod tests {
 
         assert_eq!(builder.connect_url.path(), "/custom/path");
 
-        let client = builder.build();
+        let client = builder.build().unwrap();
 
         let config = &client.0.config;
         assert_eq!(config.connect_timeout, Some(Duration::from_secs(25)));
@@ -415,7 +475,8 @@ mod tests {
             .websocket_config_mut(|config| {
                 *config = config.max_frame_size(Some(1024 * 1024));
             })
-            .build();
+            .build()
+            .unwrap();
 
         assert_eq!(client.0.config.websocket_config.max_frame_size, Some(1024 * 1024));
     }
@@ -423,7 +484,7 @@ mod tests {
     #[test]
     fn test_builder_websocket_config_replaces_defaults() {
         let config = WebSocketConfig::default().max_frame_size(Some(42));
-        let client = test_builder().websocket_config(config).build();
+        let client = test_builder().websocket_config(config).build().unwrap();
 
         assert_eq!(client.0.config.websocket_config.max_frame_size, Some(42));
     }
@@ -434,7 +495,8 @@ mod tests {
             .with_init_handler(async |_session, _data: Option<String>| Ok(Some("response".to_owned())))
             .on_session_ready(async |_session| Ok(()))
             .on_session_close(async |_session| Ok(()))
-            .build();
+            .build()
+            .unwrap();
 
         assert!(client.0.config.init_handler.is_some());
         assert!(client.0.config.on_session_ready_handler.is_some());
@@ -451,7 +513,8 @@ mod tests {
 
                 Ok(request)
             })
-            .build();
+            .build()
+            .unwrap();
 
         assert!(client.0.config.request_modifier.is_some());
     }

@@ -58,6 +58,11 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Defaults to the value inherited from the server builder.
     pub(crate) broadcast_concurrency_limit: usize,
 
+    /// Number of messages permitted in each connection channel.
+    ///
+    /// Defaults to the value inherited from the server builder.
+    pub(crate) channel_capacity: usize,
+
     /// Maximum duration for waiting for the next WebSocket message on a ready connection.
     ///
     /// Packet processing time is excluded. `None` disables the timeout.
@@ -98,6 +103,11 @@ pub(crate) struct WsIoServerNamespaceConfig {
     ///
     /// Defaults to the value inherited from the server builder.
     pub(crate) init_response_timeout: Duration,
+
+    /// Maximum outgoing Binary payload size after packet transformation, excluding frame headers.
+    ///
+    /// Defaults to the value inherited from the server builder.
+    pub(crate) max_outgoing_message_size: usize,
 
     /// Optional namespace middleware for connection setup.
     ///
@@ -155,8 +165,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Tungstenite WebSocket transport limits and buffer sizes.
     ///
     /// The namespace receives a copy of the server-level configuration and may
-    /// override it independently. It also derives internal connection channel
-    /// capacity from the configured max-write/write-buffer ratio.
+    /// override it independently. Internal channel capacity is configured separately.
     ///
     /// Defaults to the value inherited from the server builder.
     pub(crate) websocket_config: WebSocketConfig,
@@ -167,6 +176,7 @@ impl FmtDebug for WsIoServerNamespaceConfig {
         f.debug_struct("WsIoServerNamespaceConfig")
             .field("path", &self.path)
             .field("broadcast_concurrency_limit", &self.broadcast_concurrency_limit)
+            .field("channel_capacity", &self.channel_capacity)
             .field("connection_idle_timeout", &self.connection_idle_timeout)
             .field("http_request_upgrade_timeout", &self.http_request_upgrade_timeout)
             .field(
@@ -180,6 +190,7 @@ impl FmtDebug for WsIoServerNamespaceConfig {
             )
             .field("init_response_handler_timeout", &self.init_response_handler_timeout)
             .field("init_response_timeout", &self.init_response_timeout)
+            .field("max_outgoing_message_size", &self.max_outgoing_message_size)
             .field("middleware", &self.middleware.as_ref().map(|_| "<handler>"))
             .field("middleware_execution_timeout", &self.middleware_execution_timeout)
             .field("on_close_handler_timeout", &self.on_close_handler_timeout)

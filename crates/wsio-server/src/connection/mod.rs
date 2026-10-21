@@ -63,7 +63,6 @@ use self::extensions::ConnectionExtensions;
 use crate::{
     WsIoServer,
     core::{
-        channel_capacity_from_websocket_config,
         event::registry::WsIoEventRegistry,
         packet::{
             WsIoPacket,
@@ -187,7 +186,7 @@ impl WsIoServerConnection {
         namespace: Arc<WsIoServerNamespace>,
         request_uri: Uri,
     ) -> (Arc<Self>, mpsc::Receiver<Arc<Message>>, mpsc::Receiver<WsIoPacket>) {
-        let channel_capacity = channel_capacity_from_websocket_config(&namespace.config.websocket_config);
+        let channel_capacity = namespace.config.channel_capacity;
         let (event_queue_tx, event_queue_rx) = mpsc::channel(channel_capacity);
         let (message_tx, message_rx) = mpsc::channel(channel_capacity);
         let id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
@@ -595,6 +594,10 @@ impl WsIoServerConnection {
         self.close();
     }
 
+    /// Encodes and queues an event without waiting for peer receipt.
+    ///
+    /// The transformed packet must fit the configured outgoing message limit.
+    /// Success is not a delivery acknowledgement.
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         self.emit_event_message(
             self.namespace
@@ -745,7 +748,10 @@ mod tests {
     };
     use tokio::{
         sync::{
-            mpsc,
+            mpsc::{
+                self,
+                error::TryRecvError,
+            },
             oneshot,
         },
         time::{
@@ -753,11 +759,12 @@ mod tests {
             timeout,
         },
     };
+    use wsio_core::packet::codecs::WsIoPacketCodec;
 
     use super::*;
 
     fn create_test_connection() -> Arc<WsIoServerConnection> {
-        let server = Arc::new(WsIoServer::builder().build());
+        let server = Arc::new(WsIoServer::builder().build().unwrap());
         let namespace = server.new_namespace_builder("/socket").register().unwrap();
         let (connection, _rx, _event_rx) =
             WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
@@ -766,12 +773,54 @@ mod tests {
     }
 
     fn create_test_connection_with_event_queue_rx() -> (Arc<WsIoServerConnection>, mpsc::Receiver<WsIoPacket>) {
-        let server = Arc::new(WsIoServer::builder().build());
+        let server = Arc::new(WsIoServer::builder().build().unwrap());
         let namespace = server.new_namespace_builder("/socket").register().unwrap();
         let (connection, _rx, event_queue_rx) =
             WsIoServerConnection::new(HeaderMap::new(), namespace, Uri::from_static("http://localhost"));
 
         (connection, event_queue_rx)
+    }
+
+    #[tokio::test]
+    async fn test_oversized_emit_does_not_enqueue_or_close_connection() {
+        let codec = WsIoPacketCodec::Msgpack;
+        let data = Bytes::from_static(b"ok");
+        let packet = WsIoPacket::new_event("ping", Some(codec.encode_data(&data).unwrap()));
+        let limit = codec.encode(&packet).unwrap().len();
+        let server = WsIoServer::builder().channel_capacity(1).build().unwrap();
+        let namespace = server
+            .new_namespace_builder("/socket")
+            .max_outgoing_message_size(limit)
+            .register()
+            .unwrap();
+
+        let (connection, mut messages, _) =
+            WsIoServerConnection::new(HeaderMap::new(), Arc::clone(&namespace), Uri::from_static("/ws.io"));
+
+        connection.state.store(ConnectionState::Ready);
+        assert!(namespace.insert_connection(&connection));
+        let oversized = Bytes::from(vec![0; limit + 1]);
+        assert!(connection.emit("ping", Some(&oversized)).await.is_err());
+        assert!(namespace.emit("ping", Some(&oversized)).await.is_err());
+        assert!(matches!(messages.try_recv(), Err(TryRecvError::Empty)));
+        assert!(connection.is_ready());
+        assert!(!connection.cancel_token.is_cancelled());
+        for broadcast in [false, true] {
+            if broadcast {
+                namespace.emit("ping", Some(&data)).await.unwrap();
+            } else {
+                connection.emit("ping", Some(&data)).await.unwrap();
+            }
+
+            let message = messages.try_recv().unwrap();
+            let Message::Binary(bytes) = &*message else {
+                panic!("expected binary message")
+            };
+
+            assert_eq!(bytes.len(), limit);
+        }
+
+        connection.cleanup().await;
     }
 
     #[tokio::test]

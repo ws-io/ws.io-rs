@@ -233,11 +233,13 @@ mod tests {
     fn create_test_config() -> WsIoServerConfig {
         WsIoServerConfig {
             broadcast_concurrency_limit: 16,
+            channel_capacity: 2048,
             connection_idle_timeout: Some(Duration::from_secs(90)),
             http_request_upgrade_timeout: Duration::from_secs(3),
             init_request_handler_timeout: Duration::from_secs(3),
             init_response_handler_timeout: Duration::from_secs(3),
             init_response_timeout: Duration::from_secs(3),
+            max_outgoing_message_size: 2 * 1024 * 1024,
             middleware_execution_timeout: Duration::from_secs(3),
             on_close_handler_timeout: Duration::from_secs(3),
             on_connect_handler_timeout: Duration::from_secs(3),

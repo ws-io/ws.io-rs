@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{
     Result,
     anyhow,
+    ensure,
 };
 use futures_util::{
     SinkExt,
@@ -299,6 +300,13 @@ impl WsIoServerNamespace {
     pub(crate) async fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
         let bytes = self.config.packet_transformer.encode(bytes).await?;
+        ensure!(
+            bytes.len() <= self.config.max_outgoing_message_size,
+            "outgoing message exceeds max_outgoing_message_size ({} > {} bytes)",
+            bytes.len(),
+            self.config.max_outgoing_message_size
+        );
+
         Ok(Arc::new(Message::Binary(bytes)))
     }
 
@@ -399,6 +407,10 @@ impl WsIoServerNamespace {
             .await
     }
 
+    /// Encodes and queues an event without waiting for peer receipt.
+    ///
+    /// The transformed packet must fit the configured outgoing message limit.
+    /// Success is not a delivery acknowledgement; disconnected broadcast targets may be skipped.
     pub async fn emit<D: Serialize>(self: &Arc<Self>, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         WsIoServerNamespaceBroadcastOperator::new(Arc::clone(self))
             .emit(event, data)
@@ -454,6 +466,7 @@ mod tests {
     fn create_test_namespace() -> Arc<WsIoServerNamespace> {
         WsIoServer::builder()
             .build()
+            .unwrap()
             .new_namespace_builder("/test")
             .register()
             .unwrap()

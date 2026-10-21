@@ -60,6 +60,17 @@ impl TaskSpawner for MySpawner {
 }
 ```
 
+### 6. Builders validate outgoing limits and channel capacity
+
+- Server and client `build()` now return `anyhow::Result`; namespace `register()` also validates its final settings.
+- New `max_outgoing_message_size` (default 2 MiB) limits the transformed Binary payload. Oversized emits now return an error instead of disconnecting the connection. Messages are not fragmented, so raising it may require raising the peer's frame/message limits and this side's `max_write_buffer_size`; an insufficient write buffer fails at build time.
+- New `channel_capacity` (default 2048, message count) replaces the capacity previously derived from `websocket_config`. `wsio_core::channel_capacity_from_websocket_config` was removed.
+
+```rust
+let server = WsIoServer::builder().build()?;
+let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
+```
+
 ## Runtime and Lifecycle Changes
 
 - Client request modifiers and the WebSocket handshake now observe cancellation, so cancelling connection setup no longer waits for the modifier or handshake to finish. The existing `connect_timeout` behavior is preserved.
@@ -76,3 +87,4 @@ impl TaskSpawner for MySpawner {
 - [ ] Ensure every `on`, `emit`, and `off` event key is non-empty.
 - [ ] Update custom `TaskSpawner` implementations and direct `dispatch_event_packet` callers.
 - [ ] Account for bounded-queue backpressure and the fact that pending events are dropped on shutdown.
+- [ ] Handle the `Result` from server/client `build()` and size `max_outgoing_message_size` / `channel_capacity` for your workload.

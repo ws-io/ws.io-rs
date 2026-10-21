@@ -98,7 +98,7 @@ async fn setup_room_server(client_count: usize, joined_room_count: usize) -> Ben
     let local_addr = listener.local_addr().unwrap();
     let ws_url = format!("ws://{local_addr}{TEST_NAMESPACE}");
 
-    let server = Arc::new(WsIoServer::builder().build());
+    let server = Arc::new(WsIoServer::builder().build().unwrap());
     let namespace = server
         .new_namespace_builder(TEST_NAMESPACE)
         .on_connect(async |connection| {
@@ -127,7 +127,7 @@ async fn setup_room_server(client_count: usize, joined_room_count: usize) -> Ben
     let mut clients = Vec::with_capacity(client_count);
     let acks = Arc::new(Semaphore::new(0));
     for index in 0..client_count {
-        let client = WsIoClient::builder(ws_url.as_str()).unwrap().build();
+        let client = WsIoClient::builder(ws_url.as_str()).unwrap().build().unwrap();
         register_ack_counter(&client, &acks);
 
         client.connect().await;

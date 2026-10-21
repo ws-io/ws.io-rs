@@ -40,7 +40,7 @@ async fn test_e2e_ping_pong() {
         .unwrap();
 
     // 2. Setup Client
-    let client = WsIoClient::builder(ws_url.as_str()).unwrap().build();
+    let client = WsIoClient::builder(ws_url.as_str()).unwrap().build().unwrap();
 
     let (tx, rx) = oneshot::channel();
     let tx = Arc::new(Mutex::new(Some(tx)));

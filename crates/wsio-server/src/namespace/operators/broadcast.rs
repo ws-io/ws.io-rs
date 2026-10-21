@@ -144,6 +144,10 @@ impl WsIoServerNamespaceBroadcastOperator {
         Ok(())
     }
 
+    /// Encodes and queues an event without waiting for peer receipt.
+    ///
+    /// The transformed packet must fit the configured outgoing message limit.
+    /// Success is not a delivery acknowledgement; disconnected broadcast targets may be skipped.
     pub async fn emit<D: Serialize>(self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         self.namespace.status.ensure(NamespaceStatus::Running, |status| {
             format!("Cannot emit in invalid status: {status:?}")
@@ -210,6 +214,7 @@ mod tests {
     fn namespace_with_rooms() -> (Arc<WsIoServerNamespace>, [u64; 3]) {
         let namespace = WsIoServer::builder()
             .build()
+            .unwrap()
             .new_namespace_builder("/test")
             .register()
             .unwrap();

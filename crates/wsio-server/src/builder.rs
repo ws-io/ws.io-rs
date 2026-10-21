@@ -1,13 +1,22 @@
 use std::time::Duration;
 
+use anyhow::Result;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use crate::{
     WsIoServer,
     config::WsIoServerConfig,
-    core::packet::{
-        codecs::WsIoPacketCodec,
-        transformers::WsIoPacketTransformer,
+    core::{
+        packet::{
+            codecs::WsIoPacketCodec,
+            transformers::WsIoPacketTransformer,
+        },
+        transport::{
+            DEFAULT_CHANNEL_CAPACITY,
+            DEFAULT_MAX_OUTGOING_MESSAGE_SIZE,
+            default_websocket_config,
+            validate_transport_config,
+        },
     },
     runtime::WsIoServerRuntime,
 };
@@ -31,23 +40,20 @@ impl WsIoServerBuilder {
         Self {
             config: WsIoServerConfig {
                 broadcast_concurrency_limit: 512,
+                channel_capacity: DEFAULT_CHANNEL_CAPACITY,
                 connection_idle_timeout: Some(Duration::from_secs(90)),
                 http_request_upgrade_timeout: Duration::from_secs(3),
                 init_request_handler_timeout: Duration::from_secs(3),
                 init_response_handler_timeout: Duration::from_secs(3),
                 init_response_timeout: Duration::from_secs(5),
+                max_outgoing_message_size: DEFAULT_MAX_OUTGOING_MESSAGE_SIZE,
                 middleware_execution_timeout: Duration::from_secs(2),
                 on_close_handler_timeout: Duration::from_secs(2),
                 on_connect_handler_timeout: Duration::from_secs(3),
                 packet_codec: WsIoPacketCodec::Msgpack,
                 packet_transformer: WsIoPacketTransformer::default(),
                 request_path: "/ws.io".to_owned(),
-                websocket_config: WebSocketConfig::default()
-                    .max_frame_size(Some(8 * 1024 * 1024))
-                    .max_message_size(Some(16 * 1024 * 1024))
-                    .max_write_buffer_size(2 * 1024 * 1024)
-                    .read_buffer_size(8 * 1024)
-                    .write_buffer_size(8 * 1024),
+                websocket_config: default_websocket_config(),
             },
         }
     }
@@ -62,8 +68,29 @@ impl WsIoServerBuilder {
     }
 
     /// Builds a [`WsIoServer`] from this builder's configuration.
-    pub fn build(self) -> WsIoServer {
-        WsIoServer(WsIoServerRuntime::new(self.config))
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if channel capacity is invalid, the outgoing limit is zero,
+    /// or the write buffer cannot accommodate the outgoing limit and required overhead.
+    pub fn build(self) -> Result<WsIoServer> {
+        validate_transport_config(
+            &self.config.websocket_config,
+            self.config.channel_capacity,
+            self.config.max_outgoing_message_size,
+        )?;
+
+        Ok(WsIoServer(WsIoServerRuntime::new(self.config)))
+    }
+
+    /// Sets the default message capacity of each internal channel.
+    ///
+    /// Defaults to `2048`. Must be between 1 and [`tokio::sync::Semaphore::MAX_PERMITS`].
+    /// This limits message count, not bytes, and is independent of WebSocket buffer sizes.
+    /// Namespace builders inherit this value and may override it.
+    pub fn channel_capacity(mut self, channel_capacity: usize) -> Self {
+        self.config.channel_capacity = channel_capacity;
+        self
     }
 
     /// Sets the default maximum duration for waiting for the next WebSocket message on a ready connection.
@@ -111,6 +138,19 @@ impl WsIoServerBuilder {
     /// inherit this value and may override it.
     pub fn init_response_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_timeout = duration;
+        self
+    }
+
+    /// Sets the default maximum outgoing Binary payload size after packet transformation, excluding frame headers.
+    ///
+    /// Defaults to 2 MiB; zero is rejected. The limit applies after codec encoding
+    /// and transformation, before queueing. The write buffer must fit this limit
+    /// plus its configured write threshold and [`OUTGOING_FRAME_OVERHEAD`](crate::core::transport::OUTGOING_FRAME_OVERHEAD) bytes.
+    /// Messages are not fragmented; the peer must accept a frame of this size.
+    /// Large broadcasts can leave a large retained write buffer on each connection.
+    /// Namespace builders inherit this value and may override it.
+    pub fn max_outgoing_message_size(mut self, max_outgoing_message_size: usize) -> Self {
+        self.config.max_outgoing_message_size = max_outgoing_message_size;
         self
     }
 
@@ -171,8 +211,7 @@ impl WsIoServerBuilder {
     /// Replaces the default Tungstenite WebSocket configuration.
     ///
     /// Namespace builders inherit this value. It controls transport limits and
-    /// buffer sizes and derives internal channel capacity from the configured
-    /// max-write/write-buffer ratio.
+    /// buffer sizes independently of [`Self::channel_capacity`].
     pub fn websocket_config(mut self, websocket_config: WebSocketConfig) -> Self {
         self.config.websocket_config = websocket_config;
         self
@@ -195,6 +234,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_builder_rejects_invalid_outgoing_settings() {
+        assert!(WsIoServer::builder().channel_capacity(0).build().is_err());
+        assert!(WsIoServer::builder().max_outgoing_message_size(0).build().is_err());
+        assert!(
+            WsIoServer::builder()
+                .max_outgoing_message_size(3 * 1024 * 1024)
+                .build()
+                .is_err()
+        );
+
+        let transport = WebSocketConfig::default()
+            .write_buffer_size(8 * 1024)
+            .max_write_buffer_size(4 * 1024 * 1024);
+
+        for server in [
+            WsIoServer::builder()
+                .max_outgoing_message_size(3 * 1024 * 1024)
+                .websocket_config(transport)
+                .build(),
+            WsIoServer::builder()
+                .websocket_config(transport)
+                .max_outgoing_message_size(3 * 1024 * 1024)
+                .build(),
+        ] {
+            assert_eq!(server.unwrap().0.config.channel_capacity, 2048);
+        }
+    }
+
+    #[test]
     fn test_builder_configuration_chaining() {
         let server = WsIoServer::builder()
             .broadcast_concurrency_limit(1024)
@@ -210,7 +278,8 @@ mod tests {
             .websocket_config_mut(|config| {
                 *config = config.max_frame_size(Some(999));
             })
-            .build();
+            .build()
+            .unwrap();
 
         // Access internal config through the built runtime
         let config = &server.0.config;
@@ -230,7 +299,7 @@ mod tests {
     #[test]
     fn test_builder_websocket_config_override() {
         let config = WebSocketConfig::default().max_frame_size(Some(42));
-        let server = WsIoServer::builder().websocket_config(config).build();
+        let server = WsIoServer::builder().websocket_config(config).build().unwrap();
         assert_eq!(server.0.config.websocket_config.max_frame_size, Some(42));
     }
 }

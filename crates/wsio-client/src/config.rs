@@ -47,6 +47,13 @@ type RequestModifier =
 
 // Structs
 pub(crate) struct WsIoClientConfig {
+    /// Number of messages permitted in each internal channel.
+    ///
+    /// This limits message count, not bytes.
+    ///
+    /// Defaults to `2048`.
+    pub(crate) channel_capacity: usize,
+
     /// Maximum duration for a WebSocket connection attempt.
     ///
     /// This covers the transport connection and HTTP upgrade performed by
@@ -86,6 +93,13 @@ pub(crate) struct WsIoClientConfig {
     /// Defaults to 5 seconds.
     /// `Duration::ZERO` does not disable the timeout.
     pub(crate) init_packet_timeout: Duration,
+
+    /// Maximum outgoing Binary payload size after packet transformation, excluding frame headers.
+    ///
+    /// Oversized packets are rejected before queueing.
+    ///
+    /// Defaults to 2 MiB.
+    pub(crate) max_outgoing_message_size: usize,
 
     /// Optional handler invoked when a client session closes.
     ///
@@ -159,11 +173,11 @@ pub(crate) struct WsIoClientConfig {
 
     /// Tungstenite WebSocket transport limits and buffer sizes.
     ///
-    /// The configuration is passed to the client connection and derives internal
-    /// session channel capacity from the configured max-write/write-buffer ratio.
+    /// The configuration is passed to the client connection. Internal session
+    /// channel capacity is configured independently.
     ///
-    /// The defaults are 8 MiB per frame, 16 MiB per message, a 2 MiB maximum write
-    /// buffer, and 8 KiB read and write buffers; other settings use
+    /// The receiving defaults are 8 MiB per frame and 16 MiB per message. The maximum
+    /// write buffer is 2 MiB + 8 KiB + [`OUTGOING_FRAME_OVERHEAD`](crate::core::transport::OUTGOING_FRAME_OVERHEAD) bytes, with 8 KiB read and write buffers; other settings use
     /// [`WebSocketConfig::default`].
     pub(crate) websocket_config: WebSocketConfig,
 }
@@ -171,11 +185,13 @@ pub(crate) struct WsIoClientConfig {
 impl FmtDebug for WsIoClientConfig {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("WsIoClientConfig")
+            .field("channel_capacity", &self.channel_capacity)
             .field("connect_timeout", &self.connect_timeout)
             .field("disconnect_timeout", &self.disconnect_timeout)
             .field("init_handler", &self.init_handler.as_ref().map(|_| "<handler>"))
             .field("init_handler_timeout", &self.init_handler_timeout)
             .field("init_packet_timeout", &self.init_packet_timeout)
+            .field("max_outgoing_message_size", &self.max_outgoing_message_size)
             .field(
                 "on_session_close_handler",
                 &self.on_session_close_handler.as_ref().map(|_| "<handler>"),

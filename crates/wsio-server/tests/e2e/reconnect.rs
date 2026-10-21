@@ -53,7 +53,8 @@ async fn test_e2e_client_reconnect() {
     let client = WsIoClient::builder(ws_url.as_str())
         .unwrap()
         .reconnect_delay(Duration::from_millis(250))
-        .build();
+        .build()
+        .unwrap();
 
     client.connect().await;
 

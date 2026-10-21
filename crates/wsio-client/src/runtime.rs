@@ -6,6 +6,7 @@ use std::{
 use anyhow::{
     Result,
     anyhow,
+    ensure,
 };
 use arc_swap::{
     ArcSwap,
@@ -51,7 +52,6 @@ use url::Url;
 use crate::{
     config::WsIoClientConfig,
     core::{
-        channel_capacity_from_websocket_config,
         event::registry::WsIoEventRegistry,
         packet::WsIoPacket,
         traits::task::spawner::TaskSpawner,
@@ -103,8 +103,7 @@ impl TaskSpawner for WsIoClientRuntime {
 
 impl WsIoClientRuntime {
     pub(crate) fn new(config: WsIoClientConfig, connect_url: Url) -> Arc<Self> {
-        let channel_capacity = channel_capacity_from_websocket_config(&config.websocket_config);
-        let (send_event_message_tx, send_event_message_rx) = mpsc::channel(channel_capacity);
+        let (send_event_message_tx, send_event_message_rx) = mpsc::channel(config.channel_capacity);
         Arc::new(Self {
             cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
             config,
@@ -427,6 +426,13 @@ impl WsIoClientRuntime {
     pub(crate) async fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
         let bytes = self.config.packet_codec.encode(packet)?;
         let bytes = self.config.packet_transformer.encode(bytes).await?;
+        ensure!(
+            bytes.len() <= self.config.max_outgoing_message_size,
+            "outgoing message exceeds max_outgoing_message_size ({} > {} bytes)",
+            bytes.len(),
+            self.config.max_outgoing_message_size
+        );
+
         Ok(Arc::new(Message::Binary(bytes)))
     }
 
@@ -510,13 +516,16 @@ mod tests {
         },
     };
 
+    use bytes::Bytes;
     use tokio::{
         sync::{
             Notify,
+            mpsc::error::TryRecvError,
             oneshot,
         },
         time::timeout,
     };
+    use wsio_core::packet::codecs::WsIoPacketCodec;
 
     use super::*;
     use crate::WsIoClient;
@@ -534,6 +543,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn oversized_emit_does_not_enqueue_or_stop_runtime() {
+        let codec = WsIoPacketCodec::Msgpack;
+        let data = Bytes::from_static(b"ok");
+        let packet = WsIoPacket::new_event("ping", Some(codec.encode_data(&data).unwrap()));
+        let limit = codec.encode(&packet).unwrap().len();
+        let client = WsIoClient::builder("ws://localhost/socket")
+            .unwrap()
+            .channel_capacity(1)
+            .max_outgoing_message_size(limit)
+            .build()
+            .unwrap();
+
+        client.0.status.store(RuntimeStatus::Running);
+        let oversized = Bytes::from(vec![0; limit + 1]);
+        assert!(client.emit("ping", Some(&oversized)).await.is_err());
+        let mut messages = client.0.send_event_message_rx.lock().await;
+        assert!(matches!(messages.try_recv(), Err(TryRecvError::Empty)));
+
+        assert!(client.0.status.is(RuntimeStatus::Running));
+        client.emit("ping", Some(&data)).await.unwrap();
+        let message = messages.try_recv().unwrap();
+        let Message::Binary(bytes) = &*message else {
+            panic!("expected binary message")
+        };
+
+        assert_eq!(bytes.len(), limit);
+    }
+
+    #[tokio::test]
     async fn disconnect_cancels_pending_request_modifier() {
         let modifier_entered = Arc::new(Notify::new());
         let modifier_entered_for_callback = Arc::clone(&modifier_entered);
@@ -546,7 +584,8 @@ mod tests {
                     pending().await
                 }
             })
-            .build();
+            .build()
+            .unwrap();
 
         client.connect().await;
         timeout(Duration::from_secs(1), modifier_entered.notified())
@@ -591,7 +630,8 @@ mod tests {
         let client = WsIoClient::builder(format!("ws://{server_address}/socket"))
             .unwrap()
             .connect_timeout(None)
-            .build();
+            .build()
+            .unwrap();
 
         client.connect().await;
 

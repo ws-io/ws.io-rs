@@ -20,6 +20,13 @@ pub(crate) struct WsIoServerConfig {
     /// Defaults to `512`.
     pub(crate) broadcast_concurrency_limit: usize,
 
+    /// Number of messages permitted in each internal channel.
+    ///
+    /// This limits message count, not bytes. Namespace builders may override this value.
+    ///
+    /// Defaults to `2048`.
+    pub(crate) channel_capacity: usize,
+
     /// Maximum duration for waiting for the next WebSocket message on a ready connection.
     ///
     /// Packet processing time is excluded. Namespace builders may override this value.
@@ -75,6 +82,13 @@ pub(crate) struct WsIoServerConfig {
     /// Defaults to 5 seconds.
     /// `Duration::ZERO` does not disable the timeout.
     pub(crate) init_response_timeout: Duration,
+
+    /// Maximum outgoing Binary payload size after packet transformation, excluding frame headers.
+    ///
+    /// Oversized packets are rejected before queueing. Namespace builders may override this value.
+    ///
+    /// Defaults to 2 MiB.
+    pub(crate) max_outgoing_message_size: usize,
 
     /// Maximum duration for namespace middleware execution.
     ///
@@ -138,14 +152,13 @@ pub(crate) struct WsIoServerConfig {
 
     /// Tungstenite WebSocket transport limits and buffer sizes.
     ///
-    /// The configuration is passed to [`tokio_tungstenite::WebSocketStream::from_raw_socket`] and
-    /// derives internal connection channel capacity from the configured
-    /// max-write/write-buffer ratio.
+    /// The configuration is passed to [`tokio_tungstenite::WebSocketStream::from_raw_socket`].
+    /// Internal channel capacity is configured independently.
     ///
     /// Namespace builders may override this value.
     ///
-    /// The defaults are 8 MiB per frame, 16 MiB per message, a 2 MiB maximum write
-    /// buffer, and 8 KiB read and write buffers; other settings use
+    /// The receiving defaults are 8 MiB per frame and 16 MiB per message. The maximum
+    /// write buffer is 2 MiB + 8 KiB + [`OUTGOING_FRAME_OVERHEAD`](crate::core::transport::OUTGOING_FRAME_OVERHEAD) bytes, with 8 KiB read and write buffers; other settings use
     /// [`WebSocketConfig::default`].
     pub(crate) websocket_config: WebSocketConfig,
 }

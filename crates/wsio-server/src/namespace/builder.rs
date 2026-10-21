@@ -16,9 +16,12 @@ use super::{
 };
 use crate::{
     connection::WsIoServerConnection,
-    core::packet::{
-        codecs::WsIoPacketCodec,
-        transformers::WsIoPacketTransformer,
+    core::{
+        packet::{
+            codecs::WsIoPacketCodec,
+            transformers::WsIoPacketTransformer,
+        },
+        transport::validate_transport_config,
     },
     runtime::WsIoServerRuntime,
 };
@@ -46,6 +49,7 @@ impl WsIoServerNamespaceBuilder {
         Self {
             config: WsIoServerNamespaceConfig {
                 broadcast_concurrency_limit: runtime.config.broadcast_concurrency_limit,
+                channel_capacity: runtime.config.channel_capacity,
                 connection_idle_timeout: runtime.config.connection_idle_timeout,
                 http_request_upgrade_timeout: runtime.config.http_request_upgrade_timeout,
                 init_request_handler: None,
@@ -53,6 +57,7 @@ impl WsIoServerNamespaceBuilder {
                 init_response_handler: None,
                 init_response_handler_timeout: runtime.config.init_response_handler_timeout,
                 init_response_timeout: runtime.config.init_response_timeout,
+                max_outgoing_message_size: runtime.config.max_outgoing_message_size,
                 middleware: None,
                 middleware_execution_timeout: runtime.config.middleware_execution_timeout,
                 on_connect_handler: None,
@@ -69,11 +74,21 @@ impl WsIoServerNamespaceBuilder {
     }
 
     // Public methods
+
     /// Sets the maximum number of concurrent broadcast sends.
     ///
     /// `0` means unlimited concurrency.
     pub fn broadcast_concurrency_limit(mut self, broadcast_concurrency_limit: usize) -> Self {
         self.config.broadcast_concurrency_limit = broadcast_concurrency_limit;
+        self
+    }
+
+    /// Sets the message capacity of each internal connection channel.
+    ///
+    /// Inherits the server default of 2048. Must be between 1 and
+    /// [`tokio::sync::Semaphore::MAX_PERMITS`]. The limit counts messages, not bytes.
+    pub fn channel_capacity(mut self, channel_capacity: usize) -> Self {
+        self.config.channel_capacity = channel_capacity;
         self
     }
 
@@ -120,6 +135,18 @@ impl WsIoServerNamespaceBuilder {
     /// respond in time, the connection closes.
     pub fn init_response_timeout(mut self, duration: Duration) -> Self {
         self.config.init_response_timeout = duration;
+        self
+    }
+
+    /// Sets the maximum outgoing Binary payload size after packet transformation, excluding frame headers.
+    ///
+    /// Inherits the server default of 2 MiB; zero is rejected. Oversized packets
+    /// are rejected before queueing. Registration requires a write buffer of at
+    /// least this limit plus the write threshold and [`OUTGOING_FRAME_OVERHEAD`](crate::core::transport::OUTGOING_FRAME_OVERHEAD) bytes.
+    /// Messages are not fragmented, so the peer's frame limit must accommodate them.
+    /// Large broadcasts can leave a large retained write buffer on each connection.
+    pub fn max_outgoing_message_size(mut self, max_outgoing_message_size: usize) -> Self {
+        self.config.max_outgoing_message_size = max_outgoing_message_size;
         self
     }
 
@@ -203,8 +230,14 @@ impl WsIoServerNamespaceBuilder {
     ///
     /// # Errors
     ///
-    /// Returns an error if the path is already registered.
+    /// Returns an error if the path is already registered or queue/outgoing-buffer settings are invalid.
     pub fn register(self) -> Result<Arc<WsIoServerNamespace>> {
+        validate_transport_config(
+            &self.config.websocket_config,
+            self.config.channel_capacity,
+            self.config.max_outgoing_message_size,
+        )?;
+
         let namespace = WsIoServerNamespace::new(self.config, Arc::clone(&self.runtime));
         self.runtime.insert_namespace(Arc::clone(&namespace))?;
         Ok(namespace)
@@ -212,8 +245,8 @@ impl WsIoServerNamespaceBuilder {
 
     /// Replaces the full Tungstenite WebSocket configuration for this namespace.
     ///
-    /// The configuration controls transport limits and buffer sizes and derives
-    /// internal channel capacity from the configured max-write/write-buffer ratio.
+    /// The configuration controls transport limits and buffer sizes. Internal
+    /// channel capacity is configured independently with [`Self::channel_capacity`].
     pub fn websocket_config(mut self, websocket_config: WebSocketConfig) -> Self {
         self.config.websocket_config = websocket_config;
         self
@@ -331,8 +364,33 @@ mod tests {
     }
 
     #[test]
+    fn test_namespace_builder_validates_overrides_before_registration() {
+        let server = WsIoServer::builder().channel_capacity(7).build().unwrap();
+        assert!(
+            server
+                .new_namespace_builder("/invalid")
+                .channel_capacity(0)
+                .register()
+                .is_err()
+        );
+
+        assert!(server.of("/invalid").is_none());
+        assert!(
+            server
+                .new_namespace_builder("/invalid")
+                .max_outgoing_message_size(usize::MAX)
+                .register()
+                .is_err()
+        );
+
+        let namespace = server.new_namespace_builder("/valid").register().unwrap();
+        assert_eq!(namespace.config.channel_capacity, 7);
+        assert_eq!(namespace.config.max_outgoing_message_size, 2 * 1024 * 1024);
+    }
+
+    #[test]
     fn test_namespace_builder_configuration() {
-        let server = Arc::new(WsIoServer::builder().build());
+        let server = Arc::new(WsIoServer::builder().build().unwrap());
         let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0))
             .broadcast_concurrency_limit(42)
             .http_request_upgrade_timeout(Duration::from_millis(750))
@@ -365,7 +423,13 @@ mod tests {
     #[test]
     fn test_namespace_builder_inherits_and_overrides_packet_transformer() {
         let global_transformer = WsIoPacketTransformer::custom(Arc::new(TestPacketTransformer));
-        let server = Arc::new(WsIoServer::builder().packet_transformer(global_transformer).build());
+        let server = Arc::new(
+            WsIoServer::builder()
+                .packet_transformer(global_transformer)
+                .build()
+                .unwrap(),
+        );
+
         let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0));
 
         assert_eq!(
@@ -382,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_namespace_builder_registers_lifecycle_handlers() {
-        let server = Arc::new(WsIoServer::builder().build());
+        let server = Arc::new(WsIoServer::builder().build().unwrap());
         let builder = WsIoServerNamespaceBuilder::new("/custom", Arc::clone(&server.0))
             .on_connect(async |_connection| Ok(()))
             .on_ready(async |_connection| Ok(()))
@@ -399,7 +463,7 @@ mod tests {
 
     #[test]
     fn test_namespace_duplicate_registration_fails() {
-        let server = Arc::new(WsIoServer::builder().build());
+        let server = Arc::new(WsIoServer::builder().build().unwrap());
 
         let builder1 = WsIoServerNamespaceBuilder::new("/socket", Arc::clone(&server.0));
         let register1_result = builder1.register();
