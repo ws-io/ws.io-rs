@@ -380,6 +380,7 @@ impl WsIoServerConnection {
         self.namespace.remove_connection(self.id);
 
         // Leave all joined rooms
+        // Closing rejects new joins; taking the same lock also waits for accepted joins to finish both index updates.
         let joined_rooms = take(&mut *self.joined_rooms.lock());
         for room_name in &joined_rooms {
             self.namespace.remove_connection_id_from_room(room_name, self.id);
@@ -635,15 +636,28 @@ impl WsIoServerConnection {
         self.state.is(ConnectionState::Ready)
     }
 
+    /// Joins rooms unless the connection is closing or closed.
     #[inline]
     pub fn join(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl Into<String>>) {
         for room_name in room_names {
             let room_name = room_name.into();
-            self.namespace.add_connection_id_to_room(&room_name, self.id);
 
             #[cfg(feature = "tracing")]
-            tracing::trace!(connection_id = self.id, room = %room_name, "connection joined room");
-            self.joined_rooms.lock().insert(room_name);
+            let logged_room_name = room_name.clone();
+
+            {
+                let mut joined_rooms = self.joined_rooms.lock();
+                if matches!(self.state.get(), ConnectionState::Closing | ConnectionState::Closed) {
+                    return;
+                }
+
+                // Keep the lock order consistent with leave: connection rooms, then namespace rooms.
+                self.namespace.add_connection_id_to_room(&room_name, self.id);
+                joined_rooms.insert(room_name);
+            }
+
+            #[cfg(feature = "tracing")]
+            tracing::trace!(connection_id = self.id, room = %logged_room_name, "connection joined room");
         }
     }
 
@@ -651,9 +665,11 @@ impl WsIoServerConnection {
     pub fn leave(self: &Arc<Self>, room_names: impl IntoIterator<Item = impl Into<String>>) {
         for room_name in room_names {
             let room_name = room_name.into();
-            self.namespace.remove_connection_id_from_room(&room_name, self.id);
-
-            self.joined_rooms.lock().remove(&room_name);
+            {
+                let mut joined_rooms = self.joined_rooms.lock();
+                self.namespace.remove_connection_id_from_room(&room_name, self.id);
+                joined_rooms.remove(&room_name);
+            }
 
             #[cfg(feature = "tracing")]
             tracing::trace!(connection_id = self.id, room = %room_name, "connection left room");
