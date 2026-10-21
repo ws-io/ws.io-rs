@@ -44,6 +44,7 @@ type Handler<C> = Arc<
         + Sync
         + 'static,
 >;
+
 type HandlerResult = Result<Result<()>, Box<dyn Any + Send>>;
 
 // Constants/Statics
