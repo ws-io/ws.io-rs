@@ -59,6 +59,38 @@ fn tagged(max_input: usize) -> WsIoPacketTransformer {
 }
 
 #[tokio::test]
+async fn room_connection_count_tracks_membership_across_namespaces() {
+    let server = WsIoServer::builder().build().unwrap();
+    assert_eq!(server.room_connection_count("shared"), 0);
+    let first = server.new_namespace_builder("/first").register().unwrap();
+    let second = server.new_namespace_builder("/second").register().unwrap();
+    let (a, _arx) = ready_connection(&first).await;
+    let (b, _brx) = ready_connection(&first).await;
+    let (c, _crx) = ready_connection(&second).await;
+
+    a.join(["shared", "shared", "other"]);
+    b.join(["shared"]);
+    c.join(["shared"]);
+    assert_eq!(first.room_connection_count("shared"), 2);
+    assert_eq!(second.room_connection_count("shared"), 1);
+    assert_eq!(server.room_connection_count("shared"), 3);
+    assert_eq!(server.room_connection_count("other"), 1);
+    assert_eq!(first.room_connection_count("missing"), 0);
+    assert_eq!(server.room_connection_count("missing"), 0);
+
+    a.leave(["shared", "shared"]);
+    assert_eq!(first.room_connection_count("shared"), 1);
+    assert_eq!(server.room_connection_count("shared"), 2);
+    b.cleanup().await;
+    assert_eq!(first.room_connection_count("shared"), 0);
+    assert_eq!(server.room_connection_count("shared"), 1);
+    c.cleanup().await;
+    assert_eq!(server.room_connection_count("shared"), 0);
+    a.cleanup().await;
+    assert_eq!(server.room_connection_count("other"), 0);
+}
+
+#[tokio::test]
 async fn outgoing_limit_is_checked_after_transforming_before_broadcast_enqueue() {
     let payload = vec![7_u8; 8];
     let packet = WsIoPacket::new_event("e", Some(WsIoPacketCodec::Msgpack.encode_data(&payload).unwrap()));

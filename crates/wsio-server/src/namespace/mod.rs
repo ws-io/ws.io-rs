@@ -440,6 +440,12 @@ impl WsIoServerNamespace {
         &self.config.path
     }
 
+    /// Returns the number of connections in a room in this namespace, or zero if it does not exist.
+    #[inline]
+    pub fn room_connection_count(&self, room_name: impl AsRef<str>) -> u64 {
+        self.rooms.get(room_name.as_ref()).map_or(0, |room| room.len())
+    }
+
     #[inline]
     pub fn server(&self) -> WsIoServer {
         WsIoServer(Arc::clone(&self.runtime))

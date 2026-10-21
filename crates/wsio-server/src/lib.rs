@@ -85,6 +85,14 @@ impl WsIoServer {
         self.0.remove_namespace(path.as_ref()).await;
     }
 
+    /// Returns the total number of connections in rooms with this name across registered namespaces.
+    ///
+    /// Returns zero if no matching room exists. Concurrent membership changes are not an atomic snapshot.
+    #[inline]
+    pub fn room_connection_count(&self, room_name: impl AsRef<str>) -> u64 {
+        self.0.room_connection_count(room_name.as_ref())
+    }
+
     pub async fn shutdown(&self) {
         self.0.shutdown().await;
     }

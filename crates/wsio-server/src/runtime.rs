@@ -202,6 +202,16 @@ impl WsIoServerRuntime {
         namespace.shutdown().await;
     }
 
+    pub(crate) fn room_connection_count(&self, room_name: &str) -> u64 {
+        // TODO: Consider maintaining per-room counters if this query is needed for every message,
+        // rather than scanning namespaces and summing bitmap cardinalities on each call.
+        self.namespaces
+            .read()
+            .values()
+            .map(|namespace| namespace.room_connection_count(room_name))
+            .sum()
+    }
+
     pub(crate) async fn shutdown(self: &Arc<Self>) {
         let runtime = Arc::clone(self);
         self.shutdown_completion
