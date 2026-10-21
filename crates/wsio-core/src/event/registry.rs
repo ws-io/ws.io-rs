@@ -9,6 +9,8 @@ use std::{
         Formatter,
         Result as FmtResult,
     },
+    iter::once,
+    panic::AssertUnwindSafe,
     pin::Pin,
     sync::{
         Arc,
@@ -22,6 +24,7 @@ use std::{
 
 use anyhow::Result;
 use bytes::Bytes;
+use futures_util::FutureExt;
 use kikiutils::types::fx_collections::FxHashMap;
 use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
@@ -41,9 +44,16 @@ type Handler<C> = Arc<
         + Sync
         + 'static,
 >;
+type HandlerResult = Result<Result<()>, Box<dyn Any + Send>>;
 
 // Constants/Statics
 static EMPTY_EVENT_DATA_ANY_ARC: LazyLock<Arc<dyn Any + Send + Sync>> = LazyLock::new(|| Arc::new(()));
+
+// Enums
+enum HandlerSnapshot<C> {
+    Single(Handler<C>),
+    Multiple(Vec<Handler<C>>),
+}
 
 // Structs
 struct EventEntry<C> {
@@ -100,7 +110,8 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     /// handlers concurrently with shared `ctx` and decoded payload values. Handler
     /// execution order is unspecified. Without payload data, only handlers
     /// registered for `()` run. Events without registered handlers are ignored.
-    /// Handler errors and task failures do not fail dispatch and are logged when
+    /// A single handler runs inline; multiple handlers run in separate tasks.
+    /// Handler errors and panics do not fail dispatch and are logged when
     /// the `tracing` feature is enabled.
     ///
     /// # Errors
@@ -110,13 +121,13 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     ///
     /// # Panics
     ///
-    /// Panics if handlers are spawned outside a Tokio runtime.
+    /// Panics if multiple handlers are spawned outside a Tokio runtime.
     ///
     /// # Cancellation safety
     ///
     /// Canceling `cancel_token` drops unfinished handler futures. Dropping this
-    /// dispatch future aborts its handler tasks. Neither action rolls back
-    /// completed side effects; retrying may invoke handlers again.
+    /// dispatch future drops its inline handler future or aborts its handler tasks.
+    /// Neither action rolls back completed side effects; retrying may invoke handlers again.
     #[inline]
     pub async fn dispatch_event_packet(
         &self,
@@ -133,55 +144,64 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
             return Ok(());
         };
 
-        #[cfg(feature = "tracing")]
-        let event_name = event.to_owned();
         let data = match packet_data {
             Some(bytes) => match (event_entry.data_decoder)(&bytes, packet_codec) {
                 Ok(data) => data,
                 Err(err) => {
                     #[cfg(feature = "tracing")]
-                    tracing::debug!(event = %event_name, error = %err, "failed to decode event packet data");
+                    tracing::debug!(event, error = %err, "failed to decode event packet data");
                     return Err(err);
                 },
             },
             None => EMPTY_EVENT_DATA_ANY_ARC.clone(),
         };
 
-        let handlers = event_entry.handlers.read().values().cloned().collect::<Vec<_>>();
+        let handlers = {
+            let handlers = event_entry.handlers.read();
+            let mut handler_iter = handlers.values().cloned();
+            let Some(first_handler) = handler_iter.next() else {
+                return Ok(());
+            };
 
-        #[cfg(feature = "tracing")]
-        tracing::trace!(
-            event = %event_name,
-            handler_count = handlers.len(),
-            "dispatching event handlers"
-        );
-
-        let mut handler_tasks = JoinSet::new();
-        for handler in handlers {
-            let ctx = Arc::clone(&ctx);
-            let data = Arc::clone(&data);
-            let cancel_token = cancel_token.clone();
-            handler_tasks.spawn(async move {
-                select! {
-                    biased;
-                    () = cancel_token.cancelled() => Ok(()),
-                    result = handler(ctx, data) => result,
-                }
-            });
-        }
-
-        while let Some(result) = handler_tasks.join_next().await {
-            match result {
-                Ok(Ok(())) => {},
-                Ok(Err(_err)) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::debug!(event = %event_name, error = %_err, "event handler failed");
-                },
-                Err(_err) => {
-                    #[cfg(feature = "tracing")]
-                    tracing::debug!(event = %event_name, error = %_err, "event handler task failed");
-                },
+            if handlers.len() == 1 {
+                HandlerSnapshot::Single(first_handler)
+            } else {
+                HandlerSnapshot::Multiple(once(first_handler).chain(handler_iter).collect())
             }
+        };
+
+        match handlers {
+            HandlerSnapshot::Single(handler) => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!(event, handler_count = 1, "dispatching event handlers");
+
+                if let Some(result) = run_handler(handler, ctx, data, cancel_token).await {
+                    log_handler_result(event, result);
+                }
+            },
+            HandlerSnapshot::Multiple(handlers) => {
+                #[cfg(feature = "tracing")]
+                tracing::trace!(event, handler_count = handlers.len(), "dispatching event handlers");
+
+                let mut handler_tasks = JoinSet::new();
+                for handler in handlers {
+                    let ctx = Arc::clone(&ctx);
+                    let data = Arc::clone(&data);
+                    let cancel_token = cancel_token.clone();
+                    handler_tasks.spawn(async move { run_handler(handler, ctx, data, &cancel_token).await });
+                }
+
+                while let Some(result) = handler_tasks.join_next().await {
+                    match result {
+                        Ok(Some(result)) => log_handler_result(event, result),
+                        Ok(None) => {},
+                        Err(_err) => {
+                            #[cfg(feature = "tracing")]
+                            tracing::debug!(event, error = %_err, "event handler task failed");
+                        },
+                    }
+                }
+            },
         }
 
         Ok(())
@@ -277,12 +297,55 @@ fn decode_data_as_any_arc<D: DeserializeOwned + Send + Sync + 'static>(
     Ok(Arc::new(packet_codec.decode_data::<D>(bytes)?))
 }
 
+#[inline]
+fn log_handler_result(_event: &str, _result: HandlerResult) {
+    #[cfg(feature = "tracing")]
+    match _result {
+        Ok(Ok(())) => {},
+        Ok(Err(err)) => tracing::debug!(event = _event, error = %err, "event handler failed"),
+        Err(payload) => {
+            let message = payload
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("<non-string panic payload>");
+
+            tracing::debug!(event = _event, panic = message, "event handler panicked");
+        },
+    }
+}
+
+/// Runs one handler with panic isolation, returning `None` when canceled first.
+#[inline]
+async fn run_handler<C>(
+    handler: Handler<C>,
+    ctx: Arc<C>,
+    data: Arc<dyn Any + Send + Sync>,
+    cancel_token: &CancellationToken,
+) -> Option<HandlerResult> {
+    select! {
+        biased;
+        () = cancel_token.cancelled() => None,
+        // Calling the handler inside the async block also catches panics raised while creating its future.
+        result = AssertUnwindSafe(async move { handler(ctx, data).await }).catch_unwind() => Some(result),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        future::pending,
+        time::Duration,
+    };
 
+    use anyhow::bail;
     use tokio::{
+        spawn,
         sync::mpsc,
+        task::{
+            try_id,
+            yield_now,
+        },
         time::{
             sleep,
             timeout,
@@ -293,6 +356,169 @@ mod tests {
     use super::*;
 
     struct DummyConnection;
+
+    #[tokio::test]
+    async fn test_single_handler_runs_inline() {
+        let registry = Arc::new(WsIoEventRegistry::<DummyConnection>::new());
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        registry.on("ping", move |_ctx, _payload: Arc<()>| {
+            tx.send(try_id()).unwrap();
+            async { Ok(()) }
+        });
+
+        // Dispatch from a spawned task so the dispatcher has a task ID to compare against.
+        let dispatcher_task_id = spawn(async move {
+            registry
+                .dispatch_event_packet(
+                    Arc::new(DummyConnection),
+                    "ping",
+                    &WsIoPacketCodec::Msgpack,
+                    None,
+                    &CancellationToken::new(),
+                )
+                .await
+                .unwrap();
+
+            try_id()
+        })
+        .await
+        .unwrap();
+
+        assert!(dispatcher_task_id.is_some());
+        assert_eq!(rx.try_recv().unwrap(), dispatcher_task_id);
+    }
+
+    #[tokio::test]
+    async fn test_single_handler_isolates_panics_and_errors() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        registry.on("creation_panic", |_ctx, _payload: Arc<()>| {
+            panic!("panic while creating handler future");
+            #[allow(unreachable_code)]
+            async {
+                Ok(())
+            }
+        });
+
+        registry.on("poll_panic", async |_ctx, _payload: Arc<()>| {
+            yield_now().await;
+            panic!("panic while polling handler future");
+        });
+
+        registry.on("error", async |_ctx, _payload: Arc<()>| {
+            bail!("handler failed");
+        });
+
+        for event in ["creation_panic", "poll_panic", "error"] {
+            registry
+                .dispatch_event_packet(
+                    Arc::new(DummyConnection),
+                    event,
+                    &WsIoPacketCodec::Msgpack,
+                    None,
+                    &CancellationToken::new(),
+                )
+                .await
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_single_handler_prioritizes_cancellation() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        let cancel_token = CancellationToken::new();
+        cancel_token.cancel();
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        registry.on("ping", move |_ctx, _payload: Arc<()>| {
+            tx.send(()).unwrap();
+            async { Ok(()) }
+        });
+
+        registry
+            .dispatch_event_packet(
+                Arc::new(DummyConnection),
+                "ping",
+                &WsIoPacketCodec::Msgpack,
+                None,
+                &cancel_token,
+            )
+            .await
+            .unwrap();
+
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_multiple_handlers_remain_spawned_and_isolate_panics() {
+        let registry = WsIoEventRegistry::<DummyConnection>::new();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let dispatcher_task_id = try_id();
+        registry.on("ping", async |_ctx, _payload: Arc<()>| {
+            panic!("handler panic must not affect other handlers");
+        });
+
+        registry.on("ping", move |_ctx, _payload: Arc<()>| {
+            tx.send(try_id()).unwrap();
+            async { Ok(()) }
+        });
+
+        registry
+            .dispatch_event_packet(
+                Arc::new(DummyConnection),
+                "ping",
+                &WsIoPacketCodec::Msgpack,
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+
+        let handler_task_id = rx.try_recv().unwrap();
+        assert!(handler_task_id.is_some());
+        assert_ne!(handler_task_id, dispatcher_task_id);
+    }
+
+    #[tokio::test]
+    async fn test_single_handler_dropped_on_cancellation_or_dispatch_drop() {
+        for cancel in [true, false] {
+            let registry = WsIoEventRegistry::<DummyConnection>::new();
+            let dropped = CancellationToken::new();
+            let handler_dropped = dropped.clone();
+            registry.on("ping", move |_ctx, _payload: Arc<()>| {
+                let guard = handler_dropped.clone().drop_guard();
+                async move {
+                    let _guard = guard;
+                    pending::<()>().await;
+                    Ok(())
+                }
+            });
+
+            let cancel_token = CancellationToken::new();
+            let mut dispatch = Box::pin(registry.dispatch_event_packet(
+                Arc::new(DummyConnection),
+                "ping",
+                &WsIoPacketCodec::Msgpack,
+                None,
+                &cancel_token,
+            ));
+
+            select! {
+                biased;
+                _ = &mut dispatch => panic!("handler must remain pending"),
+                () = async {} => {},
+            }
+
+            assert!(!dropped.is_cancelled());
+            if cancel {
+                cancel_token.cancel();
+                timeout(Duration::from_secs(1), &mut dispatch).await.unwrap().unwrap();
+                assert!(dropped.is_cancelled(), "cancellation must drop the handler future");
+            }
+
+            drop(dispatch);
+            assert!(dropped.is_cancelled());
+        }
+    }
 
     #[tokio::test]
     async fn test_registry_dispatch_runs_all_handlers() {
