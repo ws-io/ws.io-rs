@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.2 - 2026-10-21T09:39:49Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.15.1...wsio-server-v0.15.2)
+
+### 🚀 Enhancements
+
+- *(server)* add room connection count queries ([8d93dd5](https://github.com/ws-io/ws.io-rs/commit/8d93dd50c427f2c1536bbd34123d5b5be9e91754))
+
 ## 0.15.1 - 2026-10-21T08:26:49Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.15.0...wsio-server-v0.15.1)
