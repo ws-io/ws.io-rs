@@ -1,13 +1,18 @@
 use std::{
     collections::hash_map::Entry,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
+    },
 };
 
 use anyhow::{
     Result,
     bail,
 };
-use arc_swap::ArcSwap;
 use futures_util::future::join_all;
 use kikiutils::{
     atomic::enum_cell::AtomicEnumCell,
@@ -18,7 +23,6 @@ use num_enum::{
     TryFromPrimitive,
 };
 use parking_lot::RwLock;
-use roaring::RoaringTreemap;
 use serde::Serialize;
 
 use crate::{
@@ -43,7 +47,7 @@ pub(crate) enum WsIoServerRuntimeStatus {
 #[derive(Debug)]
 pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
-    connection_ids: ArcSwap<RoaringTreemap>,
+    connection_count: AtomicUsize,
     namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
     shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
@@ -53,7 +57,7 @@ impl WsIoServerRuntime {
     pub(crate) fn new(config: WsIoServerConfig) -> Arc<Self> {
         Arc::new(Self {
             config,
-            connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
+            connection_count: AtomicUsize::new(0),
             namespaces: RwLock::new(FxHashMap::default()),
             shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
@@ -91,7 +95,7 @@ impl WsIoServerRuntime {
     // Protected methods
     #[inline]
     pub(crate) fn connection_count(&self) -> usize {
-        usize::try_from(self.connection_ids.load().len()).unwrap_or(usize::MAX)
+        self.connection_count.load(Ordering::Relaxed)
     }
 
     pub(crate) async fn close_all(&self) {
@@ -102,6 +106,11 @@ impl WsIoServerRuntime {
         );
 
         join_all(self.clone_namespaces().iter().map(WsIoServerNamespace::close_all)).await;
+    }
+
+    #[inline]
+    pub(crate) fn decrement_connection_count(&self) {
+        self.connection_count.fetch_sub(1, Ordering::Relaxed);
     }
 
     pub(crate) async fn emit<D: Serialize>(&self, event: &str, data: Option<&D>) -> Result<()> {
@@ -145,12 +154,8 @@ impl WsIoServerRuntime {
     }
 
     #[inline]
-    pub(crate) fn insert_connection_id(&self, id: u64) {
-        self.connection_ids.rcu(|old_connection_ids| {
-            let mut new_connection_ids = (**old_connection_ids).clone();
-            new_connection_ids.insert(id);
-            new_connection_ids
-        });
+    pub(crate) fn increment_connection_count(&self) {
+        self.connection_count.fetch_add(1, Ordering::Relaxed);
     }
 
     #[inline]
@@ -181,15 +186,6 @@ impl WsIoServerRuntime {
         WsIoServerNamespaceBuilder::new(path, Arc::clone(self))
     }
 
-    #[inline]
-    pub(crate) fn remove_connection_id(&self, id: u64) {
-        self.connection_ids.rcu(|old_connection_ids| {
-            let mut new_connection_ids = (**old_connection_ids).clone();
-            new_connection_ids.remove(id);
-            new_connection_ids
-        });
-    }
-
     pub(crate) async fn remove_namespace(&self, path: &str) {
         let Some(namespace) = self.namespaces.write().remove(path) else {
             #[cfg(feature = "tracing")]
@@ -216,13 +212,23 @@ impl WsIoServerRuntime {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        array::from_fn,
+        time::Duration,
+    };
 
+    use http::{
+        HeaderMap,
+        Uri,
+    };
     use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
     use wsio_core::packet::transformers::WsIoPacketTransformer;
 
     use super::*;
-    use crate::core::packet::codecs::WsIoPacketCodec;
+    use crate::{
+        connection::WsIoServerConnection,
+        core::packet::codecs::WsIoPacketCodec,
+    };
 
     fn create_test_config() -> WsIoServerConfig {
         WsIoServerConfig {
@@ -272,13 +278,20 @@ mod tests {
     }
 
     #[test]
-    fn test_runtime_connection_id_tracking() {
+    fn test_runtime_connection_count_tracking() {
         let runtime = WsIoServerRuntime::new(create_test_config());
-        runtime.insert_connection_id(1);
-        runtime.insert_connection_id(2);
+        let namespace = runtime.new_namespace_builder("/test").register().unwrap();
+        let connections: [_; 2] = from_fn(|_| {
+            let (connection, _, _) =
+                WsIoServerConnection::new(HeaderMap::new(), Arc::clone(&namespace), Uri::from_static("/ws.io"));
+
+            assert!(namespace.insert_connection(&connection));
+            connection
+        });
+
         assert_eq!(runtime.connection_count(), 2);
 
-        runtime.remove_connection_id(1);
+        namespace.remove_connection(connections[0].id());
         assert_eq!(runtime.connection_count(), 1);
     }
 

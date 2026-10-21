@@ -87,7 +87,6 @@ tracing = [
 
 [dependencies]
 anyhow = "1.0.104"
-arc-swap = "1.9.3"
 bytes = "1.12.1"
 futures-util = { version = "0.3.34", default-features = false }
 http = "1.5.0"

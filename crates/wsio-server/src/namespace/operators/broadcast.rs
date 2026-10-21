@@ -70,7 +70,7 @@ impl WsIoServerNamespaceBroadcastOperator {
 
     fn target_connection_ids(&self) -> RoaringTreemap {
         let mut target_connection_ids = if self.include_rooms.is_empty() {
-            (**self.namespace.connection_ids.load()).clone()
+            self.namespace.connections.iter().map(|entry| *entry.key()).collect()
         } else {
             let mut connection_ids = RoaringTreemap::new();
             for room_name in &self.include_rooms {
@@ -197,47 +197,58 @@ impl WsIoServerNamespaceBroadcastOperator {
 
 #[cfg(test)]
 mod tests {
+    use std::array::from_fn;
+
+    use http::{
+        HeaderMap,
+        Uri,
+    };
+
     use super::*;
     use crate::WsIoServer;
 
-    fn namespace_with_rooms() -> Arc<WsIoServerNamespace> {
+    fn namespace_with_rooms() -> (Arc<WsIoServerNamespace>, [u64; 3]) {
         let namespace = WsIoServer::builder()
             .build()
             .new_namespace_builder("/test")
             .register()
             .unwrap();
 
-        namespace
-            .connection_ids
-            .store(Arc::new(RoaringTreemap::from_iter([1, 2, 3])));
+        let ids = from_fn(|_| {
+            let (connection, _, _) =
+                WsIoServerConnection::new(HeaderMap::new(), Arc::clone(&namespace), Uri::from_static("/ws.io"));
 
-        namespace.add_connection_id_to_room("included", 1);
-        namespace.add_connection_id_to_room("included", 2);
-        namespace.add_connection_id_to_room("excluded", 2);
-        namespace.add_connection_id_to_room("excluded", 3);
-        namespace
+            assert!(namespace.insert_connection(&connection));
+            connection.id()
+        });
+
+        namespace.add_connection_id_to_room("included", ids[0]);
+        namespace.add_connection_id_to_room("included", ids[1]);
+        namespace.add_connection_id_to_room("excluded", ids[1]);
+        namespace.add_connection_id_to_room("excluded", ids[2]);
+        (namespace, ids)
     }
 
     #[test]
     fn resolves_existing_include_room_members() {
-        let targets = namespace_with_rooms().to(["included"]).target_connection_ids();
+        let (namespace, ids) = namespace_with_rooms();
+        let targets = namespace.to(["included"]).target_connection_ids();
 
-        assert_eq!(targets, RoaringTreemap::from_iter([1, 2]));
+        assert_eq!(targets, RoaringTreemap::from_iter([ids[0], ids[1]]));
     }
 
     #[test]
     fn resolves_included_and_excluded_room_intersection() {
-        let targets = namespace_with_rooms()
-            .to(["included"])
-            .except(["excluded"])
-            .target_connection_ids();
+        let (namespace, ids) = namespace_with_rooms();
+        let targets = namespace.to(["included"]).except(["excluded"]).target_connection_ids();
 
-        assert_eq!(targets, RoaringTreemap::from_iter([1]));
+        assert_eq!(targets, RoaringTreemap::from_iter([ids[0]]));
     }
 
     #[test]
     fn resolves_empty_include_room_to_no_targets() {
-        let targets = namespace_with_rooms().to(["missing"]).target_connection_ids();
+        let (namespace, _) = namespace_with_rooms();
+        let targets = namespace.to(["missing"]).target_connection_ids();
 
         assert!(targets.is_empty());
     }

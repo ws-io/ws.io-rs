@@ -4,7 +4,6 @@ use anyhow::{
     Result,
     anyhow,
 };
-use arc_swap::ArcSwap;
 use futures_util::{
     SinkExt,
     StreamExt,
@@ -77,7 +76,6 @@ enum NamespaceStatus {
 #[derive(Debug)]
 pub struct WsIoServerNamespace {
     pub(crate) config: WsIoServerNamespaceConfig,
-    connection_ids: ArcSwap<RoaringTreemap>,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
     connection_task_tracker: TaskTracker,
     rooms: FxDashMap<String, RoaringTreemap>,
@@ -90,7 +88,6 @@ impl WsIoServerNamespace {
     fn new(config: WsIoServerNamespaceConfig, runtime: Arc<WsIoServerRuntime>) -> Arc<Self> {
         Arc::new(Self {
             config,
-            connection_ids: ArcSwap::new(Arc::new(RoaringTreemap::new())),
             connections: FxDashMap::default(),
             connection_task_tracker: TaskTracker::new(),
             rooms: FxDashMap::default(),
@@ -352,12 +349,10 @@ impl WsIoServerNamespace {
             return false;
         }
 
-        self.connections.insert(connection.id(), Arc::clone(connection));
-        self.runtime.insert_connection_id(connection.id());
-        self.connection_ids.rcu(|old_connection_ids| {
-            let mut new_connection_ids = (**old_connection_ids).clone();
-            new_connection_ids.insert(connection.id());
-            new_connection_ids
+        self.connections.entry(connection.id()).or_insert_with(|| {
+            // Count the connection before publishing it, while the entry's write lock excludes removal.
+            self.runtime.increment_connection_count();
+            Arc::clone(connection)
         });
 
         // Shutdown may have taken its close_all() snapshot while this connection
@@ -372,13 +367,9 @@ impl WsIoServerNamespace {
 
     #[inline]
     pub(crate) fn remove_connection(&self, id: u64) {
-        self.connections.remove(&id);
-        self.runtime.remove_connection_id(id);
-        self.connection_ids.rcu(|old_connection_ids| {
-            let mut new_connection_ids = (**old_connection_ids).clone();
-            new_connection_ids.remove(id);
-            new_connection_ids
-        });
+        if self.connections.remove(&id).is_some() {
+            self.runtime.decrement_connection_count();
+        }
     }
 
     #[inline]
