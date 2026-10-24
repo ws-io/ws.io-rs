@@ -14,6 +14,10 @@ main() {
     require_cmd cargo
     cd -- "${REPO_ROOT}"
 
+    local sysroot
+    sysroot="$(rustc --print sysroot)"
+    export LIBRARY_PATH="${sysroot}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+
     log_info 'Applying Dylint fixes...'
     cargo dlint-fix --allow-dirty --allow-staged
 

@@ -29,9 +29,12 @@ prepare_windows_msvc() {
 }
 
 load_windows_msvc_env() {
-    local xwin_env
+    local xwin_env sysroot
 
     prepare_windows_msvc || return
     xwin_env="$(cargo xwin env --target x86_64-pc-windows-msvc)" || return
     eval "${xwin_env}"
+
+    sysroot="$(rustc --print sysroot)" || return
+    export LIBRARY_PATH="${sysroot}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
 }
