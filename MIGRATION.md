@@ -77,6 +77,12 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 - Namespaces hold a weak reference to the server runtime, removing the runtime/namespace strong-reference cycle. Keeping a namespace or connection handle no longer keeps the server runtime alive. Retain a `WsIoServer` or another runtime-owning handle, such as its Tower layer or service, while the server is needed.
 - This ownership change does not automatically shut down active connections or background tasks. Call `shutdown().await` when coordinated shutdown is required.
 
+### 8. Namespace paths use a shared normalized identity
+
+- Client namespace selection and server registration, lookup, removal, and handshake routing use one leading `/`, collapse repeated `/`, and remove trailing `/`. Empty and slash-only names select the root namespace `/`.
+- Names such as `test`, `/test/`, and `//test//` all identify `/test`. Registrations that normalize to an existing namespace are rejected; rename namespaces that relied on distinct slash spellings.
+- Namespace normalization does not change the HTTP request path or decode percent-encoded path segments.
+
 ## Runtime and Lifecycle Changes
 
 - Server connections now finish within the new `disconnect_timeout` (default 5 seconds, namespace-overridable) after `close()`/`disconnect()`, even when the outbound queue is full or the peer stops reading. Delivery of queued messages and the Close frame is best-effort.
@@ -99,3 +105,4 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 - [ ] Account for bounded-queue backpressure and the fact that pending events are dropped on shutdown.
 - [ ] Handle the `Result` from server/client `build()` and size `max_outgoing_message_size` / `channel_capacity` for your workload.
 - [ ] Handle the `Option` returned by namespace/connection `server()` and retain a runtime-owning handle for the required server lifetime.
+- [ ] Resolve namespace name collisions caused by slash normalization.

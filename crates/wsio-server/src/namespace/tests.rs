@@ -60,6 +60,34 @@ fn tagged(max_input: usize) -> WsIoPacketTransformer {
 }
 
 #[tokio::test]
+async fn namespace_path_spellings_share_one_identity() {
+    let server = WsIoServer::builder().build().unwrap();
+    for (variants, expected) in [
+        (["", "/", "///"], "/"),
+        (["test", "/test/", "//test//"], "/test"),
+        (["a/b", "/a//b/", "//a///b//"], "/a/b"),
+    ] {
+        for registered in variants {
+            let namespace = server.new_namespace_builder(registered).register().unwrap();
+            assert_eq!(namespace.path(), expected);
+            for lookup in variants {
+                assert!(Arc::ptr_eq(&namespace, &server.of(lookup).unwrap()));
+                assert!(server.new_namespace_builder(lookup).register().is_err());
+            }
+
+            assert_eq!(server.namespace_count(), 1);
+            // Remove through a spelling different from the registered one.
+            let removal = variants.into_iter().find(|&lookup| lookup != registered).unwrap();
+            server.remove_namespace(removal).await;
+            assert_eq!(server.namespace_count(), 0);
+            for lookup in variants {
+                assert!(server.of(lookup).is_none());
+            }
+        }
+    }
+}
+
+#[tokio::test]
 async fn room_connection_count_tracks_membership_across_namespaces() {
     let server = WsIoServer::builder().build().unwrap();
     assert_eq!(server.room_connection_count("shared"), 0);

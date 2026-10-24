@@ -27,7 +27,10 @@ use serde::Serialize;
 
 use crate::{
     config::WsIoServerConfig,
-    core::utils::lifecycle::WsIoLifecycleCompletionSlot,
+    core::utils::{
+        lifecycle::WsIoLifecycleCompletionSlot,
+        normalize_path,
+    },
     namespace::{
         WsIoServerNamespace,
         builder::WsIoServerNamespaceBuilder,
@@ -150,7 +153,7 @@ impl WsIoServerRuntime {
 
     #[inline]
     pub(crate) fn get_namespace(&self, path: &str) -> Option<Arc<WsIoServerNamespace>> {
-        self.namespaces.read().get(path).cloned()
+        self.namespaces.read().get(&normalize_path(path)).cloned()
     }
 
     #[inline]
@@ -187,7 +190,8 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn remove_namespace(&self, path: &str) {
-        let Some(namespace) = self.namespaces.write().remove(path) else {
+        let path = normalize_path(path);
+        let Some(namespace) = self.namespaces.write().remove(&path) else {
             #[cfg(feature = "tracing")]
             tracing::trace!(
                 namespace = path,

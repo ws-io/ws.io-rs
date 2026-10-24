@@ -22,6 +22,7 @@ use crate::{
             transformers::WsIoPacketTransformer,
         },
         transport::validate_transport_config,
+        utils::normalize_path,
     },
     runtime::WsIoServerRuntime,
 };
@@ -67,7 +68,7 @@ impl WsIoServerNamespaceBuilder {
                 on_ready_handler: None,
                 packet_codec: runtime.config.packet_codec.clone(),
                 packet_transformer: runtime.config.packet_transformer.clone(),
-                path: path.to_owned(),
+                path: normalize_path(path),
                 websocket_config: runtime.config.websocket_config,
             },
             runtime,
