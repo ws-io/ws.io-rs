@@ -31,7 +31,10 @@ use crate::{
             default_websocket_config,
             validate_transport_config,
         },
-        utils::path::normalize_path,
+        utils::path::{
+            normalize_path,
+            validate_namespace_path,
+        },
     },
     runtime::WsIoClientRuntime,
     session::WsIoClientSession,
@@ -41,9 +44,8 @@ use crate::{
 
 /// A builder for configuring and creating a [`WsIoClient`].
 ///
-/// The input URL path selects the namespace, normalized to one leading slash
-/// with repeated and trailing slashes removed. The root namespace is `/`.
-/// The WebSocket request path defaults to `/ws.io`.
+/// The input URL path selects the namespace. The WebSocket request path defaults to `/ws.io`.
+/// Both are normalized with [`normalize_path`]; the namespace must pass [`validate_namespace_path`].
 ///
 /// Configuration methods consume the builder and return the updated builder.
 /// Registering a callback replaces the previous callback of that kind. Callbacks
@@ -70,6 +72,7 @@ impl WsIoClientBuilder {
             .collect::<Vec<_>>();
 
         let namespace = normalize_path(url.path());
+        validate_namespace_path(&namespace)?;
         url.query_pairs_mut()
             .clear()
             .extend_pairs(query_pairs)
@@ -282,9 +285,8 @@ impl WsIoClientBuilder {
         self
     }
 
-    /// Sets the WebSocket HTTP request path.
+    /// Sets the WebSocket HTTP request path, normalized with [`normalize_path`].
     ///
-    /// The path is normalized to one leading slash with empty segments removed.
     /// This controls the request URI path, not the namespace query value derived
     /// from the input URL.
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {

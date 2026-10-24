@@ -66,7 +66,7 @@ impl WsIoServer {
         WsIoServerLayer::new(Arc::clone(&self.0))
     }
 
-    /// Looks up a namespace using its normalized path.
+    /// Looks up a namespace by its normalized path.
     #[inline]
     pub fn of(&self, path: impl AsRef<str>) -> Option<Arc<WsIoServerNamespace>> {
         self.0.get_namespace(path.as_ref())
@@ -77,14 +77,14 @@ impl WsIoServer {
         self.0.namespace_count()
     }
 
-    /// Creates a namespace builder with one leading slash and no repeated or
-    /// trailing slashes in its path. Empty and slash-only paths select `/`.
+    /// Creates a namespace builder with a path normalized by
+    /// [`normalize_path`](crate::core::utils::path::normalize_path).
     #[inline]
     pub fn new_namespace_builder(&self, path: impl AsRef<str>) -> WsIoServerNamespaceBuilder {
         self.0.new_namespace_builder(path.as_ref())
     }
 
-    /// Removes and shuts down the namespace selected by the normalized path.
+    /// Removes and shuts down the namespace with this normalized path.
     pub async fn remove_namespace(&self, path: impl AsRef<str>) {
         self.0.remove_namespace(path.as_ref()).await;
     }

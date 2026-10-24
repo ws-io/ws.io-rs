@@ -22,7 +22,10 @@ use crate::{
             transformers::WsIoPacketTransformer,
         },
         transport::validate_transport_config,
-        utils::path::normalize_path,
+        utils::path::{
+            normalize_path,
+            validate_namespace_path,
+        },
     },
     runtime::WsIoServerRuntime,
 };
@@ -242,8 +245,9 @@ impl WsIoServerNamespaceBuilder {
     ///
     /// # Errors
     ///
-    /// Returns an error if the path is already registered or queue/outgoing-buffer settings are invalid.
+    /// Returns an error if the path is invalid or already registered, or queue/outgoing-buffer settings are invalid.
     pub fn register(self) -> Result<Arc<WsIoServerNamespace>> {
+        validate_namespace_path(&self.config.path)?;
         validate_transport_config(
             &self.config.websocket_config,
             self.config.channel_capacity,

@@ -45,7 +45,7 @@ impl WsIoClient {
     /// # Errors
     ///
     /// Returns an error if `url` cannot be parsed, its scheme is not `ws` or `wss`,
-    /// or its scheme is `wss` without an enabled TLS feature.
+    /// its scheme is `wss` without an enabled TLS feature, or its namespace path is invalid.
     pub fn builder(url: impl AsRef<str>) -> Result<WsIoClientBuilder> {
         let url = Url::parse(url.as_ref()).map_err(|err| anyhow!("Invalid URL: {err}"))?;
 

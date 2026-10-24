@@ -211,9 +211,8 @@ impl WsIoServerBuilder {
         self
     }
 
-    /// Sets the HTTP request path handled by the server adapter.
+    /// Sets the HTTP request path handled by the server adapter, normalized with [`normalize_path`].
     ///
-    /// The path is normalized to one leading slash with empty segments removed.
     /// Requests with a different URI path pass through to the wrapped service.
     /// Client namespace selection is carried separately in the `namespace` query
     /// parameter.

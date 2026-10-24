@@ -77,12 +77,11 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 - Namespaces hold a weak reference to the server runtime, removing the runtime/namespace strong-reference cycle. Keeping a namespace or connection handle no longer keeps the server runtime alive. Retain a `WsIoServer` or another runtime-owning handle, such as its Tower layer or service, while the server is needed.
 - This ownership change does not automatically shut down active connections or background tasks. Call `shutdown().await` when coordinated shutdown is required.
 
-### 8. Namespace paths use a shared normalized identity
+### 8. Namespace and request path rules
 
-- Client namespace selection and server registration, lookup, removal, and handshake routing use one leading `/`, collapse repeated `/`, and remove trailing `/`. Empty and slash-only names select the root namespace `/`.
-- Names such as `test`, `/test/`, and `//test//` all identify `/test`. Registrations that normalize to an existing namespace are rejected; rename namespaces that relied on distinct slash spellings.
-- Server and client `request_path` values use the same slash normalization, so `/socket/` and `socket` configure `/socket`. Incoming request URI paths are still matched exactly.
-- Normalization does not decode percent-encoded path segments.
+- Namespace paths and client/server `request_path` values are normalized to one leading `/` without repeated or trailing `/`; for example, `test`, `/test/`, and `//test//` all become `/test`, and empty paths become `/`.
+- Registering a namespace whose normalized path already exists fails. Incoming request URI paths must match the normalized server `request_path` exactly.
+- Namespace paths may contain only ASCII letters, digits, `-`, `_`, `.`, and `/`, without `.` or `..` segments. Server registration and client construction reject other names, such as `/世界` or `/a b`.
 
 ## Runtime and Lifecycle Changes
 
@@ -106,4 +105,4 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 - [ ] Account for bounded-queue backpressure and the fact that pending events are dropped on shutdown.
 - [ ] Handle the `Result` from server/client `build()` and size `max_outgoing_message_size` / `channel_capacity` for your workload.
 - [ ] Handle the `Option` returned by namespace/connection `server()` and retain a runtime-owning handle for the required server lifetime.
-- [ ] Resolve namespace name collisions caused by slash normalization.
+- [ ] Rename namespaces that collide after slash normalization or use characters outside the namespace whitelist, and ensure client request paths match the normalized server `request_path`.

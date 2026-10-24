@@ -21,3 +21,13 @@ fn builder_url_carries_normalized_namespace_and_request_path() {
         assert_eq!(query_value("token"), ["a&b"]);
     }
 }
+
+#[test]
+fn builder_rejects_namespace_outside_whitelist() {
+    for path in ["/世界", "/a%20b", "/a+b"] {
+        assert!(
+            WsIoClient::builder(format!("ws://localhost{path}")).is_err(),
+            "{path:?}"
+        );
+    }
+}

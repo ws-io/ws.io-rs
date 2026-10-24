@@ -59,6 +59,16 @@ fn tagged(max_input: usize) -> WsIoPacketTransformer {
     WsIoPacketTransformer::custom(Arc::new(TaggedTransformer { max_input }))
 }
 
+#[test]
+fn registration_rejects_namespace_outside_whitelist() {
+    let server = WsIoServer::builder().build().unwrap();
+    for path in ["/世界", "/a b", "/a/../b"] {
+        assert!(server.new_namespace_builder(path).register().is_err(), "{path:?}");
+    }
+
+    assert_eq!(server.namespace_count(), 0);
+}
+
 #[tokio::test]
 async fn namespace_path_spellings_share_one_identity() {
     let server = WsIoServer::builder().build().unwrap();
