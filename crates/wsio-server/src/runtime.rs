@@ -29,7 +29,7 @@ use crate::{
     config::WsIoServerConfig,
     core::utils::{
         lifecycle::WsIoLifecycleCompletionSlot,
-        path::normalize_path,
+        path::resolve_path,
     },
     namespace::{
         WsIoServerNamespace,
@@ -153,7 +153,7 @@ impl WsIoServerRuntime {
 
     #[inline]
     pub(crate) fn get_namespace(&self, path: &str) -> Option<Arc<WsIoServerNamespace>> {
-        self.namespaces.read().get(&normalize_path(path)).cloned()
+        self.namespaces.read().get(&resolve_path(path).ok()?).cloned()
     }
 
     #[inline]
@@ -190,8 +190,10 @@ impl WsIoServerRuntime {
     }
 
     pub(crate) async fn remove_namespace(&self, path: &str) {
-        let path = normalize_path(path);
-        let Some(namespace) = self.namespaces.write().remove(&path) else {
+        let Some(namespace) = resolve_path(path)
+            .ok()
+            .and_then(|path| self.namespaces.write().remove(&path))
+        else {
             #[cfg(feature = "tracing")]
             tracing::trace!(
                 namespace = path,
@@ -202,7 +204,7 @@ impl WsIoServerRuntime {
         };
 
         #[cfg(feature = "tracing")]
-        tracing::info!(namespace = path, "removing namespace");
+        tracing::info!(namespace = namespace.path(), "removing namespace");
         namespace.shutdown().await;
     }
 

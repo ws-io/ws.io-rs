@@ -31,10 +31,7 @@ use crate::{
             default_websocket_config,
             validate_transport_config,
         },
-        utils::path::{
-            normalize_path,
-            validate_namespace_path,
-        },
+        utils::path::resolve_path,
     },
     runtime::WsIoClientRuntime,
     session::WsIoClientSession,
@@ -45,7 +42,7 @@ use crate::{
 /// A builder for configuring and creating a [`WsIoClient`].
 ///
 /// The input URL path selects the namespace. The WebSocket request path defaults to `/ws.io`.
-/// Both are normalized with [`normalize_path`]; the namespace must pass [`validate_namespace_path`].
+/// Both are normalized and validated with [`resolve_path`].
 ///
 /// Configuration methods consume the builder and return the updated builder.
 /// Registering a callback replaces the previous callback of that kind. Callbacks
@@ -71,8 +68,7 @@ impl WsIoClientBuilder {
             .map(|(key, value)| (key.into_owned(), value.into_owned()))
             .collect::<Vec<_>>();
 
-        let namespace = normalize_path(url.path());
-        validate_namespace_path(&namespace)?;
+        let namespace = resolve_path(url.path())?;
         url.query_pairs_mut()
             .clear()
             .extend_pairs(query_pairs)
@@ -285,14 +281,18 @@ impl WsIoClientBuilder {
         self
     }
 
-    /// Sets the WebSocket HTTP request path, normalized with [`normalize_path`].
+    /// Sets the WebSocket HTTP request path, normalized and validated with [`resolve_path`].
     ///
     /// This controls the request URI path, not the namespace query value derived
     /// from the input URL.
-    pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
-        self.connect_url.set_path(&normalize_path(request_path.as_ref()));
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path contains unsupported characters or `.` or `..` segments.
+    pub fn request_path(mut self, request_path: impl AsRef<str>) -> Result<Self> {
+        self.connect_url.set_path(&resolve_path(request_path.as_ref())?);
 
-        self
+        Ok(self)
     }
 
     /// Replaces the full Tungstenite WebSocket configuration.

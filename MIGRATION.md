@@ -81,7 +81,7 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 
 - Namespace paths and client/server `request_path` values are normalized to one leading `/` without repeated or trailing `/`; for example, `test`, `/test/`, and `//test//` all become `/test`, and empty paths become `/`.
 - Registering a namespace whose normalized path already exists fails. Incoming request URI paths must match the normalized server `request_path` exactly.
-- Namespace paths may contain only ASCII letters, digits, `-`, `_`, `.`, and `/`, without `.` or `..` segments. Server registration and client construction reject other names, such as `/世界` or `/a b`.
+- Namespace and request paths may contain only ASCII letters, digits, `-`, `_`, `.`, and `/`, without `.` or `..` segments; other characters, including `%`, are rejected rather than decoded. Namespace registration and client construction return an error for invalid paths, and client and server `request_path()` now return `Result<Self>`, for example `.request_path("/socket")?.build()?`.
 
 ## Runtime and Lifecycle Changes
 
@@ -105,4 +105,4 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 - [ ] Account for bounded-queue backpressure and the fact that pending events are dropped on shutdown.
 - [ ] Handle the `Result` from server/client `build()` and size `max_outgoing_message_size` / `channel_capacity` for your workload.
 - [ ] Handle the `Option` returned by namespace/connection `server()` and retain a runtime-owning handle for the required server lifetime.
-- [ ] Rename namespaces that collide after slash normalization or use characters outside the namespace whitelist, and ensure client request paths match the normalized server `request_path`.
+- [ ] Rename namespaces that collide after slash normalization, change namespaces or request paths that use unsupported characters, and handle the `Result` from `request_path()`.

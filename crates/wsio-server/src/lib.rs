@@ -77,8 +77,8 @@ impl WsIoServer {
         self.0.namespace_count()
     }
 
-    /// Creates a namespace builder with a path normalized by
-    /// [`normalize_path`](crate::core::utils::path::normalize_path).
+    /// Creates a namespace builder. The path is normalized and validated by
+    /// [`resolve_path`](crate::core::utils::path::resolve_path) when registering.
     #[inline]
     pub fn new_namespace_builder(&self, path: impl AsRef<str>) -> WsIoServerNamespaceBuilder {
         self.0.new_namespace_builder(path.as_ref())

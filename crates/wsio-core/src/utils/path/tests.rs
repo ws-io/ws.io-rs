@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn path_normalization_preserves_segments_and_is_idempotent() {
+fn path_resolution_normalizes_valid_names_and_is_idempotent() {
     for (input, expected) in [
         ("", "/"),
         ("/", "/"),
@@ -9,22 +9,19 @@ fn path_normalization_preserves_segments_and_is_idempotent() {
         ("test", "/test"),
         ("/test/", "/test"),
         ("//a///b//", "/a/b"),
-        ("/世界/", "/世界"),
-        ("/a%2Fb/", "/a%2Fb"),
-        ("/ a /", "/ a "),
+        ("/a-b_c.d/E9/", "/a-b_c.d/E9"),
+        ("/v1.0", "/v1.0"),
     ] {
-        assert_eq!(normalize_path(input), expected, "{input:?}");
-        assert_eq!(normalize_path(expected), expected, "{expected:?}");
+        assert_eq!(resolve_path(input).unwrap(), expected, "{input:?}");
+        assert_eq!(resolve_path(expected).unwrap(), expected, "{expected:?}");
     }
 }
 
 #[test]
-fn namespace_path_validation_allows_only_whitelisted_characters() {
-    for path in ["/", "/test", "/a-b_c.d/E9", "/v1.0"] {
-        assert!(validate_namespace_path(path).is_ok(), "{path:?}");
-    }
-
-    for path in ["/世界", "/a b", "/a%2Fb", "/a\\b", "/a+b", "/.", "/a/..", "/a/./b"] {
-        assert!(validate_namespace_path(path).is_err(), "{path:?}");
+fn path_resolution_rejects_unsupported_characters_and_dot_segments() {
+    for path in [
+        "/世界", "/a b", "/a%2Fb", "/a\\b", "/a+b", "/.", "/a/..", "/a/./b", "/a\tb", "/a\nb",
+    ] {
+        assert!(resolve_path(path).is_err(), "{path:?}");
     }
 }

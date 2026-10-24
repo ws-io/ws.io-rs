@@ -17,7 +17,7 @@ use crate::{
             default_websocket_config,
             validate_transport_config,
         },
-        utils::path::normalize_path,
+        utils::path::resolve_path,
     },
     runtime::WsIoServerRuntime,
 };
@@ -211,14 +211,18 @@ impl WsIoServerBuilder {
         self
     }
 
-    /// Sets the HTTP request path handled by the server adapter, normalized with [`normalize_path`].
+    /// Sets the HTTP request path handled by the server adapter, normalized and validated with [`resolve_path`].
     ///
     /// Requests with a different URI path pass through to the wrapped service.
     /// Client namespace selection is carried separately in the `namespace` query
     /// parameter.
-    pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
-        self.config.request_path = normalize_path(request_path.as_ref());
-        self
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path contains unsupported characters or `.` or `..` segments.
+    pub fn request_path(mut self, request_path: impl AsRef<str>) -> Result<Self> {
+        self.config.request_path = resolve_path(request_path.as_ref())?;
+        Ok(self)
     }
 
     /// Replaces the default Tungstenite WebSocket configuration.
@@ -239,3 +243,6 @@ impl WsIoServerBuilder {
         self
     }
 }
+
+#[cfg(test)]
+mod tests;
