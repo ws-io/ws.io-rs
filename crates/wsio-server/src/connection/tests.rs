@@ -20,26 +20,22 @@ use tokio::{
 use super::*;
 use crate::namespace::builder::WsIoServerNamespaceBuilder;
 
-fn builder() -> WsIoServerNamespaceBuilder {
-    WsIoServer::builder()
-        .channel_capacity(1)
-        .build()
-        .unwrap()
-        .new_namespace_builder("/test")
-}
-
 fn fixture(
-    builder: WsIoServerNamespaceBuilder,
+    configure: impl FnOnce(WsIoServerNamespaceBuilder) -> WsIoServerNamespaceBuilder,
 ) -> (
+    WsIoServer,
     Arc<WsIoServerConnection>,
     mpsc::Receiver<Arc<Message>>,
     mpsc::Receiver<WsIoPacket>,
 ) {
-    WsIoServerConnection::new(
+    let server = WsIoServer::builder().channel_capacity(1).build().unwrap();
+    let (connection, messages, events) = WsIoServerConnection::new(
         HeaderMap::new(),
-        builder.register().unwrap(),
+        configure(server.new_namespace_builder("/test")).register().unwrap(),
         Uri::from_static("/ws.io"),
-    )
+    );
+
+    (server, connection, messages, events)
 }
 
 async fn incoming(connection: &Arc<WsIoServerConnection>, packet: WsIoPacket) -> Result<()> {
@@ -74,7 +70,7 @@ async fn stall_or_fail(stalls: bool, message: &'static str) -> Result<()> {
 
 #[tokio::test]
 async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
-    let (connection, mut messages, mut events) = fixture(builder());
+    let (_server, connection, mut messages, mut events) = fixture(|builder| builder);
     assert!(incoming(&connection, WsIoPacket::new_init(None)).await.is_err());
     // Ready is a server-to-client packet: receiving it must not activate a server connection.
     incoming(&connection, WsIoPacket::new_ready()).await.unwrap();
@@ -102,12 +98,14 @@ async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
     assert!(incoming(&connection, WsIoPacket::new_init(None)).await.is_err());
     connection.cleanup().await;
     assert_eq!(connection.namespace.connection_count(), 0);
-    assert_eq!(connection.server().connection_count(), 0);
+    assert_eq!(connection.server().unwrap().connection_count(), 0);
 }
 
 #[tokio::test(start_paused = true)]
 async fn missing_init_response_expires_but_ready_disarms_watchdog() {
-    let (connection, mut messages, _) = fixture(builder().init_response_timeout(Duration::from_secs(1)));
+    let (_server, connection, mut messages, _) =
+        fixture(|builder| builder.init_response_timeout(Duration::from_secs(1)));
+
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
     timeout(Duration::from_secs(2), connection.cancel_token.cancelled())
@@ -116,7 +114,9 @@ async fn missing_init_response_expires_but_ready_disarms_watchdog() {
 
     assert_eq!(connection.state.get(), ConnectionState::Closing);
     connection.cleanup().await;
-    let (connection, mut messages, _) = fixture(builder().init_response_timeout(Duration::from_secs(1)));
+    let (_server, connection, mut messages, _) =
+        fixture(|builder| builder.init_response_timeout(Duration::from_secs(1)));
+
     ready(&connection, &mut messages).await;
     advance(Duration::from_secs(2)).await;
     yield_now().await;
@@ -131,23 +131,24 @@ async fn setup_errors_and_timeouts_do_not_register_connections() {
     // Every awaited setup phase has its own failure/timeout boundary.
     for stage in 0..4 {
         for stalls in [false, true] {
-            let namespace_builder = builder()
-                .init_request_handler_timeout(Duration::from_secs(1))
-                .init_response_handler_timeout(Duration::from_secs(1))
-                .middleware_execution_timeout(Duration::from_secs(1))
-                .on_connect_handler_timeout(Duration::from_secs(1));
+            let (_server, connection, mut messages, _) = fixture(|builder| {
+                let namespace_builder = builder
+                    .init_request_handler_timeout(Duration::from_secs(1))
+                    .init_response_handler_timeout(Duration::from_secs(1))
+                    .middleware_execution_timeout(Duration::from_secs(1))
+                    .on_connect_handler_timeout(Duration::from_secs(1));
 
-            let namespace_builder = match stage {
-                0 => namespace_builder.with_init_request(move |_| async move {
-                    stall_or_fail(stalls, "init request failed").await.map(|()| None::<()>)
-                }),
-                1 => namespace_builder
-                    .with_init_response(move |_, _: Option<()>| stall_or_fail(stalls, "init response failed")),
-                2 => namespace_builder.with_middleware(move |_| stall_or_fail(stalls, "middleware failed")),
-                _ => namespace_builder.on_connect(move |_| stall_or_fail(stalls, "on connect failed")),
-            };
+                match stage {
+                    0 => namespace_builder.with_init_request(move |_| async move {
+                        stall_or_fail(stalls, "init request failed").await.map(|()| None::<()>)
+                    }),
+                    1 => namespace_builder
+                        .with_init_response(move |_, _: Option<()>| stall_or_fail(stalls, "init response failed")),
+                    2 => namespace_builder.with_middleware(move |_| stall_or_fail(stalls, "middleware failed")),
+                    _ => namespace_builder.on_connect(move |_| stall_or_fail(stalls, "on connect failed")),
+                }
+            });
 
-            let (connection, mut messages, _) = fixture(namespace_builder);
             if stage == 0 {
                 assert!(
                     timeout(Duration::from_secs(2), connection.init())
@@ -172,7 +173,7 @@ async fn setup_errors_and_timeouts_do_not_register_connections() {
             assert!(!connection.is_ready());
             assert!(messages.try_recv().is_err());
             assert_eq!(connection.namespace.connection_count(), 0);
-            assert_eq!(connection.server().connection_count(), 0);
+            assert_eq!(connection.server().unwrap().connection_count(), 0);
             connection.cleanup().await;
         }
     }
@@ -180,10 +181,12 @@ async fn setup_errors_and_timeouts_do_not_register_connections() {
 
 #[tokio::test]
 async fn closing_inside_middleware_cannot_resurrect_connection() {
-    let (connection, mut messages, _) = fixture(builder().with_middleware(|connection| async move {
-        connection.close();
-        Ok(())
-    }));
+    let (_server, connection, mut messages, _) = fixture(|builder| {
+        builder.with_middleware(|connection| async move {
+            connection.close();
+            Ok(())
+        })
+    });
 
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
@@ -195,7 +198,9 @@ async fn closing_inside_middleware_cannot_resurrect_connection() {
 
 #[tokio::test(start_paused = true)]
 async fn full_queues_do_not_block_disconnect_or_event_waiters() {
-    let (connection, mut messages, mut events) = fixture(builder().disconnect_timeout(Duration::from_secs(1)));
+    let (_server, connection, mut messages, mut events) =
+        fixture(|builder| builder.disconnect_timeout(Duration::from_secs(1)));
+
     ready(&connection, &mut messages).await;
     connection
         .send_message(Arc::new(Message::Binary(Bytes::new())))
@@ -218,7 +223,7 @@ async fn full_queues_do_not_block_disconnect_or_event_waiters() {
 
 #[tokio::test]
 async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
-    let (connection, mut messages, events) = fixture(builder());
+    let (_server, connection, mut messages, events) = fixture(|builder| builder);
     ready(&connection, &mut messages).await;
     connection.join(["room"]);
     let closes = Arc::new(AtomicUsize::new(0));
@@ -264,7 +269,7 @@ async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
 
     connection.cleanup().await;
     assert_eq!(closes.load(Ordering::SeqCst), 1);
-    assert_eq!(connection.server().connection_count(), 0);
+    assert_eq!(connection.server().unwrap().connection_count(), 0);
     assert!(connection.event_dispatcher_task.lock().await.is_none());
     assert!(connection.init_timeout_task.lock().await.is_none());
     assert_eq!(connection.state.get(), ConnectionState::Closed);
@@ -272,7 +277,7 @@ async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
 
 #[tokio::test(start_paused = true)]
 async fn stalled_close_hook_is_bounded_by_timeout() {
-    let (connection, _, _) = fixture(builder().on_close_handler_timeout(Duration::from_secs(1)));
+    let (_server, connection, _, _) = fixture(|builder| builder.on_close_handler_timeout(Duration::from_secs(1)));
     connection
         .on_close(|_| async {
             pending::<()>().await;
@@ -291,8 +296,8 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
     let middleware_order = Arc::clone(&order);
     let connect_order = Arc::clone(&order);
     let (ready_tx, mut ready_rx) = mpsc::unbounded_channel();
-    let (connection, mut messages, _) = fixture(
-        builder()
+    let (_server, connection, mut messages, _) = fixture(|builder| {
+        builder
             .with_init_request(|_| async { Ok(Some(7_u32)) })
             .with_init_response(move |_, data: Option<u32>| {
                 let order = Arc::clone(&init_order);
@@ -325,8 +330,8 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
 
                     Ok(())
                 }
-            }),
-    );
+            })
+    });
 
     connection.init().await.unwrap();
     let packet = decode_message(&connection, &messages.try_recv().unwrap());
@@ -364,7 +369,7 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
 
 #[tokio::test]
 async fn close_cancels_managed_work_before_cleanup() {
-    let (connection, _, _) = fixture(builder());
+    let (_server, connection, _, _) = fixture(|builder| builder);
     let (started_tx, started_rx) = oneshot::channel();
     let (alive_tx, alive_rx) = oneshot::channel::<()>();
     connection.spawn_task(async move {
@@ -382,7 +387,7 @@ async fn close_cancels_managed_work_before_cleanup() {
 
 #[tokio::test]
 async fn cleanup_aborts_pending_init_response_watchdog() {
-    let (connection, mut messages, _) = fixture(builder());
+    let (_server, connection, mut messages, _) = fixture(|builder| builder);
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
     let watchdog = connection

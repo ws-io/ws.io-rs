@@ -43,15 +43,16 @@ impl WsIoPacketCustomTransformer for TaggedTransformer {
     }
 }
 
-fn namespace(limit: usize, transformer: WsIoPacketTransformer) -> Arc<WsIoServerNamespace> {
-    WsIoServer::builder()
-        .build()
-        .unwrap()
+fn namespace(limit: usize, transformer: WsIoPacketTransformer) -> (WsIoServer, Arc<WsIoServerNamespace>) {
+    let server = WsIoServer::builder().build().unwrap();
+    let namespace = server
         .new_namespace_builder("/test")
         .max_outgoing_message_size(limit)
         .packet_transformer(transformer)
         .register()
-        .unwrap()
+        .unwrap();
+
+    (server, namespace)
 }
 
 fn tagged(max_input: usize) -> WsIoPacketTransformer {
@@ -97,7 +98,7 @@ async fn outgoing_limit_is_checked_after_transforming_before_broadcast_enqueue()
     let mut wire = vec![0xa5];
     wire.extend_from_slice(&WsIoPacketCodec::Msgpack.encode(&packet).unwrap());
     for limit in [wire.len() - 1, wire.len(), wire.len() + 1] {
-        let namespace = namespace(limit, tagged(usize::MAX));
+        let (_server, namespace) = namespace(limit, tagged(usize::MAX));
         let (connection, mut messages) = ready_connection(&namespace).await;
         let result = namespace.emit("e", Some(&payload)).await;
         if limit < wire.len() {
@@ -122,7 +123,7 @@ async fn compression_can_make_an_oversized_codec_packet_fit_the_outgoing_limit()
     let packet = WsIoPacket::new_event("e", Some(WsIoPacketCodec::Msgpack.encode_data(&payload).unwrap()));
     let encoded = WsIoPacketCodec::Msgpack.encode(&packet).unwrap();
     assert!(encoded.len() > 64);
-    let namespace = namespace(
+    let (_server, namespace) = namespace(
         64,
         WsIoPacketTransformer::zstd(WsIoPacketZstdTransformerConfig {
             compression_threshold: 0,
@@ -149,7 +150,7 @@ async fn compression_can_make_an_oversized_codec_packet_fit_the_outgoing_limit()
 #[tokio::test]
 async fn transformer_failure_is_propagated_before_broadcast_enqueue() {
     // Handshake packets fit the input limit; the event payload does not.
-    let namespace = namespace(64, tagged(16));
+    let (_server, namespace) = namespace(64, tagged(16));
     let (connection, mut messages) = ready_connection(&namespace).await;
     let error = namespace.emit("e", Some(&vec![0_u8; 16])).await.unwrap_err();
     assert_eq!(error.to_string(), "custom input too large");

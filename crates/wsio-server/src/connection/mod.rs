@@ -734,8 +734,11 @@ impl WsIoServerConnection {
         &self.request_uri
     }
 
+    /// Returns the server if its runtime is still alive.
+    ///
+    /// Holding a connection does not keep the server runtime alive.
     #[inline]
-    pub fn server(&self) -> WsIoServer {
+    pub fn server(&self) -> Option<WsIoServer> {
         self.namespace.server()
     }
 

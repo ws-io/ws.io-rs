@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    Weak,
+};
 
 use anyhow::{
     Result,
@@ -81,19 +84,19 @@ pub struct WsIoServerNamespace {
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
     connection_task_tracker: TaskTracker,
     rooms: FxDashMap<String, RoaringTreemap>,
-    runtime: Arc<WsIoServerRuntime>,
+    runtime: Weak<WsIoServerRuntime>,
     shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
     status: AtomicEnumCell<NamespaceStatus>,
 }
 
 impl WsIoServerNamespace {
-    fn new(config: WsIoServerNamespaceConfig, runtime: Arc<WsIoServerRuntime>) -> Arc<Self> {
+    fn new(config: WsIoServerNamespaceConfig, runtime: &Arc<WsIoServerRuntime>) -> Arc<Self> {
         Arc::new(Self {
             config,
             connections: FxDashMap::default(),
             connection_task_tracker: TaskTracker::new(),
             rooms: FxDashMap::default(),
-            runtime,
+            runtime: Arc::downgrade(runtime),
             shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             status: AtomicEnumCell::new(NamespaceStatus::Running),
         })
@@ -119,11 +122,12 @@ impl WsIoServerNamespace {
                 .await;
 
         // Check runtime and namespace status
-        if !self.runtime.status.is(WsIoServerRuntimeStatus::Running) || !self.status.is(NamespaceStatus::Running) {
+        let runtime_status = self.runtime.upgrade().map(|runtime| runtime.status.get());
+        if runtime_status != Some(WsIoServerRuntimeStatus::Running) || !self.status.is(NamespaceStatus::Running) {
             #[cfg(feature = "tracing")]
             tracing::debug!(
                 namespace = self.config.path,
-                runtime_status = ?self.runtime.status.get(),
+                runtime_status = ?runtime_status,
                 namespace_status = ?self.status.get(),
                 "rejecting upgraded request because server or namespace is not running"
             );
@@ -363,13 +367,17 @@ impl WsIoServerNamespace {
 
     #[inline]
     pub(crate) fn insert_connection(&self, connection: &Arc<WsIoServerConnection>) -> bool {
-        if !self.status.is(NamespaceStatus::Running) {
+        let Some(runtime) = self.runtime.upgrade() else {
+            return false;
+        };
+
+        if !runtime.status.is(WsIoServerRuntimeStatus::Running) || !self.status.is(NamespaceStatus::Running) {
             return false;
         }
 
         self.connections.entry(connection.id()).or_insert_with(|| {
             // Count the connection before publishing it, while the entry's write lock excludes removal.
-            self.runtime.increment_connection_count();
+            runtime.increment_connection_count();
             Arc::clone(connection)
         });
 
@@ -385,8 +393,10 @@ impl WsIoServerNamespace {
 
     #[inline]
     pub(crate) fn remove_connection(&self, id: u64) {
-        if self.connections.remove(&id).is_some() {
-            self.runtime.decrement_connection_count();
+        if self.connections.remove(&id).is_some()
+            && let Some(runtime) = self.runtime.upgrade()
+        {
+            runtime.decrement_connection_count();
         }
     }
 
@@ -446,9 +456,12 @@ impl WsIoServerNamespace {
         self.rooms.get(room_name.as_ref()).map_or(0, |room| room.len())
     }
 
+    /// Returns the server if its runtime is still alive.
+    ///
+    /// Holding a namespace does not keep the server runtime alive.
     #[inline]
-    pub fn server(&self) -> WsIoServer {
-        WsIoServer(Arc::clone(&self.runtime))
+    pub fn server(&self) -> Option<WsIoServer> {
+        self.runtime.upgrade().map(WsIoServer)
     }
 
     pub async fn shutdown(self: &Arc<Self>) {

@@ -249,7 +249,7 @@ impl WsIoServerNamespaceBuilder {
             self.config.max_outgoing_message_size,
         )?;
 
-        let namespace = WsIoServerNamespace::new(self.config, Arc::clone(&self.runtime));
+        let namespace = WsIoServerNamespace::new(self.config, &self.runtime);
         self.runtime.insert_namespace(Arc::clone(&namespace))?;
         Ok(namespace)
     }
