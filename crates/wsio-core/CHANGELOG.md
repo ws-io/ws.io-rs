@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.16.0 - 2026-10-24T20:51:43Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.15.2...wsio-core-v0.16.0)
+
+### 💅 Refactors
+
+- centralize packet encoding and consolidate test support ([5a31dea](https://github.com/ws-io/ws.io-rs/commit/5a31deaba9ad8015b82c4a5fc5b0daa81705cc99))
+- *(path)* [**breaking**] unify path resolution and validation ([d09e9b6](https://github.com/ws-io/ws.io-rs/commit/d09e9b60587e5265ab7e08480a1cf3e2a3a28155))
+
+### 🩹 Fixes
+
+- *(namespace)* [**breaking**] restrict namespace paths to URL-safe ASCII names ([b08ed27](https://github.com/ws-io/ws.io-rs/commit/b08ed27b165b122201fe1ac7c083313e51566c75))
+- *(server)* [**breaking**] normalize configured request paths ([21c986b](https://github.com/ws-io/ws.io-rs/commit/21c986bf79e56ad3b2e90c205ef16be14de74424))
+- *(namespace)* [**breaking**] normalize namespace paths consistently ([4ee9af8](https://github.com/ws-io/ws.io-rs/commit/4ee9af8698edc9e6cad1b397c14cc1efeaead89a))
+
 ## 0.15.2 - 2026-10-24T11:35:12Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.15.1...wsio-core-v0.15.2)
