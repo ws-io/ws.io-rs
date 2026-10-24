@@ -81,7 +81,8 @@ let client = WsIoClient::builder("ws://localhost:3000/socket")?.build()?;
 
 - Client namespace selection and server registration, lookup, removal, and handshake routing use one leading `/`, collapse repeated `/`, and remove trailing `/`. Empty and slash-only names select the root namespace `/`.
 - Names such as `test`, `/test/`, and `//test//` all identify `/test`. Registrations that normalize to an existing namespace are rejected; rename namespaces that relied on distinct slash spellings.
-- Namespace normalization does not change the HTTP request path or decode percent-encoded path segments.
+- Server and client `request_path` values use the same slash normalization, so `/socket/` and `socket` configure `/socket`. Incoming request URI paths are still matched exactly.
+- Normalization does not decode percent-encoded path segments.
 
 ## Runtime and Lifecycle Changes
 

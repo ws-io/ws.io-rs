@@ -29,7 +29,7 @@ use crate::{
     config::WsIoServerConfig,
     core::utils::{
         lifecycle::WsIoLifecycleCompletionSlot,
-        normalize_path,
+        path::normalize_path,
     },
     namespace::{
         WsIoServerNamespace,

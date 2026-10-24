@@ -1,4 +1,4 @@
-use super::normalize_path;
+use super::*;
 
 #[test]
 fn path_normalization_preserves_segments_and_is_idempotent() {

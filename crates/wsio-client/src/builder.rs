@@ -31,7 +31,7 @@ use crate::{
             default_websocket_config,
             validate_transport_config,
         },
-        utils::normalize_path,
+        utils::path::normalize_path,
     },
     runtime::WsIoClientRuntime,
     session::WsIoClientSession,

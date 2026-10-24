@@ -22,7 +22,7 @@ use crate::{
             transformers::WsIoPacketTransformer,
         },
         transport::validate_transport_config,
-        utils::normalize_path,
+        utils::path::normalize_path,
     },
     runtime::WsIoServerRuntime,
 };

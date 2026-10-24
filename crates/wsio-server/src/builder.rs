@@ -17,6 +17,7 @@ use crate::{
             default_websocket_config,
             validate_transport_config,
         },
+        utils::path::normalize_path,
     },
     runtime::WsIoServerRuntime,
 };
@@ -212,11 +213,12 @@ impl WsIoServerBuilder {
 
     /// Sets the HTTP request path handled by the server adapter.
     ///
+    /// The path is normalized to one leading slash with empty segments removed.
     /// Requests with a different URI path pass through to the wrapped service.
     /// Client namespace selection is carried separately in the `namespace` query
     /// parameter.
     pub fn request_path(mut self, request_path: impl AsRef<str>) -> Self {
-        request_path.as_ref().clone_into(&mut self.config.request_path);
+        self.config.request_path = normalize_path(request_path.as_ref());
         self
     }
 
