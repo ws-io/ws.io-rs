@@ -14,6 +14,9 @@ mod request;
 pub mod request_adapters;
 mod runtime;
 
+#[cfg(test)]
+mod test_support;
+
 #[cfg(feature = "tower")]
 use self::request_adapters::tower::layer::WsIoServerLayer;
 use self::{

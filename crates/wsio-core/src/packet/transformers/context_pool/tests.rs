@@ -27,7 +27,7 @@ fn operation_errors_return_context_but_creation_errors_do_not_cache() {
 }
 
 #[test]
-fn nested_use_does_not_hold_cache_lock_and_returned_contexts_stay_bounded() {
+fn nested_use_does_not_hold_the_cache_lock() {
     let cache = WsIoPacketContextCache::<usize>::new();
     cache
         .with_context(
@@ -44,6 +44,14 @@ fn nested_use_does_not_hold_cache_lock_and_returned_contexts_stay_bounded() {
                 )
             },
         )
+        .unwrap();
+}
+
+#[test]
+fn returned_contexts_are_bounded_by_max_contexts() {
+    let cache = WsIoPacketContextCache::<usize>::new();
+    cache
+        .with_context(1, || Ok(1), |_| cache.with_context(1, || Ok(2), |_| Ok(())))
         .unwrap();
 
     assert_eq!(cache.contexts.lock().len(), 1);

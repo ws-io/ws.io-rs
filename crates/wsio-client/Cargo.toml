@@ -217,7 +217,6 @@ wsio-core.workspace = true
 
 # Test/example/bench-only dependencies.
 [dev-dependencies]
-async-trait = "0.1.92"
 futures-util = { version = "0.3.34", default-features = false, features = ["async-await"] }
 tokio = { version = "1.54.1", features = ["test-util"] }
 

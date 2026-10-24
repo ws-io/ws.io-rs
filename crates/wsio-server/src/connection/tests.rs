@@ -9,18 +9,29 @@ use std::{
 
 use futures_util::poll;
 use tokio::{
-    sync::{
-        mpsc::error::TryRecvError,
-        oneshot,
-    },
+    sync::mpsc::error::TryRecvError,
     task::yield_now,
     time::advance,
 };
 
 use super::*;
-use crate::namespace::builder::WsIoServerNamespaceBuilder;
+use crate::{
+    namespace::builder::WsIoServerNamespaceBuilder,
+    test_support::{
+        TEST_TIMEOUT,
+        park_until_dropped,
+    },
+};
 
-fn fixture(
+#[derive(Debug, Clone, Copy)]
+enum SetupStage {
+    InitRequest,
+    InitResponse,
+    Middleware,
+    OnConnect,
+}
+
+fn new_connection(
     configure: impl FnOnce(WsIoServerNamespaceBuilder) -> WsIoServerNamespaceBuilder,
 ) -> (
     WsIoServer,
@@ -39,24 +50,30 @@ fn fixture(
 }
 
 async fn incoming(connection: &Arc<WsIoServerConnection>, packet: WsIoPacket) -> Result<()> {
-    connection
-        .handle_incoming_packet(connection.namespace.config.packet_codec.encode(&packet)?)
-        .await
+    let config = &connection.namespace.config;
+    let encoded_packet = config
+        .packet_transformer
+        .encode(config.packet_codec.encode(&packet)?)
+        .await?;
+
+    connection.handle_incoming_packet(encoded_packet).await
 }
 
-fn decode_message(connection: &WsIoServerConnection, message: &Message) -> WsIoPacket {
+async fn decode_message(connection: &WsIoServerConnection, message: &Message) -> WsIoPacket {
     let Message::Binary(bytes) = message else {
         panic!("expected a binary packet")
     };
 
-    connection.namespace.config.packet_codec.decode(bytes).unwrap()
+    let config = &connection.namespace.config;
+    let bytes = config.packet_transformer.decode(bytes.clone()).await.unwrap();
+    config.packet_codec.decode(&bytes).unwrap()
 }
 
 async fn ready(connection: &Arc<WsIoServerConnection>, messages: &mut mpsc::Receiver<Arc<Message>>) {
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
     incoming(connection, WsIoPacket::new_init(None)).await.unwrap();
-    let packet = decode_message(connection, &messages.try_recv().unwrap());
+    let packet = decode_message(connection, &messages.try_recv().unwrap()).await;
     assert!(matches!(packet.r#type, WsIoPacketType::Ready));
 }
 
@@ -70,7 +87,7 @@ async fn stall_or_fail(stalls: bool, message: &'static str) -> Result<()> {
 
 #[tokio::test]
 async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
-    let (_server, connection, mut messages, mut events) = fixture(|builder| builder);
+    let (_server, connection, mut messages, mut events) = new_connection(|builder| builder);
     assert!(incoming(&connection, WsIoPacket::new_init(None)).await.is_err());
     // Ready is a server-to-client packet: receiving it must not activate a server connection.
     incoming(&connection, WsIoPacket::new_ready()).await.unwrap();
@@ -104,18 +121,18 @@ async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
 #[tokio::test(start_paused = true)]
 async fn missing_init_response_expires_but_ready_disarms_watchdog() {
     let (_server, connection, mut messages, _) =
-        fixture(|builder| builder.init_response_timeout(Duration::from_secs(1)));
+        new_connection(|builder| builder.init_response_timeout(Duration::from_secs(1)));
 
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
-    timeout(Duration::from_secs(2), connection.cancel_token.cancelled())
+    timeout(TEST_TIMEOUT, connection.cancel_token.cancelled())
         .await
         .unwrap();
 
     assert_eq!(connection.state.get(), ConnectionState::Closing);
     connection.cleanup().await;
     let (_server, connection, mut messages, _) =
-        fixture(|builder| builder.init_response_timeout(Duration::from_secs(1)));
+        new_connection(|builder| builder.init_response_timeout(Duration::from_secs(1)));
 
     ready(&connection, &mut messages).await;
     advance(Duration::from_secs(2)).await;
@@ -129,9 +146,14 @@ async fn missing_init_response_expires_but_ready_disarms_watchdog() {
 #[tokio::test(start_paused = true)]
 async fn setup_errors_and_timeouts_do_not_register_connections() {
     // Every awaited setup phase has its own failure/timeout boundary.
-    for stage in 0..4 {
+    for stage in [
+        SetupStage::InitRequest,
+        SetupStage::InitResponse,
+        SetupStage::Middleware,
+        SetupStage::OnConnect,
+    ] {
         for stalls in [false, true] {
-            let (_server, connection, mut messages, _) = fixture(|builder| {
+            let (_server, connection, mut messages, _) = new_connection(|builder| {
                 let namespace_builder = builder
                     .init_request_handler_timeout(Duration::from_secs(1))
                     .init_response_handler_timeout(Duration::from_secs(1))
@@ -139,41 +161,51 @@ async fn setup_errors_and_timeouts_do_not_register_connections() {
                     .on_connect_handler_timeout(Duration::from_secs(1));
 
                 match stage {
-                    0 => namespace_builder.with_init_request(move |_| async move {
+                    SetupStage::InitRequest => namespace_builder.with_init_request(move |_| async move {
                         stall_or_fail(stalls, "init request failed").await.map(|()| None::<()>)
                     }),
-                    1 => namespace_builder
+                    SetupStage::InitResponse => namespace_builder
                         .with_init_response(move |_, _: Option<()>| stall_or_fail(stalls, "init response failed")),
-                    2 => namespace_builder.with_middleware(move |_| stall_or_fail(stalls, "middleware failed")),
-                    _ => namespace_builder.on_connect(move |_| stall_or_fail(stalls, "on connect failed")),
+                    SetupStage::Middleware => {
+                        namespace_builder.with_middleware(move |_| stall_or_fail(stalls, "middleware failed"))
+                    },
+                    SetupStage::OnConnect => {
+                        namespace_builder.on_connect(move |_| stall_or_fail(stalls, "on connect failed"))
+                    },
                 }
             });
 
-            if stage == 0 {
+            if matches!(stage, SetupStage::InitRequest) {
                 assert!(
-                    timeout(Duration::from_secs(2), connection.init())
-                        .await
-                        .unwrap()
-                        .is_err()
+                    timeout(TEST_TIMEOUT, connection.init()).await.unwrap().is_err(),
+                    "{stage:?}, stalls: {stalls}"
                 );
             } else {
                 connection.init().await.unwrap();
                 messages.try_recv().unwrap();
                 assert!(
-                    timeout(
-                        Duration::from_secs(2),
-                        incoming(&connection, WsIoPacket::new_init(None))
-                    )
-                    .await
-                    .unwrap()
-                    .is_err()
+                    timeout(TEST_TIMEOUT, incoming(&connection, WsIoPacket::new_init(None)))
+                        .await
+                        .unwrap()
+                        .is_err(),
+                    "{stage:?}, stalls: {stalls}"
                 );
             }
 
-            assert!(!connection.is_ready());
-            assert!(messages.try_recv().is_err());
-            assert_eq!(connection.namespace.connection_count(), 0);
-            assert_eq!(connection.server().unwrap().connection_count(), 0);
+            assert!(!connection.is_ready(), "{stage:?}, stalls: {stalls}");
+            assert!(messages.try_recv().is_err(), "{stage:?}, stalls: {stalls}");
+            assert_eq!(
+                connection.namespace.connection_count(),
+                0,
+                "{stage:?}, stalls: {stalls}"
+            );
+
+            assert_eq!(
+                connection.server().unwrap().connection_count(),
+                0,
+                "{stage:?}, stalls: {stalls}"
+            );
+
             connection.cleanup().await;
         }
     }
@@ -181,7 +213,7 @@ async fn setup_errors_and_timeouts_do_not_register_connections() {
 
 #[tokio::test]
 async fn closing_inside_middleware_cannot_resurrect_connection() {
-    let (_server, connection, mut messages, _) = fixture(|builder| {
+    let (_server, connection, mut messages, _) = new_connection(|builder| {
         builder.with_middleware(|connection| async move {
             connection.close();
             Ok(())
@@ -199,7 +231,7 @@ async fn closing_inside_middleware_cannot_resurrect_connection() {
 #[tokio::test(start_paused = true)]
 async fn full_queues_do_not_block_disconnect_or_event_waiters() {
     let (_server, connection, mut messages, mut events) =
-        fixture(|builder| builder.disconnect_timeout(Duration::from_secs(1)));
+        new_connection(|builder| builder.disconnect_timeout(Duration::from_secs(1)));
 
     ready(&connection, &mut messages).await;
     connection
@@ -213,8 +245,8 @@ async fn full_queues_do_not_block_disconnect_or_event_waiters() {
 
     let mut blocked = Box::pin(incoming(&connection, WsIoPacket::new_event("blocked", None)));
     assert!(poll!(&mut blocked).is_pending());
-    timeout(Duration::from_secs(2), connection.disconnect()).await.unwrap();
-    timeout(Duration::from_secs(1), blocked).await.unwrap().unwrap();
+    timeout(TEST_TIMEOUT, connection.disconnect()).await.unwrap();
+    timeout(TEST_TIMEOUT, blocked).await.unwrap().unwrap();
     assert!(connection.cancel_token.is_cancelled());
     assert_eq!(events.try_recv().unwrap().key.as_deref(), Some("first"));
     assert!(events.try_recv().is_err());
@@ -223,7 +255,7 @@ async fn full_queues_do_not_block_disconnect_or_event_waiters() {
 
 #[tokio::test]
 async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
-    let (_server, connection, mut messages, events) = fixture(|builder| builder);
+    let (_server, connection, mut messages, events) = new_connection(|builder| builder);
     ready(&connection, &mut messages).await;
     connection.join(["room"]);
     let closes = Arc::new(AtomicUsize::new(0));
@@ -241,43 +273,35 @@ async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
         .await;
 
     let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel::<()>();
+    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
     let id = connection.on("e", move |_, _: Arc<()>| {
-        let started = started_tx.clone();
-        let alive = alive_tx.clone();
-        async move {
-            started.send(()).unwrap();
-            pending::<()>().await;
-            drop(alive);
-            Ok(())
-        }
+        park_until_dropped(started_tx.clone(), alive_tx.clone())
     });
 
     connection.start_event_dispatcher(events).await;
     incoming(&connection, WsIoPacket::new_event("e", None)).await.unwrap();
-    timeout(Duration::from_secs(2), started_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
 
     connection.off_by_handler_id("e", id);
     // Transport failure can enter cleanup without close() running first.
     assert!(!connection.cancel_token.is_cancelled());
-    timeout(Duration::from_secs(2), connection.cleanup()).await.unwrap();
+    timeout(TEST_TIMEOUT, connection.cleanup()).await.unwrap();
     assert!(connection.cancel_token.is_cancelled());
     assert_eq!(alive_rx.try_recv(), Err(TryRecvError::Disconnected));
 
+    // Cleanup is idempotent: the close hook must not run twice.
     connection.cleanup().await;
     assert_eq!(closes.load(Ordering::SeqCst), 1);
     assert_eq!(connection.server().unwrap().connection_count(), 0);
     assert!(connection.event_dispatcher_task.lock().await.is_none());
-    assert!(connection.init_timeout_task.lock().await.is_none());
     assert_eq!(connection.state.get(), ConnectionState::Closed);
 }
 
 #[tokio::test(start_paused = true)]
 async fn stalled_close_hook_is_bounded_by_timeout() {
-    let (_server, connection, _, _) = fixture(|builder| builder.on_close_handler_timeout(Duration::from_secs(1)));
+    let (_server, connection, _, _) =
+        new_connection(|builder| builder.on_close_handler_timeout(Duration::from_secs(1)));
+
     connection
         .on_close(|_| async {
             pending::<()>().await;
@@ -285,7 +309,7 @@ async fn stalled_close_hook_is_bounded_by_timeout() {
         })
         .await;
 
-    timeout(Duration::from_secs(2), connection.cleanup()).await.unwrap();
+    timeout(TEST_TIMEOUT, connection.cleanup()).await.unwrap();
     assert_eq!(connection.state.get(), ConnectionState::Closed);
 }
 
@@ -296,7 +320,7 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
     let middleware_order = Arc::clone(&order);
     let connect_order = Arc::clone(&order);
     let (ready_tx, mut ready_rx) = mpsc::unbounded_channel();
-    let (_server, connection, mut messages, _) = fixture(|builder| {
+    let (_server, connection, mut messages, _) = new_connection(|builder| {
         builder
             .with_init_request(|_| async { Ok(Some(7_u32)) })
             .with_init_response(move |_, data: Option<u32>| {
@@ -334,7 +358,7 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
     });
 
     connection.init().await.unwrap();
-    let packet = decode_message(&connection, &messages.try_recv().unwrap());
+    let packet = decode_message(&connection, &messages.try_recv().unwrap()).await;
     assert_eq!(
         connection
             .namespace
@@ -356,7 +380,7 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
 
     messages.try_recv().unwrap();
     assert_eq!(
-        timeout(Duration::from_secs(2), ready_rx.recv()).await.unwrap().unwrap(),
+        timeout(TEST_TIMEOUT, ready_rx.recv()).await.unwrap().unwrap(),
         (true, 1)
     );
 
@@ -369,25 +393,19 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
 
 #[tokio::test]
 async fn close_cancels_managed_work_before_cleanup() {
-    let (_server, connection, _, _) = fixture(|builder| builder);
-    let (started_tx, started_rx) = oneshot::channel();
-    let (alive_tx, alive_rx) = oneshot::channel::<()>();
-    connection.spawn_task(async move {
-        started_tx.send(()).unwrap();
-        pending::<()>().await;
-        drop(alive_tx);
-        Ok(())
-    });
-
-    timeout(Duration::from_secs(2), started_rx).await.unwrap().unwrap();
+    let (_server, connection, _, _) = new_connection(|builder| builder);
+    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+    connection.spawn_task(park_until_dropped(started_tx, alive_tx));
+    timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
     connection.close();
-    assert!(timeout(Duration::from_secs(2), alive_rx).await.unwrap().is_err());
+    assert!(timeout(TEST_TIMEOUT, alive_rx.recv()).await.unwrap().is_none());
     connection.cleanup().await;
 }
 
 #[tokio::test]
 async fn cleanup_aborts_pending_init_response_watchdog() {
-    let (_server, connection, mut messages, _) = fixture(|builder| builder);
+    let (_server, connection, mut messages, _) = new_connection(|builder| builder);
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
     let watchdog = connection
@@ -401,7 +419,7 @@ async fn cleanup_aborts_pending_init_response_watchdog() {
     assert!(!watchdog.is_finished());
     connection.cleanup().await;
     assert!(connection.init_timeout_task.lock().await.is_none());
-    timeout(Duration::from_secs(2), async {
+    timeout(TEST_TIMEOUT, async {
         while !watchdog.is_finished() {
             yield_now().await;
         }

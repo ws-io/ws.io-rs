@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{
     Result,
@@ -11,7 +14,16 @@ use tokio::{
     task::JoinHandle,
     time::timeout,
 };
-use tungstenite::protocol::WebSocketConfig;
+use tungstenite::{
+    Message,
+    protocol::WebSocketConfig,
+};
+
+use crate::packet::{
+    WsIoPacket,
+    codecs::WsIoPacketCodec,
+    transformers::WsIoPacketTransformer,
+};
 
 // Enums
 enum CompletedWebSocketTask {
@@ -48,6 +60,29 @@ pub fn default_websocket_config() -> WebSocketConfig {
         .max_write_buffer_size(DEFAULT_BUFFER_SIZE + DEFAULT_MAX_OUTGOING_MESSAGE_SIZE + OUTGOING_FRAME_OVERHEAD)
         .read_buffer_size(DEFAULT_BUFFER_SIZE)
         .write_buffer_size(DEFAULT_BUFFER_SIZE)
+}
+
+/// Encodes and transforms a packet into a Binary message.
+///
+/// # Errors
+///
+/// Returns an error if encoding or transformation fails, or the transformed bytes exceed
+/// `max_outgoing_message_size`.
+pub async fn encode_packet_to_message(
+    packet_codec: &WsIoPacketCodec,
+    packet_transformer: &WsIoPacketTransformer,
+    max_outgoing_message_size: usize,
+    packet: &WsIoPacket,
+) -> Result<Arc<Message>> {
+    let bytes = packet_codec.encode(packet)?;
+    let bytes = packet_transformer.encode(bytes).await?;
+    ensure!(
+        bytes.len() <= max_outgoing_message_size,
+        "outgoing message exceeds max_outgoing_message_size ({} > {max_outgoing_message_size} bytes)",
+        bytes.len()
+    );
+
+    Ok(Arc::new(Message::Binary(bytes)))
 }
 
 /// Waits for either transport task to finish, then stops its sibling.

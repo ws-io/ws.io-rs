@@ -20,6 +20,9 @@ mod config;
 mod runtime;
 pub mod session;
 
+#[cfg(test)]
+mod test_support;
+
 use self::{
     builder::WsIoClientBuilder,
     core::traits::task::spawner::TaskSpawner,

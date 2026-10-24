@@ -1,7 +1,4 @@
-use std::{
-    task::Poll,
-    time::Duration,
-};
+use std::task::Poll;
 
 use futures_util::poll;
 use tokio::{
@@ -11,51 +8,44 @@ use tokio::{
 use zstd::bulk::compress;
 
 use super::*;
-
-fn make_transformer(
-    blocking_threshold: usize,
-    compression_threshold: usize,
-    max_decompressed_size: usize,
-) -> WsIoPacketZstdTransformer {
-    WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
-        blocking_threshold,
-        compression_threshold,
-        max_decompressed_size,
-        ..WsIoPacketZstdTransformerConfig::default()
-    })
-}
+use crate::test_support::TEST_TIMEOUT;
 
 #[tokio::test]
-async fn thresholds_and_raw_fallback_preserve_payload() {
+async fn compression_threshold_is_inclusive_and_preserves_payload() {
     // Force both synchronous and blocking paths; test the exact compression threshold.
-    for blocking in [0, usize::MAX] {
-        let transformer = make_transformer(blocking, 128, 1024);
+    for blocking_threshold in [0, usize::MAX] {
+        let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+            blocking_threshold,
+            compression_threshold: 128,
+            max_decompressed_size: 1024,
+            ..WsIoPacketZstdTransformerConfig::default()
+        });
+
         for size in [0, 127, 128, 129, 1024] {
             let input = Bytes::from(vec![b'a'; size]);
             let encoded = transformer.encode(input.clone()).await.unwrap();
             assert_eq!(encoded[0] & 1 != 0, size >= 128);
             assert_eq!(transformer.decode(encoded).await.unwrap(), input);
         }
-
-        let transformer = make_transformer(blocking, 0, 1024);
-        for input in [
-            Bytes::new(),
-            Bytes::from_static(b"x"),
-            Bytes::from((0..=255).collect::<Vec<u8>>()),
-        ] {
-            let encoded = transformer.encode(input.clone()).await.unwrap();
-            assert_eq!(encoded[0], 0x22, "non-beneficial compression must use raw framing");
-            assert_eq!(&encoded[5..], input.as_ref());
-            assert_eq!(transformer.decode(encoded).await.unwrap(), input);
-        }
     }
 }
 
 #[tokio::test]
-async fn encoded_frames_preserve_headers_and_contain_no_unused_buffer_bytes() {
-    for blocking in [0, usize::MAX] {
-        let transformer = make_transformer(blocking, 0, 1024);
-        for input in [Bytes::new(), Bytes::from_static(b"x"), Bytes::from(vec![b'a'; 1024])] {
+async fn encoded_frames_match_exact_wire_layout() {
+    for blocking_threshold in [0, usize::MAX] {
+        let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+            blocking_threshold,
+            compression_threshold: 0,
+            max_decompressed_size: 1024,
+            ..WsIoPacketZstdTransformerConfig::default()
+        });
+
+        for input in [
+            Bytes::new(),
+            Bytes::from_static(b"x"),
+            Bytes::from((0..=255).collect::<Vec<u8>>()),
+            Bytes::from(vec![b'a'; 1024]),
+        ] {
             let compressed = compress(&input, WsIoPacketZstdTransformerConfig::default().compression_level).unwrap();
             let use_compressed = compressed.len() < input.len();
             let mut expected = vec![if use_compressed { 0x23 } else { 0x22 }];
@@ -71,8 +61,14 @@ async fn encoded_frames_preserve_headers_and_contain_no_unused_buffer_bytes() {
 
 #[tokio::test]
 async fn limits_and_corruption_are_rejected_without_poisoning_reused_contexts() {
-    for blocking in [0, usize::MAX] {
-        let transformer = make_transformer(blocking, 0, 128);
+    for blocking_threshold in [0, usize::MAX] {
+        let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+            blocking_threshold,
+            compression_threshold: 0,
+            max_decompressed_size: 128,
+            ..WsIoPacketZstdTransformerConfig::default()
+        });
+
         assert!(transformer.encode(Bytes::from(vec![0; 129])).await.is_err());
         let valid = transformer.encode(Bytes::from(vec![b'a'; 128])).await.unwrap();
         let mut wrong_length = valid.to_vec();
@@ -102,7 +98,13 @@ async fn limits_and_corruption_are_rejected_without_poisoning_reused_contexts() 
             );
         }
 
-        let empty_only = make_transformer(blocking, 0, 0);
+        let empty_only = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+            blocking_threshold,
+            compression_threshold: 0,
+            max_decompressed_size: 0,
+            ..WsIoPacketZstdTransformerConfig::default()
+        });
+
         assert!(empty_only.encode(Bytes::from_static(b"x")).await.is_err());
         assert_eq!(
             empty_only
@@ -116,7 +118,13 @@ async fn limits_and_corruption_are_rejected_without_poisoning_reused_contexts() 
 
 #[tokio::test]
 async fn cloned_transformers_can_share_contexts_concurrently() {
-    let transformer = make_transformer(0, 0, 4096);
+    let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+        blocking_threshold: 0,
+        compression_threshold: 0,
+        max_decompressed_size: 4096,
+        ..WsIoPacketZstdTransformerConfig::default()
+    });
+
     let mut tasks = JoinSet::new();
     for byte in 0..16 {
         let transformer = transformer.clone();
@@ -133,8 +141,14 @@ async fn cloned_transformers_can_share_contexts_concurrently() {
 }
 
 #[tokio::test]
-async fn blocking_boundary_uses_original_size_and_waiting_for_a_permit_is_cancellable() {
-    let transformer = make_transformer(128, 0, 1024);
+async fn blocking_path_is_selected_by_original_size() {
+    let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+        blocking_threshold: 128,
+        compression_threshold: 0,
+        max_decompressed_size: 1024,
+        ..WsIoPacketZstdTransformerConfig::default()
+    });
+
     let large = Bytes::from(vec![b'a'; 128]);
     let encoded = transformer.encode(large.clone()).await.unwrap();
     assert!(encoded.len() < 128);
@@ -145,13 +159,13 @@ async fn blocking_boundary_uses_original_size_and_waiting_for_a_permit_is_cancel
     }
 
     let small = Bytes::from(vec![b'a'; 127]);
-    let small_encoded = timeout(Duration::from_secs(2), transformer.encode(small.clone()))
+    let small_encoded = timeout(TEST_TIMEOUT, transformer.encode(small.clone()))
         .await
         .unwrap()
         .unwrap();
 
     assert_eq!(
-        timeout(Duration::from_secs(2), transformer.decode(small_encoded))
+        timeout(TEST_TIMEOUT, transformer.decode(small_encoded))
             .await
             .unwrap()
             .unwrap(),
@@ -169,13 +183,13 @@ async fn blocking_boundary_uses_original_size_and_waiting_for_a_permit_is_cancel
 
     drop(decoding);
     drop(permits);
-    let encoded = timeout(Duration::from_secs(2), transformer.encode(large.clone()))
+    let encoded = timeout(TEST_TIMEOUT, transformer.encode(large.clone()))
         .await
         .unwrap()
         .unwrap();
 
     assert_eq!(
-        timeout(Duration::from_secs(2), transformer.decode(encoded))
+        timeout(TEST_TIMEOUT, transformer.decode(encoded))
             .await
             .unwrap()
             .unwrap(),

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::{
     Result,
     anyhow,
-    ensure,
 };
 use arc_swap::{
     ArcSwap,
@@ -52,7 +51,10 @@ use crate::{
         event::registry::WsIoEventRegistry,
         packet::WsIoPacket,
         traits::task::spawner::TaskSpawner,
-        transport::shutdown_websocket_stream_tasks,
+        transport::{
+            encode_packet_to_message,
+            shutdown_websocket_stream_tasks,
+        },
         utils::lifecycle::WsIoLifecycleCompletionSlot,
     },
     session::WsIoClientSession,
@@ -425,16 +427,13 @@ impl WsIoClientRuntime {
 
     #[inline]
     pub(crate) async fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
-        let bytes = self.config.packet_codec.encode(packet)?;
-        let bytes = self.config.packet_transformer.encode(bytes).await?;
-        ensure!(
-            bytes.len() <= self.config.max_outgoing_message_size,
-            "outgoing message exceeds max_outgoing_message_size ({} > {} bytes)",
-            bytes.len(),
-            self.config.max_outgoing_message_size
-        );
-
-        Ok(Arc::new(Message::Binary(bytes)))
+        encode_packet_to_message(
+            &self.config.packet_codec,
+            &self.config.packet_transformer,
+            self.config.max_outgoing_message_size,
+            packet,
+        )
+        .await
     }
 
     #[inline]
@@ -462,6 +461,3 @@ impl WsIoClientRuntime {
         self.event_registry.on(event, handler)
     }
 }
-
-#[cfg(test)]
-mod tests;

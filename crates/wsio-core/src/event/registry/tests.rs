@@ -1,8 +1,6 @@
 use std::{
-    future::pending,
     panic::catch_unwind,
     sync::atomic::AtomicUsize,
-    time::Duration,
 };
 
 use anyhow::bail;
@@ -13,6 +11,10 @@ use tokio::{
 };
 
 use super::*;
+use crate::test_support::{
+    TEST_TIMEOUT,
+    park_until_dropped,
+};
 
 async fn dispatch<C: Send + Sync + 'static>(
     registry: &WsIoEventRegistry<C>,
@@ -37,6 +39,7 @@ fn registration_rejects_empty_keys_and_type_conflicts_until_handlers_are_removed
         .is_err()
     );
 
+    // Removing every handler releases the payload type, so registering another type must not panic.
     registry.off("e");
     registry.on("e", |_, _: Arc<String>| async { Ok(()) });
     let id = registry.on("other", |_, _: Arc<()>| async { Ok(()) });
@@ -143,10 +146,7 @@ async fn active_dispatch_keeps_its_snapshot_when_handlers_are_replaced() {
     });
 
     for _ in 0..2 {
-        timeout(Duration::from_secs(2), started_rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
+        timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
     }
 
     registry.off("e");
@@ -156,7 +156,7 @@ async fn active_dispatch_keeps_its_snapshot_when_handlers_are_replaced() {
     });
 
     release.cancel();
-    timeout(Duration::from_secs(2), task).await.unwrap().unwrap().unwrap();
+    timeout(TEST_TIMEOUT, task).await.unwrap().unwrap().unwrap();
     assert_eq!(count.load(Ordering::SeqCst), 2);
     dispatch(&registry, Arc::clone(&count), None, &CancellationToken::new())
         .await
@@ -172,19 +172,12 @@ async fn cancellation_and_dropping_dispatch_release_all_active_handlers() {
             let registry = Arc::new(WsIoEventRegistry::<()>::new());
             let cancel = CancellationToken::new();
             let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-            let (alive_tx, mut alive_rx) = mpsc::unbounded_channel::<()>();
+            let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
             for _ in 0..handlers {
                 let started_tx = started_tx.clone();
                 let alive_tx = alive_tx.clone();
                 registry.on("e", move |_, _: Arc<()>| {
-                    let started_tx = started_tx.clone();
-                    let alive = alive_tx.clone();
-                    async move {
-                        started_tx.send(()).unwrap();
-                        pending::<()>().await;
-                        drop(alive);
-                        Ok(())
-                    }
+                    park_until_dropped(started_tx.clone(), alive_tx.clone())
                 });
             }
 
@@ -195,10 +188,7 @@ async fn cancellation_and_dropping_dispatch_release_all_active_handlers() {
             });
 
             for _ in 0..handlers {
-                timeout(Duration::from_secs(2), started_rx.recv())
-                    .await
-                    .unwrap()
-                    .unwrap();
+                timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
             }
 
             registry.off("e");
@@ -208,15 +198,10 @@ async fn cancellation_and_dropping_dispatch_release_all_active_handlers() {
                 assert!(task.await.unwrap_err().is_cancelled());
             } else {
                 cancel.cancel();
-                timeout(Duration::from_secs(2), task).await.unwrap().unwrap().unwrap();
+                timeout(TEST_TIMEOUT, task).await.unwrap().unwrap().unwrap();
             }
 
-            assert!(
-                timeout(Duration::from_secs(2), alive_rx.recv())
-                    .await
-                    .unwrap()
-                    .is_none()
-            );
+            assert!(timeout(TEST_TIMEOUT, alive_rx.recv()).await.unwrap().is_none());
         }
     }
 }

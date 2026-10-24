@@ -6,7 +6,6 @@ use std::sync::{
 use anyhow::{
     Result,
     anyhow,
-    ensure,
 };
 use futures_util::{
     SinkExt,
@@ -59,7 +58,10 @@ use crate::{
     core::{
         packet::WsIoPacket,
         traits::task::spawner::TaskSpawner,
-        transport::shutdown_websocket_stream_tasks,
+        transport::{
+            encode_packet_to_message,
+            shutdown_websocket_stream_tasks,
+        },
         utils::lifecycle::WsIoLifecycleCompletionSlot,
     },
     runtime::{
@@ -312,16 +314,13 @@ impl WsIoServerNamespace {
 
     #[inline]
     pub(crate) async fn encode_packet_to_message(&self, packet: &WsIoPacket) -> Result<Arc<Message>> {
-        let bytes = self.config.packet_codec.encode(packet)?;
-        let bytes = self.config.packet_transformer.encode(bytes).await?;
-        ensure!(
-            bytes.len() <= self.config.max_outgoing_message_size,
-            "outgoing message exceeds max_outgoing_message_size ({} > {} bytes)",
-            bytes.len(),
-            self.config.max_outgoing_message_size
-        );
-
-        Ok(Arc::new(Message::Binary(bytes)))
+        encode_packet_to_message(
+            &self.config.packet_codec,
+            &self.config.packet_transformer,
+            self.config.max_outgoing_message_size,
+            packet,
+        )
+        .await
     }
 
     #[inline]
@@ -480,7 +479,5 @@ impl WsIoServerNamespace {
     }
 }
 
-#[cfg(test)]
-mod test_support;
 #[cfg(test)]
 mod tests;

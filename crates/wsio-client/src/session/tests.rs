@@ -9,56 +9,62 @@ use std::{
 
 use futures_util::poll;
 use tokio::{
-    sync::{
-        mpsc::error::TryRecvError,
-        oneshot,
-    },
+    sync::mpsc::error::TryRecvError,
     task::yield_now,
     time::advance,
 };
 
 use super::*;
-use crate::builder::WsIoClientBuilder;
+use crate::{
+    builder::WsIoClientBuilder,
+    test_support::{
+        TEST_TIMEOUT,
+        park_until_dropped,
+    },
+};
 
-fn builder() -> WsIoClientBuilder {
-    WsIoClient::builder("ws://localhost/test").unwrap().channel_capacity(1)
-}
-
-fn fixture(
-    builder: WsIoClientBuilder,
+fn new_session(
+    configure: impl FnOnce(WsIoClientBuilder) -> WsIoClientBuilder,
 ) -> (
     Arc<WsIoClientSession>,
     mpsc::Receiver<Arc<Message>>,
     mpsc::Receiver<WsIoPacket>,
 ) {
-    WsIoClientSession::new(builder.build().unwrap().0)
+    let builder = WsIoClient::builder("ws://localhost/test").unwrap().channel_capacity(1);
+    WsIoClientSession::new(configure(builder).build().unwrap().0)
 }
 
 async fn incoming(session: &Arc<WsIoClientSession>, packet: WsIoPacket) -> Result<()> {
-    session
-        .handle_incoming_packet(session.runtime.config.packet_codec.encode(&packet)?)
-        .await
+    let config = &session.runtime.config;
+    let encoded_packet = config
+        .packet_transformer
+        .encode(config.packet_codec.encode(&packet)?)
+        .await?;
+
+    session.handle_incoming_packet(encoded_packet).await
 }
 
-fn decode_message(session: &WsIoClientSession, message: &Message) -> WsIoPacket {
+async fn decode_message(session: &WsIoClientSession, message: &Message) -> WsIoPacket {
     let Message::Binary(bytes) = message else {
         panic!("expected a binary packet")
     };
 
-    session.runtime.config.packet_codec.decode(bytes).unwrap()
+    let config = &session.runtime.config;
+    let bytes = config.packet_transformer.decode(bytes.clone()).await.unwrap();
+    config.packet_codec.decode(&bytes).unwrap()
 }
 
 async fn ready(session: &Arc<WsIoClientSession>, messages: &mut mpsc::Receiver<Arc<Message>>) {
     session.init().await;
     incoming(session, WsIoPacket::new_init(None)).await.unwrap();
-    let packet = decode_message(session, &messages.try_recv().unwrap());
+    let packet = decode_message(session, &messages.try_recv().unwrap()).await;
     assert!(matches!(packet.r#type, WsIoPacketType::Init));
     incoming(session, WsIoPacket::new_ready()).await.unwrap();
 }
 
 #[tokio::test]
 async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
-    let (session, mut messages, mut events) = fixture(builder());
+    let (session, mut messages, mut events) = new_session(|builder| builder);
     assert!(incoming(&session, WsIoPacket::new_init(None)).await.is_err());
     assert!(incoming(&session, WsIoPacket::new_ready()).await.is_err());
     session.init().await;
@@ -93,13 +99,14 @@ async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
 
 #[tokio::test(start_paused = true)]
 async fn missing_init_or_ready_expires_and_success_disarms_watchdogs() {
-    for awaiting_ready in [false, true] {
-        let (session, mut messages, _) = fixture(
-            builder()
-                .init_packet_timeout(Duration::from_secs(2))
-                .ready_packet_timeout(Duration::from_secs(2)),
-        );
+    let configure = |builder: WsIoClientBuilder| {
+        builder
+            .init_packet_timeout(Duration::from_secs(2))
+            .ready_packet_timeout(Duration::from_secs(2))
+    };
 
+    for awaiting_ready in [false, true] {
+        let (session, mut messages, _) = new_session(configure);
         session.init().await;
         if awaiting_ready {
             incoming(&session, WsIoPacket::new_init(None)).await.unwrap();
@@ -114,12 +121,7 @@ async fn missing_init_or_ready_expires_and_success_disarms_watchdogs() {
         session.cleanup().await;
     }
 
-    let (session, mut messages, _) = fixture(
-        builder()
-            .init_packet_timeout(Duration::from_secs(2))
-            .ready_packet_timeout(Duration::from_secs(2)),
-    );
-
+    let (session, mut messages, _) = new_session(configure);
     ready(&session, &mut messages).await;
     advance(Duration::from_secs(3)).await;
     yield_now().await;
@@ -133,8 +135,8 @@ async fn missing_init_or_ready_expires_and_success_disarms_watchdogs() {
 #[tokio::test(start_paused = true)]
 async fn init_handler_failure_and_timeout_never_publish_ready_or_a_response() {
     for stalls in [false, true] {
-        let (session, mut messages, _) = fixture(
-            builder()
+        let (session, mut messages, _) = new_session(|builder| {
+            builder
                 .init_handler_timeout(Duration::from_secs(1))
                 .with_init_handler(move |_, _: Option<()>| async move {
                     if stalls {
@@ -142,12 +144,12 @@ async fn init_handler_failure_and_timeout_never_publish_ready_or_a_response() {
                     }
 
                     Err::<Option<()>, _>(anyhow!("init failed"))
-                }),
-        );
+                })
+        });
 
         session.init().await;
         assert!(
-            timeout(Duration::from_secs(2), incoming(&session, WsIoPacket::new_init(None)))
+            timeout(TEST_TIMEOUT, incoming(&session, WsIoPacket::new_init(None)))
                 .await
                 .unwrap()
                 .is_err()
@@ -162,7 +164,7 @@ async fn init_handler_failure_and_timeout_never_publish_ready_or_a_response() {
 
 #[tokio::test]
 async fn full_queues_do_not_block_close_or_event_waiters() {
-    let (session, mut messages, mut events) = fixture(builder());
+    let (session, mut messages, mut events) = new_session(|builder| builder);
     ready(&session, &mut messages).await;
     session
         .send_message(Arc::new(Message::Binary(Bytes::new())))
@@ -173,12 +175,13 @@ async fn full_queues_do_not_block_close_or_event_waiters() {
     let mut blocked = Box::pin(incoming(&session, WsIoPacket::new_event("blocked", None)));
     assert!(poll!(&mut blocked).is_pending());
     session.close();
+    // Closing again must be a no-op.
     session.close();
-    timeout(Duration::from_secs(2), blocked).await.unwrap().unwrap();
+    timeout(TEST_TIMEOUT, blocked).await.unwrap().unwrap();
     assert!(session.cancel_token.is_cancelled());
     assert_eq!(events.try_recv().unwrap().key.as_deref(), Some("first"));
     assert!(events.try_recv().is_err());
-    timeout(Duration::from_secs(2), session.cleanup()).await.unwrap();
+    timeout(TEST_TIMEOUT, session.cleanup()).await.unwrap();
     assert!(session.ping_task.lock().await.is_none());
 }
 
@@ -186,70 +189,58 @@ async fn full_queues_do_not_block_close_or_event_waiters() {
 async fn cleanup_cancels_and_joins_dispatch_without_prior_close() {
     let closes = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&closes);
-    let (session, mut messages, events) = fixture(builder().on_session_close(move |_| {
-        let observed = Arc::clone(&observed);
-        async move {
-            observed.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        }
-    }));
+    let (session, mut messages, events) = new_session(|builder| {
+        builder.on_session_close(move |_| {
+            let observed = Arc::clone(&observed);
+            async move {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        })
+    });
 
     ready(&session, &mut messages).await;
     let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel::<()>();
+    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
     let id = session.runtime.event_registry.on("e", move |_, _: Arc<()>| {
-        let started = started_tx.clone();
-        let alive = alive_tx.clone();
-        async move {
-            started.send(()).unwrap();
-            pending::<()>().await;
-            drop(alive);
-            Ok(())
-        }
+        park_until_dropped(started_tx.clone(), alive_tx.clone())
     });
 
     session.start_event_dispatcher(events).await;
     incoming(&session, WsIoPacket::new_event("e", None)).await.unwrap();
-    timeout(Duration::from_secs(2), started_rx.recv())
-        .await
-        .unwrap()
-        .unwrap();
-
+    timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
     session.runtime.event_registry.off_by_handler_id("e", id);
     // Transport failure can enter cleanup without close() running first.
     assert!(!session.cancel_token.is_cancelled());
-    timeout(Duration::from_secs(2), session.cleanup()).await.unwrap();
+    timeout(TEST_TIMEOUT, session.cleanup()).await.unwrap();
     assert!(session.cancel_token.is_cancelled());
     assert_eq!(alive_rx.try_recv(), Err(TryRecvError::Disconnected));
-
     assert_eq!(closes.load(Ordering::SeqCst), 1);
     assert!(session.event_dispatcher_task.lock().await.is_none());
-    assert!(session.init_timeout_task.lock().await.is_none());
-    assert!(session.ready_timeout_task.lock().await.is_none());
     assert!(session.ping_task.lock().await.is_none());
     assert_eq!(session.state.get(), SessionState::Closed);
 }
 
 #[tokio::test(start_paused = true)]
 async fn stalled_close_hook_is_bounded_by_timeout() {
-    let (session, _, _) = fixture(
-        builder()
+    let (session, _, _) = new_session(|builder| {
+        builder
             .on_session_close_handler_timeout(Duration::from_secs(1))
             .on_session_close(|_| async {
                 pending::<()>().await;
                 Ok(())
-            }),
-    );
+            })
+    });
 
-    timeout(Duration::from_secs(2), session.cleanup()).await.unwrap();
+    timeout(TEST_TIMEOUT, session.cleanup()).await.unwrap();
     assert_eq!(session.state.get(), SessionState::Closed);
 }
 
 #[tokio::test]
-async fn init_payload_and_response_are_typed_and_ready_hook_runs_once() {
+async fn init_exchange_is_typed_and_ready_hook_runs_once() {
     let (ready_tx, mut ready_rx) = mpsc::unbounded_channel();
-    let (session, mut messages, _) = fixture(
-        builder()
+    let (session, mut messages, _) = new_session(|builder| {
+        builder
             .with_init_handler(|_, data: Option<u32>| async move {
                 assert_eq!(data, Some(7));
                 Ok(Some(8_u32))
@@ -260,8 +251,8 @@ async fn init_payload_and_response_are_typed_and_ready_hook_runs_once() {
                     ready_tx.send(session.is_ready()).unwrap();
                     Ok(())
                 }
-            }),
-    );
+            })
+    });
 
     session.init().await;
     incoming(
@@ -271,7 +262,7 @@ async fn init_payload_and_response_are_typed_and_ready_hook_runs_once() {
     .await
     .unwrap();
 
-    let packet = decode_message(&session, &messages.try_recv().unwrap());
+    let packet = decode_message(&session, &messages.try_recv().unwrap()).await;
     assert_eq!(
         session
             .runtime
@@ -283,7 +274,7 @@ async fn init_payload_and_response_are_typed_and_ready_hook_runs_once() {
     );
 
     incoming(&session, WsIoPacket::new_ready()).await.unwrap();
-    assert!(timeout(Duration::from_secs(2), ready_rx.recv()).await.unwrap().unwrap());
+    assert!(timeout(TEST_TIMEOUT, ready_rx.recv()).await.unwrap().unwrap());
     assert!(incoming(&session, WsIoPacket::new_ready()).await.is_err());
     session.cleanup().await;
     assert!(ready_rx.try_recv().is_err());
@@ -291,26 +282,20 @@ async fn init_payload_and_response_are_typed_and_ready_hook_runs_once() {
 
 #[tokio::test]
 async fn close_cancels_managed_work_before_cleanup() {
-    let (session, _, _) = fixture(builder());
-    let (started_tx, started_rx) = oneshot::channel();
-    let (alive_tx, alive_rx) = oneshot::channel::<()>();
-    session.spawn_task(async move {
-        started_tx.send(()).unwrap();
-        pending::<()>().await;
-        drop(alive_tx);
-        Ok(())
-    });
-
-    timeout(Duration::from_secs(2), started_rx).await.unwrap().unwrap();
+    let (session, _, _) = new_session(|builder| builder);
+    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+    session.spawn_task(park_until_dropped(started_tx, alive_tx));
+    timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
     session.close();
-    assert!(timeout(Duration::from_secs(2), alive_rx).await.unwrap().is_err());
+    assert!(timeout(TEST_TIMEOUT, alive_rx.recv()).await.unwrap().is_none());
     session.cleanup().await;
 }
 
 #[tokio::test(start_paused = true)]
 async fn cleanup_aborts_pending_handshake_watchdogs_and_ping_task() {
     for awaiting_ready in [false, true] {
-        let (session, mut messages, _) = fixture(builder());
+        let (session, mut messages, _) = new_session(|builder| builder);
         session.init().await;
         if awaiting_ready {
             incoming(&session, WsIoPacket::new_init(None)).await.unwrap();
@@ -331,7 +316,7 @@ async fn cleanup_aborts_pending_handshake_watchdogs_and_ping_task() {
         assert!(watchdog.lock().await.is_none());
         assert!(session.ping_task.lock().await.is_none());
         // abort_locked_task requests cancellation; it does not promise to join.
-        timeout(Duration::from_secs(1), async {
+        timeout(TEST_TIMEOUT, async {
             while !watchdog_abort.is_finished() || !ping_abort.is_finished() {
                 yield_now().await;
             }
