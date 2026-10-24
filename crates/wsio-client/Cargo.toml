@@ -1,6 +1,6 @@
 [package]
 name = "wsio-client"
-version = "0.10.1"
+version = "0.10.2"
 edition.workspace = true
 
 description = "Event-driven WebSocket client for ws.io."

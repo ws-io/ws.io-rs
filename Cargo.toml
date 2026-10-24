@@ -128,7 +128,7 @@ missing_crate_level_docs = "allow"
 # =============================================================================
 
 [workspace.dependencies]
-wsio-core = { path = "./crates/wsio-core", version = "0.15.1" }
+wsio-core = { path = "./crates/wsio-core", version = "0.15.2" }
 
 # =============================================================================
 # Profiles
