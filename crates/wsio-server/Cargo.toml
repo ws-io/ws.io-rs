@@ -93,7 +93,7 @@ http = "1.5.0"
 http-body = "1.1.0"
 hyper = "1.12.0"
 hyper-util = { version = "0.1.21", features = ["tokio"] }
-kikiutils = { version = "0.13.0", features = ["atomic-enum-cell", "fx-collections"] }
+kikiutils = { version = "0.13.2", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
 parking_lot = "0.13.0"
 roaring = "0.11.5"
