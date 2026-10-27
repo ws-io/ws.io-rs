@@ -1,14 +1,8 @@
-use std::{
-    fmt::{
-        Debug as FmtDebug,
-        Formatter,
-        Result as FmtResult,
-    },
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use anyhow::Result;
 use bytes::Bytes;
+use derive_more::Debug;
 use erased_serde::deserialize;
 use serde::{
     Serialize,
@@ -33,28 +27,18 @@ use self::{
 use super::WsIoPacket;
 
 // Enums
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum WsIoPacketCodec {
     #[cfg(feature = "packet-codec-cbor")]
+    #[debug("WsIoPacketCodec::Cbor")]
     Cbor,
+    #[debug("WsIoPacketCodec::Custom(<codec>)")]
     Custom(Arc<dyn WsIoPacketCustomCodec>),
+    #[debug("WsIoPacketCodec::Msgpack")]
     Msgpack,
-
     #[cfg(feature = "packet-codec-postcard")]
+    #[debug("WsIoPacketCodec::Postcard")]
     Postcard,
-}
-
-impl FmtDebug for WsIoPacketCodec {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            #[cfg(feature = "packet-codec-cbor")]
-            Self::Cbor => f.write_str("WsIoPacketCodec::Cbor"),
-            Self::Msgpack => f.write_str("WsIoPacketCodec::Msgpack"),
-            Self::Custom(_) => f.write_str("WsIoPacketCodec::Custom(<codec>)"),
-            #[cfg(feature = "packet-codec-postcard")]
-            Self::Postcard => f.write_str("WsIoPacketCodec::Postcard"),
-        }
-    }
 }
 
 impl WsIoPacketCodec {

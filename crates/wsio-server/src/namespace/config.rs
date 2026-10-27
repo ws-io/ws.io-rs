@@ -1,9 +1,4 @@
 use std::{
-    fmt::{
-        Debug as FmtDebug,
-        Formatter,
-        Result as FmtResult,
-    },
     pin::Pin,
     sync::Arc,
     time::Duration,
@@ -11,6 +6,7 @@ use std::{
 
 use anyhow::Result;
 use bytes::Bytes;
+use derive_more::Debug;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use crate::{
@@ -50,6 +46,7 @@ type InitResponseHandler = Box<
 >;
 
 // Structs
+#[derive(Debug)]
 pub(crate) struct WsIoServerNamespaceConfig {
     /// Maximum number of concurrent broadcast sends for this namespace.
     ///
@@ -85,6 +82,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// encoded with `packet_codec` for the client init packet.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", init_request_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) init_request_handler: Option<InitRequestHandler>,
 
     /// Maximum duration for `init_request_handler`.
@@ -98,6 +96,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// runs before middleware and on-connect processing.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", init_response_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) init_response_handler: Option<InitResponseHandler>,
 
     /// Maximum duration for `init_response_handler`.
@@ -121,6 +120,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// handler. Returning an error aborts connection setup.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", middleware.as_ref().map(|_| "<handler>"))]
     pub(crate) middleware: Option<BoxAsyncUnaryResultHandler<WsIoServerConnection>>,
 
     /// Maximum duration for `middleware`.
@@ -138,6 +138,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Runs during setup after middleware and before the ready packet is sent.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", on_connect_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) on_connect_handler: Option<BoxAsyncUnaryResultHandler<WsIoServerConnection>>,
 
     /// Maximum duration for `on_connect_handler`.
@@ -152,6 +153,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// await the task, which may start before setup returns.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", on_ready_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) on_ready_handler: Option<ArcAsyncUnaryResultHandler<WsIoServerConnection>>,
 
     /// Packet codec for this namespace's protocol packets and init data.
@@ -162,6 +164,7 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Transformer for this namespace's complete encoded WebSocket packets.
     ///
     /// Defaults to the value inherited from the server builder.
+    #[debug("{:?}", "<transformer>")]
     pub(crate) packet_transformer: WsIoPacketTransformer,
 
     /// Namespace path used to route clients from the `namespace` query parameter
@@ -177,39 +180,3 @@ pub(crate) struct WsIoServerNamespaceConfig {
     pub(crate) websocket_config: WebSocketConfig,
 }
 
-impl FmtDebug for WsIoServerNamespaceConfig {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        f.debug_struct("WsIoServerNamespaceConfig")
-            .field("path", &self.path)
-            .field("broadcast_concurrency_limit", &self.broadcast_concurrency_limit)
-            .field("channel_capacity", &self.channel_capacity)
-            .field("connection_idle_timeout", &self.connection_idle_timeout)
-            .field("disconnect_timeout", &self.disconnect_timeout)
-            .field("http_request_upgrade_timeout", &self.http_request_upgrade_timeout)
-            .field(
-                "init_request_handler",
-                &self.init_request_handler.as_ref().map(|_| "<handler>"),
-            )
-            .field("init_request_handler_timeout", &self.init_request_handler_timeout)
-            .field(
-                "init_response_handler",
-                &self.init_response_handler.as_ref().map(|_| "<handler>"),
-            )
-            .field("init_response_handler_timeout", &self.init_response_handler_timeout)
-            .field("init_response_timeout", &self.init_response_timeout)
-            .field("max_outgoing_message_size", &self.max_outgoing_message_size)
-            .field("middleware", &self.middleware.as_ref().map(|_| "<handler>"))
-            .field("middleware_execution_timeout", &self.middleware_execution_timeout)
-            .field("on_close_handler_timeout", &self.on_close_handler_timeout)
-            .field(
-                "on_connect_handler",
-                &self.on_connect_handler.as_ref().map(|_| "<handler>"),
-            )
-            .field("on_connect_handler_timeout", &self.on_connect_handler_timeout)
-            .field("on_ready_handler", &self.on_ready_handler.as_ref().map(|_| "<handler>"))
-            .field("packet_codec", &self.packet_codec)
-            .field("packet_transformer", &"<transformer>")
-            .field("websocket_config", &self.websocket_config)
-            .finish()
-    }
-}

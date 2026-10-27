@@ -1,9 +1,4 @@
 use std::{
-    fmt::{
-        Debug as FmtDebug,
-        Formatter,
-        Result as FmtResult,
-    },
     pin::Pin,
     sync::Arc,
     time::Duration,
@@ -11,6 +6,7 @@ use std::{
 
 use anyhow::Result;
 use bytes::Bytes;
+use derive_more::Debug;
 use tokio_tungstenite::tungstenite::{
     http::Request,
     protocol::WebSocketConfig,
@@ -46,6 +42,7 @@ type RequestModifier =
     Box<dyn Fn(Request<()>) -> Pin<Box<dyn Future<Output = Result<Request<()>>> + Send>> + Send + Sync + 'static>;
 
 // Structs
+#[derive(Debug)]
 pub(crate) struct WsIoClientConfig {
     /// Number of messages permitted in each internal channel.
     ///
@@ -77,6 +74,7 @@ pub(crate) struct WsIoClientConfig {
     /// decoded payload and may return optional response data.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", init_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) init_handler: Option<InitHandler>,
 
     /// Maximum duration for `init_handler`.
@@ -107,6 +105,7 @@ pub(crate) struct WsIoClientConfig {
     /// `on_session_close_handler_timeout`.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", on_session_close_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) on_session_close_handler: Option<BoxAsyncUnaryResultHandler<WsIoClientSession>>,
 
     /// Maximum duration for `on_session_close_handler`.
@@ -121,6 +120,7 @@ pub(crate) struct WsIoClientConfig {
     /// the handshake.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", on_session_ready_handler.as_ref().map(|_| "<handler>"))]
     pub(crate) on_session_ready_handler: Option<ArcAsyncUnaryResultHandler<WsIoClientSession>>,
 
     /// Packet codec for ws.io protocol packets.
@@ -134,6 +134,7 @@ pub(crate) struct WsIoClientConfig {
     /// Transformer applied to complete encoded WebSocket packets.
     ///
     /// Defaults to the no-op transformer.
+    #[debug("{:?}", "<transformer>")]
     pub(crate) packet_transformer: WsIoPacketTransformer,
 
     /// Interval between client heartbeat frames after the WebSocket session is
@@ -169,6 +170,7 @@ pub(crate) struct WsIoClientConfig {
     /// [`tokio_tungstenite::connect_async_with_config`] is called.
     ///
     /// Defaults to `None`.
+    #[debug("{:?}", request_modifier.as_ref().map(|_| "<modifier>"))]
     pub(crate) request_modifier: Option<RequestModifier>,
 
     /// Tungstenite WebSocket transport limits and buffer sizes.
@@ -180,40 +182,4 @@ pub(crate) struct WsIoClientConfig {
     /// write buffer is 2 MiB + 8 KiB + [`OUTGOING_FRAME_OVERHEAD`](crate::core::transport::OUTGOING_FRAME_OVERHEAD) bytes, with 8 KiB read and write buffers; other settings use
     /// [`WebSocketConfig::default`].
     pub(crate) websocket_config: WebSocketConfig,
-}
-
-impl FmtDebug for WsIoClientConfig {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        f.debug_struct("WsIoClientConfig")
-            .field("channel_capacity", &self.channel_capacity)
-            .field("connect_timeout", &self.connect_timeout)
-            .field("disconnect_timeout", &self.disconnect_timeout)
-            .field("init_handler", &self.init_handler.as_ref().map(|_| "<handler>"))
-            .field("init_handler_timeout", &self.init_handler_timeout)
-            .field("init_packet_timeout", &self.init_packet_timeout)
-            .field("max_outgoing_message_size", &self.max_outgoing_message_size)
-            .field(
-                "on_session_close_handler",
-                &self.on_session_close_handler.as_ref().map(|_| "<handler>"),
-            )
-            .field(
-                "on_session_close_handler_timeout",
-                &self.on_session_close_handler_timeout,
-            )
-            .field(
-                "on_session_ready_handler",
-                &self.on_session_ready_handler.as_ref().map(|_| "<handler>"),
-            )
-            .field("packet_codec", &self.packet_codec)
-            .field("packet_transformer", &"<transformer>")
-            .field("ping_interval", &self.ping_interval)
-            .field("ready_packet_timeout", &self.ready_packet_timeout)
-            .field("reconnect_delay", &self.reconnect_delay)
-            .field(
-                "request_modifier",
-                &self.request_modifier.as_ref().map(|_| "<modifier>"),
-            )
-            .field("websocket_config", &self.websocket_config)
-            .finish()
-    }
 }
