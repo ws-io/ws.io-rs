@@ -297,6 +297,9 @@ impl WsIoClientRuntime {
         session.init().await;
         session.start_event_dispatcher(event_queue_rx).await;
 
+        // Publish the session before transport tasks can signal readiness.
+        self.session.store(Some(Arc::clone(&session)));
+
         // Create read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
         let session_clone = Arc::clone(&session);
@@ -344,8 +347,6 @@ impl WsIoClientRuntime {
                 }
             }
         });
-
-        self.session.store(Some(Arc::clone(&session)));
 
         // Session cancellation ends this transport without stopping the reconnect loop.
         let session_cancel_token = session.cancel_token();
