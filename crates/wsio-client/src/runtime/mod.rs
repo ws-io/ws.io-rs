@@ -470,3 +470,6 @@ impl WsIoClientRuntime {
         self.event_registry.on(event, handler)
     }
 }
+
+#[cfg(test)]
+mod tests;
