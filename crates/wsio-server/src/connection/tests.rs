@@ -7,15 +7,26 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use futures_util::poll;
 use tokio::{
-    sync::mpsc::error::TryRecvError,
+    sync::{
+        Semaphore,
+        mpsc::error::TryRecvError,
+    },
     task::yield_now,
     time::advance,
 };
 
 use super::*;
 use crate::{
+    core::packet::{
+        codecs::WsIoPacketCodec,
+        transformers::{
+            WsIoPacketTransformer,
+            custom::WsIoPacketCustomTransformer,
+        },
+    },
     namespace::builder::WsIoServerNamespaceBuilder,
     test_support::{
         TEST_TIMEOUT,
@@ -29,6 +40,27 @@ enum SetupStage {
     InitResponse,
     Middleware,
     OnConnect,
+}
+
+struct ReadyGateTransformer {
+    started_tx: mpsc::UnboundedSender<()>,
+    release: Arc<Semaphore>,
+}
+
+#[async_trait]
+impl WsIoPacketCustomTransformer for ReadyGateTransformer {
+    async fn decode(&self, bytes: &[u8]) -> Result<Bytes> {
+        Ok(Bytes::copy_from_slice(bytes))
+    }
+
+    async fn encode(&self, bytes: &[u8]) -> Result<Bytes> {
+        if matches!(WsIoPacketCodec::Msgpack.decode(bytes)?.r#type, WsIoPacketType::Ready) {
+            self.started_tx.send(()).unwrap();
+            self.release.acquire().await?.forget();
+        }
+
+        Ok(Bytes::copy_from_slice(bytes))
+    }
 }
 
 fn new_connection(
@@ -116,6 +148,55 @@ async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
     connection.cleanup().await;
     assert_eq!(connection.namespace.connection_count(), 0);
     assert_eq!(connection.server().unwrap().connection_count(), 0);
+}
+
+#[tokio::test]
+async fn ready_is_queued_before_activation_and_broadcast_visibility() {
+    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+    let release = Arc::new(Semaphore::new(0));
+    let (_server, connection, mut messages, _) = new_connection(|builder| {
+        builder
+            .packet_codec(WsIoPacketCodec::Msgpack)
+            .packet_transformer(WsIoPacketTransformer::custom(Arc::new(ReadyGateTransformer {
+                started_tx,
+                release: Arc::clone(&release),
+            })))
+    });
+
+    connection.init().await.unwrap();
+    messages.try_recv().unwrap();
+    let connection_clone = Arc::clone(&connection);
+    let handshake = spawn(async move { incoming(&connection_clone, WsIoPacket::new_init(None)).await });
+    assert_eq!(timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap(), Some(()));
+
+    assert_eq!(connection.state.get(), ConnectionState::Activating);
+    assert_eq!(connection.namespace.connection_count(), 0);
+    timeout(TEST_TIMEOUT, connection.namespace.emit::<()>("before-ready", None))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(messages.try_recv(), Err(TryRecvError::Empty));
+
+    release.add_permits(1);
+    timeout(TEST_TIMEOUT, handshake).await.unwrap().unwrap().unwrap();
+    assert!(connection.is_ready());
+    assert_eq!(connection.namespace.connection_count(), 1);
+    let ready = decode_message(&connection, &messages.try_recv().unwrap()).await;
+    assert!(matches!(ready.r#type, WsIoPacketType::Ready));
+
+    timeout(TEST_TIMEOUT, connection.namespace.emit::<()>("after-ready", None))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let event = decode_message(&connection, &messages.try_recv().unwrap()).await;
+    assert!(matches!(event.r#type, WsIoPacketType::Event));
+    assert_eq!(event.key.as_deref(), Some("after-ready"));
+    assert_eq!(messages.try_recv(), Err(TryRecvError::Empty));
+
+    timeout(TEST_TIMEOUT, connection.cleanup()).await.unwrap();
+    assert_eq!(connection.namespace.connection_count(), 0);
 }
 
 #[tokio::test(start_paused = true)]
