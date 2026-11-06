@@ -8,8 +8,11 @@ on:
       - wsio-server-v*
   workflow_dispatch: null
 
+permissions:
+  contents: read
+
 concurrency:
-  group: ci-test-and-coverage
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,10 +27,18 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          components: llvm-tools-preview
+
+      - name: Install mold
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mold
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -36,12 +47,12 @@ jobs:
         run: cargo coverage
 
       - name: Generate lcov report
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo coverage-generate
+        if: ${{ runner.os == 'Linux' }}
+        run: cargo coverage-generate --no-run
 
       - name: Upload lcov report to codecov
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: codecov/codecov-action@v6
+        if: ${{ runner.os == 'Linux' }}
+        uses: codecov/codecov-action@v7
         with:
           fail_ci_if_error: true
           files: ./lcov.info
