@@ -179,4 +179,3 @@ pub(crate) struct WsIoServerNamespaceConfig {
     /// Defaults to the value inherited from the server builder.
     pub(crate) websocket_config: WebSocketConfig,
 }
-

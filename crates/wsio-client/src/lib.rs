@@ -81,6 +81,8 @@ impl WsIoClient {
     ///
     /// The transformed packet must fit the configured outgoing message limit.
     /// Success is not a delivery acknowledgement.
+    /// Events are buffered across automatic reconnects, but discarded on explicit disconnect.
+    /// Disconnecting also cancels pending encoding and queue waits.
     pub async fn emit<D: Serialize>(&self, event: impl AsRef<str>, data: Option<&D>) -> Result<()> {
         self.0.emit(event.as_ref(), data).await
     }

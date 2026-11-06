@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::{
+    Error as AnyhowError,
     Result,
     anyhow,
+    bail,
 };
 use arc_swap::{
     ArcSwap,
@@ -80,9 +82,8 @@ pub(crate) struct WsIoClientRuntime {
     disconnect_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession>,
     lifecycle_lock: Mutex<()>,
-    send_event_message_rx: Mutex<mpsc::Receiver<Arc<Message>>>,
     send_event_message_task: Mutex<Option<JoinHandle<()>>>,
-    send_event_message_tx: mpsc::Sender<Arc<Message>>,
+    send_event_message_tx: ArcSwapOption<mpsc::Sender<Arc<Message>>>,
     session: ArcSwapOption<WsIoClientSession>,
     status: AtomicEnumCell<RuntimeStatus>,
     pub(crate) wake_send_event_message_task_notify: Notify,
@@ -97,7 +98,6 @@ impl TaskSpawner for WsIoClientRuntime {
 
 impl WsIoClientRuntime {
     pub(crate) fn new(config: WsIoClientConfig, connect_url: Url) -> Arc<Self> {
-        let (send_event_message_tx, send_event_message_rx) = mpsc::channel(config.channel_capacity);
         Arc::new(Self {
             cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
             config,
@@ -107,9 +107,8 @@ impl WsIoClientRuntime {
             disconnect_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             event_registry: WsIoEventRegistry::new(),
             lifecycle_lock: Mutex::new(()),
-            send_event_message_rx: Mutex::new(send_event_message_rx),
             send_event_message_task: Mutex::new(None),
-            send_event_message_tx,
+            send_event_message_tx: ArcSwapOption::new(None),
             session: ArcSwapOption::new(None),
             status: AtomicEnumCell::new(RuntimeStatus::Stopped),
             wake_send_event_message_task_notify: Notify::new(),
@@ -138,7 +137,37 @@ impl WsIoClientRuntime {
         // Create new cancel token
         self.cancel_token.store(Arc::new(CancellationToken::new()));
 
-        // Create connection loop task
+        // Each explicit connect owns a queue; automatic reconnects reuse it.
+        let (send_event_message_tx, mut send_event_message_rx) =
+            mpsc::channel::<Arc<Message>>(self.config.channel_capacity);
+
+        let runtime = Arc::clone(self);
+        *self.send_event_message_task.lock().await = Some(spawn(async move {
+            while let Some(message) = send_event_message_rx.recv().await {
+                #[cfg(feature = "tracing")]
+                tracing::trace!("dequeued client event message for delivery");
+                loop {
+                    if let Some(session) = runtime.session.load().as_ref()
+                        && session.emit_event_message(Arc::clone(&message)).await.is_ok()
+                    {
+                        break;
+                    }
+
+                    let notified = runtime.wake_send_event_message_task_notify.notified();
+                    if let Some(session) = runtime.session.load().as_ref()
+                        && session.emit_event_message(Arc::clone(&message)).await.is_ok()
+                    {
+                        break;
+                    }
+
+                    notified.await;
+                }
+            }
+        }));
+
+        self.send_event_message_tx.store(Some(Arc::new(send_event_message_tx)));
+
+        // Publish the queue before starting connections and their ready callbacks.
         let runtime = Arc::clone(self);
         *self.connection_loop_task.lock().await = Some(spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
@@ -164,32 +193,6 @@ impl WsIoClientRuntime {
                 }
             }
         }));
-
-        // Create send event message task
-        let runtime = Arc::clone(self);
-        *self.send_event_message_task.lock().await = Some(spawn(async move {
-            let mut send_event_message_rx = runtime.send_event_message_rx.lock().await;
-            while let Some(message) = send_event_message_rx.recv().await {
-                #[cfg(feature = "tracing")]
-                tracing::trace!("dequeued client event message for delivery");
-                loop {
-                    if let Some(session) = runtime.session.load().as_ref()
-                        && session.emit_event_message(Arc::clone(&message)).await.is_ok()
-                    {
-                        break;
-                    }
-
-                    let notified = runtime.wake_send_event_message_task_notify.notified();
-                    if let Some(session) = runtime.session.load().as_ref()
-                        && session.emit_event_message(Arc::clone(&message)).await.is_ok()
-                    {
-                        break;
-                    }
-
-                    notified.await;
-                }
-            }
-        }));
     }
 
     async fn disconnect_inner(&self) {
@@ -210,17 +213,16 @@ impl WsIoClientRuntime {
             RuntimeStatus::Stopping => unreachable!(),
         }
 
-        // Abort send-event-message task
-        if let Some(send_event_message_task) = self.send_event_message_task.lock().await.take() {
-            send_event_message_task.abort();
-        }
+        self.send_event_message_tx.store(None);
 
         // Cancel token to abort all waiting operations (ongoing operations, connection loop task)
         self.cancel_token.load().cancel();
 
-        // Drop all pending event messages in the channel
-        let mut send_event_message_rx = self.send_event_message_rx.lock().await;
-        while send_event_message_rx.try_recv().is_ok() {}
+        // Drop the old receiver and its pending messages before another connect.
+        if let Some(send_event_message_task) = self.send_event_message_task.lock().await.take() {
+            send_event_message_task.abort();
+            let _ = send_event_message_task.await;
+        }
 
         // Await connection loop task termination
         if let Some(connection_loop_task) = self.connection_loop_task.lock().await.take() {
@@ -405,20 +407,26 @@ impl WsIoClientRuntime {
     }
 
     pub(crate) async fn emit<D: Serialize>(&self, event: &str, data: Option<&D>) -> Result<()> {
-        self.status.ensure(RuntimeStatus::Running, |status| {
-            format!("Cannot emit in invalid status: {status:?}")
-        })?;
+        let send_event_message_tx = self
+            .send_event_message_tx
+            .load_full()
+            .ok_or_else(|| anyhow!("Cannot emit while client is not running"))?;
 
-        self.send_event_message_tx
-            .send(
-                self.encode_packet_to_message(&WsIoPacket::new_event(
+        select! {
+            biased;
+            () = send_event_message_tx.closed() => bail!("Client disconnected while emitting"),
+            result = async {
+                let message = self.encode_packet_to_message(&WsIoPacket::new_event(
                     event,
                     data.map(|data| self.config.packet_codec.encode_data(data))
                         .transpose()?,
                 ))
-                .await?,
-            )
-            .await?;
+                .await?;
+
+                send_event_message_tx.send(message).await?;
+                Ok::<(), AnyhowError>(())
+            } => result?,
+        }
 
         #[cfg(feature = "tracing")]
         tracing::trace!(event, has_data = data.is_some(), "queued client event message");
