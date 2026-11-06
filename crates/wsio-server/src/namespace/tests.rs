@@ -1,11 +1,6 @@
 use std::{
     convert::Infallible,
     future::pending,
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
     time::Duration,
 };
 
@@ -15,10 +10,6 @@ use bytes::Bytes;
 use http::{
     Request,
     StatusCode,
-};
-use http_body::{
-    Body,
-    Frame,
 };
 use hyper::{
     body::Incoming,
@@ -46,22 +37,11 @@ use crate::{
     },
     request::dispatch_request,
     test_support::{
+        EmptyBody,
         TEST_TIMEOUT,
         ready_connection,
     },
 };
-
-#[derive(Default)]
-struct EmptyBody;
-
-impl Body for EmptyBody {
-    type Data = Bytes;
-    type Error = Infallible;
-
-    fn poll_frame(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
-        Poll::Ready(None)
-    }
-}
 
 /// Reports a receiver that closes when the pending Init encoding future is dropped.
 struct StalledInitTransformer {

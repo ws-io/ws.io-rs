@@ -134,3 +134,6 @@ fn respond<ResBody: Default, E: Send>(status: StatusCode) -> Result<Response<Res
     *response.status_mut() = status;
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests;

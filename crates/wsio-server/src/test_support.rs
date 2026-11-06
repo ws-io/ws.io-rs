@@ -1,13 +1,24 @@
 use std::{
+    convert::Infallible,
     future::pending,
+    pin::Pin,
     sync::Arc,
+    task::{
+        Context,
+        Poll,
+    },
     time::Duration,
 };
 
 use anyhow::Result;
+use bytes::Bytes;
 use http::{
     HeaderMap,
     Uri,
+};
+use http_body::{
+    Body,
+    Frame,
 };
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
@@ -20,6 +31,19 @@ use crate::{
 
 // Constants/Statics
 pub(crate) const TEST_TIMEOUT: Duration = Duration::from_secs(2);
+
+// Structs
+#[derive(Default)]
+pub(crate) struct EmptyBody;
+
+impl Body for EmptyBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
+        Poll::Ready(None)
+    }
+}
 
 // Functions
 
