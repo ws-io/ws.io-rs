@@ -75,8 +75,8 @@ impl<ReqBody> HyperService<Request<ReqBody>> for NotFoundService {
 
 /// Handles ws.io requests and forwards other requests to the inner service.
 ///
-/// Supports Hyper and, with the `tower` feature, Tower. The default inner
-/// service returns 404 responses for use without another HTTP application.
+/// Supports Hyper and Tower. The default inner service returns 404 responses
+/// for use without another HTTP application.
 #[derive(Debug, Clone)]
 pub struct WsIoServerService<S = NotFoundService> {
     pub(super) inner: S,

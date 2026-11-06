@@ -17,17 +17,18 @@ mod runtime;
 #[cfg(test)]
 mod test_support;
 
-#[cfg(feature = "tower")]
-use self::request_adapters::tower::layer::WsIoServerLayer;
 use self::{
     builder::WsIoServerBuilder,
     namespace::{
         WsIoServerNamespace,
         builder::WsIoServerNamespaceBuilder,
     },
-    request_adapters::service::{
-        NotFoundService,
-        WsIoServerService,
+    request_adapters::{
+        service::{
+            NotFoundService,
+            WsIoServerService,
+        },
+        tower::layer::WsIoServerLayer,
     },
     runtime::WsIoServerRuntime,
 };
@@ -68,7 +69,6 @@ impl WsIoServer {
         self.0.emit(event.as_ref(), data).await
     }
 
-    #[cfg(feature = "tower")]
     pub fn layer(&self) -> WsIoServerLayer {
         WsIoServerLayer::new(Arc::clone(&self.0))
     }
@@ -104,7 +104,7 @@ impl WsIoServer {
         self.0.room_connection_count(room_name.as_ref())
     }
 
-    /// Creates a standalone Hyper service, also usable with Tower when enabled.
+    /// Creates a standalone Hyper and Tower service.
     ///
     /// Requests outside the configured request path receive a 404 response.
     /// Enable HTTP upgrades on the Hyper connection with `.with_upgrades()`.
