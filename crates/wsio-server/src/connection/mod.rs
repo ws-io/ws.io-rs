@@ -412,29 +412,6 @@ impl WsIoServerConnection {
         tracing::debug!(connection_id = self.id, "server connection closed");
     }
 
-    #[inline]
-    pub(super) fn close(&self) {
-        // Skip if connection is already Closing or Closed, otherwise set connection state to Closing
-        match self.state.get() {
-            ConnectionState::Closed | ConnectionState::Closing => return,
-            _state @ (ConnectionState::Activating
-            | ConnectionState::AwaitingInit
-            | ConnectionState::Created
-            | ConnectionState::Initiating
-            | ConnectionState::Ready) => {
-                #[cfg(feature = "tracing")]
-                tracing::debug!(connection_id = self.id, state = ?_state, "closing server connection");
-                self.state.store(ConnectionState::Closing);
-            },
-        }
-
-        // Revoke event dispatch and managed tasks before waiting for transport shutdown.
-        self.cancel_token.cancel();
-
-        // Send websocket close frame to initiate graceful shutdown
-        let _ = self.message_tx.try_send(Arc::new(Message::Close(None)));
-    }
-
     pub(super) async fn emit_event_message(&self, message: Arc<Message>) -> Result<()> {
         self.state.ensure(ConnectionState::Ready, |state| {
             format!("Cannot emit in invalid state: {state:?}")
@@ -591,6 +568,34 @@ impl WsIoServerConnection {
     }
 
     // Public methods
+
+    /// Requests transport closure without sending a ws.io protocol Disconnect.
+    ///
+    /// Unlike [`Self::disconnect`], this allows a running ws.io client to reconnect
+    /// automatically. Event dispatch and managed tasks are signaled to stop immediately.
+    /// This method does not wait for transport shutdown or connection cleanup.
+    #[inline]
+    pub fn close(&self) {
+        // Skip if connection is already Closing or Closed, otherwise set connection state to Closing
+        match self.state.get() {
+            ConnectionState::Closed | ConnectionState::Closing => return,
+            _state @ (ConnectionState::Activating
+            | ConnectionState::AwaitingInit
+            | ConnectionState::Created
+            | ConnectionState::Initiating
+            | ConnectionState::Ready) => {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = self.id, state = ?_state, "closing server connection");
+                self.state.store(ConnectionState::Closing);
+            },
+        }
+
+        // Revoke event dispatch and managed tasks before waiting for transport shutdown.
+        self.cancel_token.cancel();
+
+        // Send websocket close frame to initiate graceful shutdown
+        let _ = self.message_tx.try_send(Arc::new(Message::Close(None)));
+    }
 
     /// Attempts to queue a protocol Disconnect within `disconnect_timeout`, then requests closure.
     ///
