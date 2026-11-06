@@ -1,110 +1,6 @@
-use std::sync::Arc;
-
-use anyhow::{
-    Result,
-    ensure,
-};
-use bytes::Bytes;
-use tokio::{
-    runtime::Handle,
-    task::spawn_blocking,
-};
-
-mod context_pool;
-
-use self::context_pool::WsIoPacketZstdContextPool;
-use super::compression_frame::{
-    COMPRESSION_FRAME_HEADER_SIZE,
-    WsIoPacketCompressionAlgorithm,
-    WsIoPacketCompressionFrameHeader,
-};
+pub(super) mod context_pool;
 
 // Structs
-
-#[derive(Clone)]
-pub(super) struct WsIoPacketZstdTransformer {
-    config: WsIoPacketZstdTransformerConfig,
-    context_pool: Arc<WsIoPacketZstdContextPool>,
-}
-
-impl WsIoPacketZstdTransformer {
-    #[inline]
-    pub(super) fn new(config: WsIoPacketZstdTransformerConfig) -> Self {
-        Self {
-            config,
-            context_pool: Arc::new(WsIoPacketZstdContextPool::new(config.compression_level)),
-        }
-    }
-
-    #[inline]
-    pub(super) async fn decode(&self, mut bytes: Bytes) -> Result<Bytes> {
-        let header = WsIoPacketCompressionFrameHeader::decode(&bytes)?;
-        ensure!(
-            header.algorithm == WsIoPacketCompressionAlgorithm::Zstd,
-            "invalid zstd transformer algorithm"
-        );
-
-        let original_length = usize::try_from(header.original_length)?;
-        ensure!(
-            original_length <= self.config.max_decompressed_size,
-            "packet exceeds the configured maximum decompressed size"
-        );
-
-        let payload = bytes.split_off(COMPRESSION_FRAME_HEADER_SIZE);
-        drop(bytes);
-
-        if !header.compressed {
-            ensure!(
-                payload.len() == original_length,
-                "invalid raw zstd transformer payload length"
-            );
-
-            return Ok(payload);
-        }
-
-        if self.config.should_use_blocking(payload.len().max(original_length)) && Handle::try_current().is_ok() {
-            let permit = self.context_pool.acquire_blocking_permit().await?;
-            let context_pool = Arc::clone(&self.context_pool);
-            return spawn_blocking(move || {
-                let result = context_pool.decompress(&payload, original_length);
-                drop(permit);
-                result
-            })
-            .await?;
-        }
-
-        self.context_pool.decompress(&payload, original_length)
-    }
-
-    #[inline]
-    pub(super) async fn encode(&self, bytes: Bytes) -> Result<Bytes> {
-        ensure!(
-            bytes.len() <= self.config.max_decompressed_size,
-            "packet exceeds the configured maximum decompressed size"
-        );
-
-        let raw_header =
-            WsIoPacketCompressionFrameHeader::new(WsIoPacketCompressionAlgorithm::Zstd, false, bytes.len())?;
-
-        if bytes.len() < self.config.compression_threshold {
-            return raw_header.encode_payload(&bytes);
-        }
-
-        if self.config.should_use_blocking(bytes.len()) && Handle::try_current().is_ok() {
-            let permit = self.context_pool.acquire_blocking_permit().await?;
-            let context_pool = Arc::clone(&self.context_pool);
-            return spawn_blocking(move || {
-                let result = context_pool.compress(&bytes, raw_header);
-                drop(permit);
-                result
-            })
-            .await?;
-        }
-
-        self.context_pool.compress(&bytes, raw_header)
-    }
-}
-
 /// Configuration for the built-in zstd packet transformer.
 #[derive(Debug, Clone, Copy)]
 pub struct WsIoPacketZstdTransformerConfig {
@@ -147,13 +43,6 @@ impl Default for WsIoPacketZstdTransformerConfig {
             compression_threshold: 256,
             max_decompressed_size: 16 * 1024 * 1024,
         }
-    }
-}
-
-impl WsIoPacketZstdTransformerConfig {
-    #[inline]
-    fn should_use_blocking(&self, payload_size: usize) -> bool {
-        payload_size >= self.blocking_threshold
     }
 }
 

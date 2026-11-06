@@ -27,12 +27,19 @@ fn operation_errors_return_context_but_creation_errors_do_not_cache() {
 }
 
 #[test]
-fn nested_use_does_not_hold_the_cache_lock() {
+fn creation_and_nested_use_do_not_hold_the_cache_lock() {
     let cache = WsIoPacketContextCache::<usize>::new();
     cache
         .with_context(
             1,
-            || Ok(1),
+            || {
+                assert!(
+                    cache.contexts.try_lock().is_some(),
+                    "creation must not hold the cache lock"
+                );
+
+                Ok(1)
+            },
             |outer| {
                 cache.with_context(
                     1,

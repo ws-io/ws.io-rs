@@ -23,13 +23,12 @@ fn invalid_headers_and_capacity_overflow_are_rejected() {
         assert!(WsIoPacketCompressionFrameHeader::decode(&[0x22; 5][..length]).is_err());
     }
 
-    for descriptor in [0x02, 0x42, 0xe2, 0x20, 0x24, 0x3e] {
+    for descriptor in [0x02, 0x42, 0xe2, 0x20, 0x26, 0x3e] {
         assert!(WsIoPacketCompressionFrameHeader::decode(&[descriptor, 0, 0, 0, 0]).is_err());
     }
 
     let header = WsIoPacketCompressionFrameHeader::new(WsIoPacketCompressionAlgorithm::Zstd, false, 0).unwrap();
     assert!(header.allocate(usize::MAX).is_err());
-    #[cfg(target_pointer_width = "64")]
     assert!(
         WsIoPacketCompressionFrameHeader::new(WsIoPacketCompressionAlgorithm::Zstd, false, u32::MAX as usize + 1)
             .is_err()

@@ -16,18 +16,19 @@ const COMPRESSION_FRAME_VERSION: u8 = 1;
 const COMPRESSION_FRAME_VERSION_SHIFT: u8 = 5;
 const ORIGINAL_LENGTH_OFFSET: usize = size_of::<u8>();
 const ORIGINAL_LENGTH_SIZE: usize = size_of::<u32>();
-pub(super) const COMPRESSION_FRAME_HEADER_SIZE: usize = ORIGINAL_LENGTH_OFFSET + ORIGINAL_LENGTH_SIZE;
+pub(in super::super) const COMPRESSION_FRAME_HEADER_SIZE: usize = ORIGINAL_LENGTH_OFFSET + ORIGINAL_LENGTH_SIZE;
 
 // Enums
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WsIoPacketCompressionAlgorithm {
     Zstd = 1,
+    Lz4 = 2,
 }
 
 // Structs
 #[derive(Debug, Clone, Copy)]
-pub(super) struct WsIoPacketCompressionFrameHeader {
+pub(in super::super) struct WsIoPacketCompressionFrameHeader {
     pub(super) algorithm: WsIoPacketCompressionAlgorithm,
     pub(super) compressed: bool,
     pub(super) original_length: u32,
@@ -49,7 +50,7 @@ impl WsIoPacketCompressionFrameHeader {
     }
 
     #[inline]
-    pub(super) fn allocate(self, payload_capacity: usize) -> Result<Vec<u8>> {
+    pub(in super::super) fn allocate(self, payload_capacity: usize) -> Result<Vec<u8>> {
         let capacity = COMPRESSION_FRAME_HEADER_SIZE
             .checked_add(payload_capacity)
             .ok_or_else(|| anyhow!("ws.io compression frame size overflow"))?;
@@ -85,6 +86,7 @@ impl WsIoPacketCompressionFrameHeader {
 
         let algorithm = match (descriptor & COMPRESSION_ALGORITHM_MASK) >> COMPRESSION_ALGORITHM_SHIFT {
             1 => WsIoPacketCompressionAlgorithm::Zstd,
+            2 => WsIoPacketCompressionAlgorithm::Lz4,
             algorithm => bail!("unsupported ws.io compression algorithm: {algorithm}"),
         };
 

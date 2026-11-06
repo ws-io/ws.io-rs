@@ -1,5 +1,6 @@
 use std::task::Poll;
 
+use bytes::Bytes;
 use futures_util::poll;
 use tokio::{
     task::JoinSet,
@@ -7,14 +8,17 @@ use tokio::{
 };
 use zstd::bulk::compress;
 
-use super::*;
+use super::{
+    super::compression::WsIoPacketCompressionTransformer,
+    *,
+};
 use crate::test_support::TEST_TIMEOUT;
 
 #[tokio::test]
 async fn compression_threshold_is_inclusive_and_preserves_payload() {
     // Force both synchronous and blocking paths; test the exact compression threshold.
     for blocking_threshold in [0, usize::MAX] {
-        let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+        let transformer = WsIoPacketCompressionTransformer::zstd(WsIoPacketZstdTransformerConfig {
             blocking_threshold,
             compression_threshold: 128,
             max_decompressed_size: 1024,
@@ -33,7 +37,7 @@ async fn compression_threshold_is_inclusive_and_preserves_payload() {
 #[tokio::test]
 async fn encoded_frames_match_exact_wire_layout() {
     for blocking_threshold in [0, usize::MAX] {
-        let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+        let transformer = WsIoPacketCompressionTransformer::zstd(WsIoPacketZstdTransformerConfig {
             blocking_threshold,
             compression_threshold: 0,
             max_decompressed_size: 1024,
@@ -62,7 +66,7 @@ async fn encoded_frames_match_exact_wire_layout() {
 #[tokio::test]
 async fn limits_and_corruption_are_rejected_without_poisoning_reused_contexts() {
     for blocking_threshold in [0, usize::MAX] {
-        let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+        let transformer = WsIoPacketCompressionTransformer::zstd(WsIoPacketZstdTransformerConfig {
             blocking_threshold,
             compression_threshold: 0,
             max_decompressed_size: 128,
@@ -98,7 +102,7 @@ async fn limits_and_corruption_are_rejected_without_poisoning_reused_contexts() 
             );
         }
 
-        let empty_only = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+        let empty_only = WsIoPacketCompressionTransformer::zstd(WsIoPacketZstdTransformerConfig {
             blocking_threshold,
             compression_threshold: 0,
             max_decompressed_size: 0,
@@ -118,7 +122,7 @@ async fn limits_and_corruption_are_rejected_without_poisoning_reused_contexts() 
 
 #[tokio::test]
 async fn cloned_transformers_can_share_contexts_concurrently() {
-    let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+    let transformer = WsIoPacketCompressionTransformer::zstd(WsIoPacketZstdTransformerConfig {
         blocking_threshold: 0,
         compression_threshold: 0,
         max_decompressed_size: 4096,
@@ -135,14 +139,18 @@ async fn cloned_transformers_can_share_contexts_concurrently() {
         });
     }
 
-    while let Some(result) = tasks.join_next().await {
-        result.unwrap();
-    }
+    timeout(TEST_TIMEOUT, async {
+        while let Some(result) = tasks.join_next().await {
+            result.unwrap();
+        }
+    })
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
 async fn blocking_path_is_selected_by_original_size() {
-    let transformer = WsIoPacketZstdTransformer::new(WsIoPacketZstdTransformerConfig {
+    let transformer = WsIoPacketCompressionTransformer::zstd(WsIoPacketZstdTransformerConfig {
         blocking_threshold: 128,
         compression_threshold: 0,
         max_decompressed_size: 1024,
@@ -154,7 +162,7 @@ async fn blocking_path_is_selected_by_original_size() {
     assert!(encoded.len() < 128);
     // Occupy every blocking slot so choosing the blocking path is observable.
     let mut permits = Vec::new();
-    while let Poll::Ready(permit) = poll!(Box::pin(transformer.context_pool.acquire_blocking_permit())) {
+    while let Poll::Ready(permit) = poll!(Box::pin(transformer.acquire_blocking_permit())) {
         permits.push(permit.unwrap());
     }
 

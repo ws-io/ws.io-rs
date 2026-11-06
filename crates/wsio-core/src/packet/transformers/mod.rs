@@ -10,30 +10,31 @@ use std::{
 use anyhow::Result;
 use bytes::Bytes;
 
-#[cfg(feature = "packet-transformer-zstd")]
-mod compression_frame;
-#[cfg(feature = "packet-transformer-zstd")]
-mod context_pool;
+#[cfg(any(feature = "packet-transformer-lz4", feature = "packet-transformer-zstd"))]
+mod compression;
 pub mod custom;
+#[cfg(feature = "packet-transformer-lz4")]
+pub mod lz4;
 #[cfg(feature = "packet-transformer-zstd")]
 pub mod zstd;
 
+#[cfg(any(feature = "packet-transformer-lz4", feature = "packet-transformer-zstd"))]
+use self::compression::WsIoPacketCompressionTransformer;
 use self::custom::WsIoPacketCustomTransformer;
+#[cfg(feature = "packet-transformer-lz4")]
+use self::lz4::WsIoPacketLz4TransformerConfig;
 #[cfg(feature = "packet-transformer-zstd")]
-use self::zstd::{
-    WsIoPacketZstdTransformer,
-    WsIoPacketZstdTransformerConfig,
-};
+use self::zstd::WsIoPacketZstdTransformerConfig;
 
 // Enums
 #[derive(Clone, Default)]
 enum WsIoPacketTransformerKind {
     #[default]
     Noop,
-    Custom(Arc<dyn WsIoPacketCustomTransformer>),
 
-    #[cfg(feature = "packet-transformer-zstd")]
-    Zstd(WsIoPacketZstdTransformer),
+    #[cfg(any(feature = "packet-transformer-lz4", feature = "packet-transformer-zstd"))]
+    Compression(WsIoPacketCompressionTransformer),
+    Custom(Arc<dyn WsIoPacketCustomTransformer>),
 }
 
 // Structs
@@ -42,8 +43,9 @@ enum WsIoPacketTransformerKind {
 ///
 /// [`Default::default`] selects the no-op strategy, which returns the input
 /// allocation unchanged. [`Self::custom`] delegates to a user-supplied transformer
-/// through an [`Arc`]. The zstd strategy is available with the `packet-transformer-zstd`
-/// feature and reuses its zstd contexts across calls and clones.
+/// through an [`Arc`]. LZ4 and zstd are optional compression strategies that share
+/// framing, size limits and bounded blocking work. zstd also reuses its contexts
+/// across calls and clones.
 #[derive(Clone, Default)]
 pub struct WsIoPacketTransformer {
     kind: WsIoPacketTransformerKind,
@@ -53,10 +55,10 @@ impl FmtDebug for WsIoPacketTransformer {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match &self.kind {
             WsIoPacketTransformerKind::Noop => f.write_str("WsIoPacketTransformer::Noop"),
-            WsIoPacketTransformerKind::Custom(_) => f.write_str("WsIoPacketTransformer::Custom(<transformer>)"),
 
-            #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd(_) => f.write_str("WsIoPacketTransformer::Zstd(<config>)"),
+            #[cfg(any(feature = "packet-transformer-lz4", feature = "packet-transformer-zstd"))]
+            WsIoPacketTransformerKind::Compression(transformer) => f.write_str(transformer.debug_name()),
+            WsIoPacketTransformerKind::Custom(_) => f.write_str("WsIoPacketTransformer::Custom(<transformer>)"),
         }
     }
 }
@@ -77,24 +79,24 @@ impl WsIoPacketTransformer {
     ///
     /// # Errors
     ///
-    /// Propagates errors from a custom transformer. With `packet-transformer-zstd`,
+    /// Propagates errors from a custom transformer. With a built-in compression strategy,
     /// returns an error for invalid compression headers or payloads, unsupported
     /// frame versions or algorithms, or lengths exceeding the configured limit.
     /// Decompression and blocking-task failures are also propagated.
     ///
     /// # Cancellation safety
     ///
-    /// Dropping the future discards its result. Already submitted zstd blocking work
+    /// Dropping the future discards its result. Already submitted compression blocking work
     /// may continue to completion. A custom transformer defines its own surviving
     /// side effects and reuse guarantees.
     #[inline]
     pub async fn decode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
             WsIoPacketTransformerKind::Noop => Ok(bytes),
-            WsIoPacketTransformerKind::Custom(transformer) => transformer.decode(&bytes).await,
 
-            #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd(transformer) => transformer.decode(bytes).await,
+            #[cfg(any(feature = "packet-transformer-lz4", feature = "packet-transformer-zstd"))]
+            WsIoPacketTransformerKind::Compression(transformer) => transformer.decode(bytes).await,
+            WsIoPacketTransformerKind::Custom(transformer) => transformer.decode(&bytes).await,
         }
     }
 
@@ -105,23 +107,37 @@ impl WsIoPacketTransformer {
     ///
     /// # Errors
     ///
-    /// Propagates errors from a custom transformer. With `packet-transformer-zstd`,
+    /// Propagates errors from a custom transformer. With a built-in compression strategy,
     /// returns an error if the input exceeds the configured size limit or
     /// `u32::MAX` bytes. Compression and blocking-task failures are also propagated.
     ///
     /// # Cancellation safety
     ///
-    /// Dropping the future discards its result. Already submitted zstd blocking work
+    /// Dropping the future discards its result. Already submitted compression blocking work
     /// may continue to completion. A custom transformer defines its own surviving
     /// side effects and reuse guarantees.
     #[inline]
     pub async fn encode(&self, bytes: Bytes) -> Result<Bytes> {
         match &self.kind {
             WsIoPacketTransformerKind::Noop => Ok(bytes),
-            WsIoPacketTransformerKind::Custom(transformer) => transformer.encode(&bytes).await,
 
-            #[cfg(feature = "packet-transformer-zstd")]
-            WsIoPacketTransformerKind::Zstd(transformer) => transformer.encode(bytes).await,
+            #[cfg(any(feature = "packet-transformer-lz4", feature = "packet-transformer-zstd"))]
+            WsIoPacketTransformerKind::Compression(transformer) => transformer.encode(bytes).await,
+            WsIoPacketTransformerKind::Custom(transformer) => transformer.encode(&bytes).await,
+        }
+    }
+
+    /// Creates a built-in LZ4 block packet transformer with `config`.
+    ///
+    /// Requires `packet-transformer-lz4`. Peers must select the same transformer.
+    /// Uses the ws.io compression frame with algorithm `2`, a big-endian `u32`
+    /// original length and no additional LZ4 frame or length prefix. Packets below
+    /// the compression threshold or without a size reduction use the raw flag.
+    #[cfg(feature = "packet-transformer-lz4")]
+    #[inline]
+    pub fn lz4(config: WsIoPacketLz4TransformerConfig) -> Self {
+        Self {
+            kind: WsIoPacketTransformerKind::Compression(WsIoPacketCompressionTransformer::lz4(config)),
         }
     }
 
@@ -138,7 +154,7 @@ impl WsIoPacketTransformer {
     #[inline]
     pub fn zstd(config: WsIoPacketZstdTransformerConfig) -> Self {
         Self {
-            kind: WsIoPacketTransformerKind::Zstd(WsIoPacketZstdTransformer::new(config)),
+            kind: WsIoPacketTransformerKind::Compression(WsIoPacketCompressionTransformer::zstd(config)),
         }
     }
 }

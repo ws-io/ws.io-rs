@@ -266,6 +266,7 @@ async fn standalone_service_dispatches_wsio_and_returns_not_found_for_other_path
             .await
             .unwrap()
             .unwrap();
+
         assert_eq!(response.status(), expected_status);
     }
 }
