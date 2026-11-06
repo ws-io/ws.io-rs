@@ -36,7 +36,7 @@ impl<S> WsIoServerService<S> {
 
 impl<S, ReqBody, ResBody> TowerService<Request<ReqBody>> for WsIoServerService<S>
 where
-    ReqBody: Body + Default + FmtDebug + Send + Unpin + 'static,
+    ReqBody: Body + FmtDebug + Send + Unpin + 'static,
     ReqBody::Data: Send,
     ReqBody::Error: FmtDebug,
     ResBody: Body + Default + Send + 'static,
