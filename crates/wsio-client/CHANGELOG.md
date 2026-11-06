@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.12.0 - 2026-11-06T14:16:16Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.11.0...wsio-client-v0.12.0)
+
+### ✅ Tests
+
+- *(client)* cover event queue lifecycle boundaries ([98fcd0a](https://github.com/ws-io/ws.io-rs/commit/98fcd0a8d4414abdbb783194c08399d843b381e8))
+
+### 🏡 Chore
+
+- upgrade deps ([bf2e116](https://github.com/ws-io/ws.io-rs/commit/bf2e116d23eb1125c9ad9158604e10448d988106))
+
+### 💅 Refactors
+
+- derive debug implementations for configs and packet codecs ([c7f6609](https://github.com/ws-io/ws.io-rs/commit/c7f6609a360a1cf83e38ae312f0cbdd949f004ac))
+
+### 🚀 Enhancements
+
+- *(core)* [**breaking**] add LZ4 packet compression ([ca6fba0](https://github.com/ws-io/ws.io-rs/commit/ca6fba07a202dff8589e1bde975dbf01845ce40a))
+
+### 🩹 Fixes
+
+- *(client)* publish sessions before starting transport tasks ([15c9b07](https://github.com/ws-io/ws.io-rs/commit/15c9b07e428d5fd0a112ba9c59d6b272fc980b85))
+- *(client)* isolate event queues across explicit reconnects ([7191402](https://github.com/ws-io/ws.io-rs/commit/7191402c31b216d172b7373a3ee7dbabd2cf6922))
+
 ## 0.11.0 - 2026-10-24T20:51:43Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-client-v0.10.2...wsio-client-v0.11.0)

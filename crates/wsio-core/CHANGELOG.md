@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.17.0 - 2026-11-06T14:16:16Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.16.0...wsio-core-v0.17.0)
+
+### 🏡 Chore
+
+- upgrade deps ([bf2e116](https://github.com/ws-io/ws.io-rs/commit/bf2e116d23eb1125c9ad9158604e10448d988106))
+
+### 💅 Refactors
+
+- derive debug implementations for configs and packet codecs ([c7f6609](https://github.com/ws-io/ws.io-rs/commit/c7f6609a360a1cf83e38ae312f0cbdd949f004ac))
+
+### 🚀 Enhancements
+
+- *(core)* [**breaking**] add LZ4 packet compression ([ca6fba0](https://github.com/ws-io/ws.io-rs/commit/ca6fba07a202dff8589e1bde975dbf01845ce40a))
+
 ## 0.16.0 - 2026-10-24T20:51:43Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-core-v0.15.2...wsio-core-v0.16.0)

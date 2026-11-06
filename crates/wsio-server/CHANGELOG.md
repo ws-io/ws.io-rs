@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.17.0 - 2026-11-06T14:16:16Z
+
+[compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.16.0...wsio-server-v0.17.0)
+
+### ✅ Tests
+
+- *(server)* cover Tower routing and readiness contracts ([d2d47d1](https://github.com/ws-io/ws.io-rs/commit/d2d47d105a27296a3bc2b4176e0435925eea0425))
+- *(server)* cover HTTP upgrade validation and metadata preservation ([6b8e237](https://github.com/ws-io/ws.io-rs/commit/6b8e237935c44b38ae42924955394e8c260538de))
+- *(server)* guard ready packet ordering before activation ([84d2a12](https://github.com/ws-io/ws.io-rs/commit/84d2a12a08d90314f55e19d1bfd4c664674d83a8))
+- *(server)* cover stalled initialization after reader failure ([4b83176](https://github.com/ws-io/ws.io-rs/commit/4b83176cd0aa24e81a8973d6a8fc86c9e387f84d))
+
+### 🏡 Chore
+
+- upgrade deps ([847ca5b](https://github.com/ws-io/ws.io-rs/commit/847ca5be9d07ddd5323a4496bc31b1c1dcb8da2c))
+- upgrade deps ([bf2e116](https://github.com/ws-io/ws.io-rs/commit/bf2e116d23eb1125c9ad9158604e10448d988106))
+
+### 💅 Refactors
+
+- *(server)* [**breaking**] make Tower integration always available ([321a1b7](https://github.com/ws-io/ws.io-rs/commit/321a1b727a439ddd6665116b9457bc2310ef22dd))
+- derive debug implementations for configs and packet codecs ([c7f6609](https://github.com/ws-io/ws.io-rs/commit/c7f6609a360a1cf83e38ae312f0cbdd949f004ac))
+
+### 🚀 Enhancements
+
+- *(core)* [**breaking**] add LZ4 packet compression ([ca6fba0](https://github.com/ws-io/ws.io-rs/commit/ca6fba07a202dff8589e1bde975dbf01845ce40a))
+- *(server)* add native Hyper and standalone services ([31b5871](https://github.com/ws-io/ws.io-rs/commit/31b5871af033299ff56cf089497a19ff1a0c3de4))
+- *(server)* expose transport-only connection close ([0554b7b](https://github.com/ws-io/ws.io-rs/commit/0554b7b9068a5e8e15fc3e163b49203e30940088))
+
+### 🩹 Fixes
+
+- *(server)* remove unnecessary Default bound on request bodies ([f42314f](https://github.com/ws-io/ws.io-rs/commit/f42314f777f740ec606f48a11d08ab6f40af5e37))
+- *(server)* supervise initialization and queue ready before activation ([b0e0984](https://github.com/ws-io/ws.io-rs/commit/b0e0984bbe7259ed1ef4a1d98f6d85ae0a1ab947))
+- *(client)* isolate event queues across explicit reconnects ([7191402](https://github.com/ws-io/ws.io-rs/commit/7191402c31b216d172b7373a3ee7dbabd2cf6922))
+
 ## 0.16.0 - 2026-10-24T20:51:43Z
 
 [compare changes](https://github.com/ws-io/ws.io-rs/compare/wsio-server-v0.15.3...wsio-server-v0.16.0)
