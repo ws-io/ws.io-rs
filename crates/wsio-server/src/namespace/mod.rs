@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use anyhow::{
+    Error as AnyhowError,
     Result,
     anyhow,
 };
@@ -28,6 +29,7 @@ use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
+use parking_lot::Mutex;
 use roaring::RoaringTreemap;
 use serde::Serialize;
 use tokio::{
@@ -42,7 +44,10 @@ use tokio_tungstenite::{
         protocol::Role,
     },
 };
-use tokio_util::task::TaskTracker;
+use tokio_util::{
+    sync::CancellationToken,
+    task::TaskTracker,
+};
 
 pub(crate) mod builder;
 mod config;
@@ -82,9 +87,10 @@ enum NamespaceStatus {
 // Structs
 #[derive(Debug)]
 pub struct WsIoServerNamespace {
+    pub(crate) cancel_token: CancellationToken,
     pub(crate) config: WsIoServerNamespaceConfig,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
-    connection_task_tracker: TaskTracker,
+    connection_task_tracker: Mutex<TaskTracker>,
     rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Weak<WsIoServerRuntime>,
     shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
@@ -94,9 +100,10 @@ pub struct WsIoServerNamespace {
 impl WsIoServerNamespace {
     fn new(config: WsIoServerNamespaceConfig, runtime: &Arc<WsIoServerRuntime>) -> Arc<Self> {
         Arc::new(Self {
+            cancel_token: CancellationToken::new(),
             config,
             connections: FxDashMap::default(),
-            connection_task_tracker: TaskTracker::new(),
+            connection_task_tracker: Mutex::new(TaskTracker::new()),
             rooms: FxDashMap::default(),
             runtime: Arc::downgrade(runtime),
             shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
@@ -134,11 +141,23 @@ impl WsIoServerNamespace {
                 "rejecting upgraded request because server or namespace is not running"
             );
 
-            ws_stream
-                .send((*self.encode_packet_to_message(&WsIoPacket::new_disconnect()).await?).clone())
-                .await?;
+            select! {
+                biased;
+                () = self.cancel_token.cancelled() => {},
+                result = timeout(self.config.disconnect_timeout, async {
+                    ws_stream
+                        .send((*self.encode_packet_to_message(&WsIoPacket::new_disconnect()).await?).clone())
+                        .await?;
 
-            let _ = ws_stream.close(None).await;
+                    let _ = ws_stream.close(None).await;
+                    Ok::<(), AnyhowError>(())
+                }) => {
+                    if let Ok(result) = result {
+                        result?;
+                    }
+                },
+            }
+
             return Ok(());
         }
 
@@ -234,26 +253,31 @@ impl WsIoServerNamespace {
             }
         });
 
-        // Initialization must also yield to close requests (including stalled transformers).
+        // Supervise transport tasks throughout initialization and the ready lifetime.
         let cancel_token = connection.cancel_token();
-        let init_result = select! {
-            biased;
-            () = cancel_token.cancelled() => Err(anyhow!("connection closed during initialization")),
-            result = connection.init() => result,
-        };
+        let connection_lifecycle = async {
+            let init_result = select! {
+                biased;
+                () = cancel_token.cancelled() => return,
+                result = connection.init() => result,
+            };
 
-        if let Err(_err) = init_result {
-            #[cfg(feature = "tracing")]
-            tracing::debug!(connection_id = connection.id(), error = %_err, "server connection initialization failed");
-            connection.close();
-        } else {
-            #[cfg(feature = "tracing")]
-            tracing::debug!(connection_id = connection.id(), "server connection initialized");
-        }
+            if let Err(_err) = init_result {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = connection.id(), error = %_err, "server connection initialization failed");
+                connection.close();
+            } else {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(connection_id = connection.id(), "server connection initialized");
+            }
+
+            cancel_token.cancelled().await;
+        };
 
         select! {
             biased;
-            () = cancel_token.cancelled() => {
+            () = connection_lifecycle => {
+                connection.close();
                 shutdown_websocket_stream_tasks(
                     read_ws_stream_task,
                     write_ws_stream_task,
@@ -283,19 +307,25 @@ impl WsIoServerNamespace {
     }
 
     async fn shutdown_inner(self: &Arc<Self>) {
-        match self.status.get() {
-            NamespaceStatus::Stopped => return,
-            NamespaceStatus::Running => {
-                #[cfg(feature = "tracing")]
-                tracing::info!(namespace = self.config.path, "shutting down namespace");
-                self.status.store(NamespaceStatus::Stopping);
-            },
-            NamespaceStatus::Stopping => unreachable!(),
-        }
+        let connection_task_tracker = {
+            let connection_task_tracker = self.connection_task_tracker.lock();
+            match self.status.get() {
+                NamespaceStatus::Stopped => return,
+                NamespaceStatus::Running => {
+                    #[cfg(feature = "tracing")]
+                    tracing::info!(namespace = self.config.path, "shutting down namespace");
+                    self.status.store(NamespaceStatus::Stopping);
+                },
+                NamespaceStatus::Stopping => unreachable!(),
+            }
 
+            connection_task_tracker.close();
+            connection_task_tracker.clone()
+        };
+
+        self.cancel_token.cancel();
         self.close_all().await;
-        self.connection_task_tracker.close();
-        self.connection_task_tracker.wait().await;
+        connection_task_tracker.wait().await;
 
         self.status.store(NamespaceStatus::Stopped);
 
@@ -337,9 +367,21 @@ impl WsIoServerNamespace {
             "spawning WebSocket upgrade task"
         );
 
+        // Serialize task admission with the transition to Stopping.
+        let connection_task_tracker = self.connection_task_tracker.lock();
+        if !self.status.is(NamespaceStatus::Running) {
+            return;
+        }
+
         let namespace = Arc::clone(self);
-        self.connection_task_tracker.spawn(async move {
-            match timeout(namespace.config.http_request_upgrade_timeout, on_upgrade).await {
+        connection_task_tracker.spawn(async move {
+            let upgrade_result = select! {
+                biased;
+                () = namespace.cancel_token.cancelled() => return,
+                result = timeout(namespace.config.http_request_upgrade_timeout, on_upgrade) => result,
+            };
+
+            match upgrade_result {
                 Ok(Ok(upgraded)) => {
                     if let Err(_err) = namespace.handle_upgraded_request(headers, request_uri, upgraded).await {
                         #[cfg(feature = "tracing")]

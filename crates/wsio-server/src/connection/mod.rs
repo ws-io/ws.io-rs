@@ -201,7 +201,7 @@ impl WsIoServerConnection {
 
         (
             Arc::new(Self {
-                cancel_token: CancellationToken::new(),
+                cancel_token: namespace.cancel_token.child_token(),
                 event_dispatcher_task: Mutex::new(None),
                 event_queue_tx,
                 event_registry: WsIoEventRegistry::new(),
@@ -328,6 +328,13 @@ impl WsIoServerConnection {
             }
         }
 
+        // Queue Ready before allowing event sends or publishing the connection.
+        self.state.ensure(ConnectionState::Activating, |state| {
+            format!("Cannot activate connection in invalid state: {state:?}")
+        })?;
+
+        self.send_packet(&WsIoPacket::new_ready()).await?;
+
         // Transition state to Ready
         self.state
             .try_transition(ConnectionState::Activating, ConnectionState::Ready)?;
@@ -339,9 +346,6 @@ impl WsIoServerConnection {
 
         #[cfg(feature = "tracing")]
         tracing::debug!(connection_id = self.id, "server connection is ready");
-
-        // Send ready packet
-        self.send_packet(&WsIoPacket::new_ready()).await?;
 
         // Invoke on_ready_handler if configured
         if let Some(on_ready_handler) = self.namespace.config.on_ready_handler.clone() {
