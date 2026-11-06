@@ -25,6 +25,10 @@ use self::{
         WsIoServerNamespace,
         builder::WsIoServerNamespaceBuilder,
     },
+    request_adapters::service::{
+        NotFoundService,
+        WsIoServerService,
+    },
     runtime::WsIoServerRuntime,
 };
 
@@ -98,6 +102,22 @@ impl WsIoServer {
     #[inline]
     pub fn room_connection_count(&self, room_name: impl AsRef<str>) -> u64 {
         self.0.room_connection_count(room_name.as_ref())
+    }
+
+    /// Creates a standalone Hyper service, also usable with Tower when enabled.
+    ///
+    /// Requests outside the configured request path receive a 404 response.
+    /// Enable HTTP upgrades on the Hyper connection with `.with_upgrades()`.
+    pub fn service(&self) -> WsIoServerService {
+        self.service_with_inner(NotFoundService)
+    }
+
+    /// Creates an HTTP service that forwards non-ws.io requests to `inner`.
+    ///
+    /// The inner service determines whether this implements Hyper or Tower's
+    /// service trait. Its response body must implement [`Default`].
+    pub fn service_with_inner<S>(&self, inner: S) -> WsIoServerService<S> {
+        WsIoServerService::new(inner, Arc::clone(&self.0))
     }
 
     pub async fn shutdown(&self) {

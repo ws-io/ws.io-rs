@@ -1,5 +1,4 @@
 use std::{
-    convert::Infallible,
     future::{
         Ready,
         poll_fn,
@@ -14,7 +13,6 @@ use http::{
     StatusCode,
     Version,
 };
-use http_body::Frame;
 use parking_lot::Mutex;
 use tokio::{
     spawn,
@@ -32,20 +30,11 @@ use tower_layer::Layer;
 use super::*;
 use crate::{
     WsIoServer,
-    test_support::TEST_TIMEOUT,
+    test_support::{
+        TEST_TIMEOUT,
+        TestBody,
+    },
 };
-
-#[derive(Debug, Default)]
-struct TestBody(Option<Bytes>);
-
-impl Body for TestBody {
-    type Data = Bytes;
-    type Error = Infallible;
-
-    fn poll_frame(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
-        Poll::Ready(self.0.take().map(|bytes| Ok(Frame::data(bytes))))
-    }
-}
 
 struct TestService {
     ready_rx: Arc<Mutex<mpsc::UnboundedReceiver<Result<(), &'static str>>>>,
@@ -247,5 +236,36 @@ async fn inner_readiness_and_call_errors_are_preserved() {
         assert_eq!(error, "call failed");
         assert_eq!(requests_rx.try_recv().unwrap().uri(), "/other");
         assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+    }
+}
+
+#[tokio::test]
+async fn standalone_service_dispatches_wsio_and_returns_not_found_for_other_paths() {
+    let server = WsIoServer::builder().build().unwrap();
+    let mut service = server.service();
+
+    for (uri, expected_status) in [
+        ("/ws.io?namespace=/test", StatusCode::METHOD_NOT_ALLOWED),
+        ("/other", StatusCode::NOT_FOUND),
+    ] {
+        timeout(
+            TEST_TIMEOUT,
+            poll_fn(|ctx| TowerService::<Request<TestBody>>::poll_ready(&mut service, ctx)),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .body(TestBody::default())
+            .unwrap();
+
+        let response = timeout(TEST_TIMEOUT, TowerService::call(&mut service, request))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.status(), expected_status);
     }
 }

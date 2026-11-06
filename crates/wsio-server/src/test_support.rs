@@ -33,15 +33,15 @@ use crate::{
 pub(crate) const TEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 // Structs
-#[derive(Default)]
-pub(crate) struct EmptyBody;
+#[derive(Debug, Default)]
+pub(crate) struct TestBody(pub(crate) Option<Bytes>);
 
-impl Body for EmptyBody {
+impl Body for TestBody {
     type Data = Bytes;
     type Error = Infallible;
 
-    fn poll_frame(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
-        Poll::Ready(None)
+    fn poll_frame(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
+        Poll::Ready(self.0.take().map(|bytes| Ok(Frame::data(bytes))))
     }
 }
 

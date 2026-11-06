@@ -1,5 +1,7 @@
 use std::{
+    convert::Infallible,
     fmt::Debug as FmtDebug,
+    future::Ready,
     mem::replace,
     pin::Pin,
     sync::Arc,
@@ -14,23 +16,29 @@ use http::{
     Response,
 };
 use http_body::Body;
+use hyper::service::Service as HyperService;
 use tower_service::Service as TowerService;
 
-use crate::{
-    request::dispatch_request,
-    runtime::WsIoServerRuntime,
+use super::super::service::{
+    EmptyBody,
+    NotFoundService,
+    WsIoServerService,
 };
+use crate::request::dispatch_request;
 
-// Structs
-#[derive(Debug, Clone)]
-pub struct WsIoServerService<S> {
-    inner: S,
-    runtime: Arc<WsIoServerRuntime>,
-}
+impl<ReqBody> TowerService<Request<ReqBody>> for NotFoundService {
+    type Error = Infallible;
+    type Future = Ready<Result<Self::Response, Self::Error>>;
+    type Response = Response<EmptyBody>;
 
-impl<S> WsIoServerService<S> {
-    pub(super) fn new(inner: S, runtime: Arc<WsIoServerRuntime>) -> Self {
-        Self { inner, runtime }
+    #[inline]
+    fn call(&mut self, request: Request<ReqBody>) -> Self::Future {
+        HyperService::call(self, request)
+    }
+
+    #[inline]
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 }
 

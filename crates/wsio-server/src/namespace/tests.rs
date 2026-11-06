@@ -36,8 +36,8 @@ use crate::{
         },
     },
     request::dispatch_request,
+    request_adapters::service::EmptyBody,
     test_support::{
-        EmptyBody,
         TEST_TIMEOUT,
         ready_connection,
     },

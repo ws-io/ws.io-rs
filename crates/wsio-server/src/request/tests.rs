@@ -29,10 +29,8 @@ use tokio::{
 use super::*;
 use crate::{
     WsIoServer,
-    test_support::{
-        EmptyBody,
-        TEST_TIMEOUT,
-    },
+    request_adapters::service::EmptyBody,
+    test_support::TEST_TIMEOUT,
 };
 
 fn new_request() -> Request<()> {
