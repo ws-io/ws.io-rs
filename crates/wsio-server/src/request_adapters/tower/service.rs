@@ -65,3 +65,6 @@ where
         self.inner.poll_ready(ctx)
     }
 }
+
+#[cfg(test)]
+mod tests;
