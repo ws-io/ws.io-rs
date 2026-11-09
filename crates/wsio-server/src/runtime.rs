@@ -22,7 +22,6 @@ use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
-use parking_lot::RwLock;
 use serde::Serialize;
 
 use crate::{
@@ -51,7 +50,7 @@ pub(crate) enum WsIoServerRuntimeStatus {
 pub(crate) struct WsIoServerRuntime {
     pub(crate) config: WsIoServerConfig,
     connection_count: AtomicUsize,
-    namespaces: RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
+    namespaces: parking_lot::RwLock<FxHashMap<String, Arc<WsIoServerNamespace>>>,
     shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) status: AtomicEnumCell<WsIoServerRuntimeStatus>,
 }
@@ -61,7 +60,7 @@ impl WsIoServerRuntime {
         Arc::new(Self {
             config,
             connection_count: AtomicUsize::new(0),
-            namespaces: RwLock::new(FxHashMap::default()),
+            namespaces: parking_lot::RwLock::new(FxHashMap::default()),
             shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             status: AtomicEnumCell::new(WsIoServerRuntimeStatus::Running),
         })

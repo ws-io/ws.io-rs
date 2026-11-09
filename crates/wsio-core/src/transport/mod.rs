@@ -11,7 +11,6 @@ use anyhow::{
 use tokio::{
     select,
     sync::Semaphore,
-    task::JoinHandle,
     time::timeout,
 };
 use tungstenite::{
@@ -88,8 +87,8 @@ pub async fn encode_packet_to_message(
 /// Waits for either transport task to finish, then stops its sibling.
 /// If neither finishes within the grace period, aborts and joins both tasks.
 pub async fn shutdown_websocket_stream_tasks(
-    mut read_task: JoinHandle<()>,
-    mut write_task: JoinHandle<()>,
+    mut read_task: tokio::task::JoinHandle<()>,
+    mut write_task: tokio::task::JoinHandle<()>,
     shutdown_timeout: Duration,
 ) {
     let graceful_shutdown = timeout(shutdown_timeout, async {

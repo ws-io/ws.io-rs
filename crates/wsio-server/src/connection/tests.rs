@@ -1,20 +1,13 @@
 use std::{
     future::pending,
-    sync::{
-        Mutex as StdMutex,
-        atomic::AtomicUsize,
-    },
+    sync::atomic::AtomicUsize,
     time::Duration,
 };
 
 use async_trait::async_trait;
 use futures_util::poll;
 use tokio::{
-    sync::{
-        Semaphore,
-        mpsc::error::TryRecvError,
-    },
-    task::yield_now,
+    sync::Semaphore,
     time::advance,
 };
 
@@ -43,7 +36,7 @@ enum SetupStage {
 }
 
 struct ReadyGateTransformer {
-    started_tx: mpsc::UnboundedSender<()>,
+    started_tx: tokio::sync::mpsc::UnboundedSender<()>,
     release: Arc<Semaphore>,
 }
 
@@ -68,8 +61,8 @@ fn new_connection(
 ) -> (
     WsIoServer,
     Arc<WsIoServerConnection>,
-    mpsc::Receiver<Arc<Message>>,
-    mpsc::Receiver<WsIoPacket>,
+    tokio::sync::mpsc::Receiver<Arc<Message>>,
+    tokio::sync::mpsc::Receiver<WsIoPacket>,
 ) {
     let server = WsIoServer::builder().channel_capacity(1).build().unwrap();
     let (connection, messages, events) = WsIoServerConnection::new(
@@ -101,7 +94,7 @@ async fn decode_message(connection: &WsIoServerConnection, message: &Message) ->
     config.packet_codec.decode(&bytes).unwrap()
 }
 
-async fn ready(connection: &Arc<WsIoServerConnection>, messages: &mut mpsc::Receiver<Arc<Message>>) {
+async fn ready(connection: &Arc<WsIoServerConnection>, messages: &mut tokio::sync::mpsc::Receiver<Arc<Message>>) {
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
     incoming(connection, WsIoPacket::new_init(None)).await.unwrap();
@@ -152,7 +145,7 @@ async fn handshake_rejects_out_of_order_packets_and_gates_events_until_ready() {
 
 #[tokio::test]
 async fn ready_is_queued_before_activation_and_broadcast_visibility() {
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
     let release = Arc::new(Semaphore::new(0));
     let (_server, connection, mut messages, _) = new_connection(|builder| {
         builder
@@ -166,7 +159,7 @@ async fn ready_is_queued_before_activation_and_broadcast_visibility() {
     connection.init().await.unwrap();
     messages.try_recv().unwrap();
     let connection_clone = Arc::clone(&connection);
-    let handshake = spawn(async move { incoming(&connection_clone, WsIoPacket::new_init(None)).await });
+    let handshake = tokio::task::spawn(async move { incoming(&connection_clone, WsIoPacket::new_init(None)).await });
     assert_eq!(timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap(), Some(()));
 
     assert_eq!(connection.state.get(), ConnectionState::Activating);
@@ -176,7 +169,7 @@ async fn ready_is_queued_before_activation_and_broadcast_visibility() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(messages.try_recv(), Err(TryRecvError::Empty));
+    assert_eq!(messages.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Empty));
 
     release.add_permits(1);
     timeout(TEST_TIMEOUT, handshake).await.unwrap().unwrap().unwrap();
@@ -193,7 +186,7 @@ async fn ready_is_queued_before_activation_and_broadcast_visibility() {
     let event = decode_message(&connection, &messages.try_recv().unwrap()).await;
     assert!(matches!(event.r#type, WsIoPacketType::Event));
     assert_eq!(event.key.as_deref(), Some("after-ready"));
-    assert_eq!(messages.try_recv(), Err(TryRecvError::Empty));
+    assert_eq!(messages.try_recv(), Err(tokio::sync::mpsc::error::TryRecvError::Empty));
 
     timeout(TEST_TIMEOUT, connection.cleanup()).await.unwrap();
     assert_eq!(connection.namespace.connection_count(), 0);
@@ -217,7 +210,7 @@ async fn missing_init_response_expires_but_ready_disarms_watchdog() {
 
     ready(&connection, &mut messages).await;
     advance(Duration::from_secs(2)).await;
-    yield_now().await;
+    tokio::task::yield_now().await;
     assert!(connection.is_ready());
     assert!(!connection.cancel_token.is_cancelled());
     assert!(connection.init_timeout_task.lock().await.is_none());
@@ -353,8 +346,8 @@ async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
         })
         .await;
 
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (alive_tx, mut alive_rx) = tokio::sync::mpsc::unbounded_channel();
     let id = connection.on("e", move |_, _: Arc<()>| {
         park_until_dropped(started_tx.clone(), alive_tx.clone())
     });
@@ -368,7 +361,10 @@ async fn cleanup_stops_dispatch_and_removes_membership_before_close_hook() {
     assert!(!connection.cancel_token.is_cancelled());
     timeout(TEST_TIMEOUT, connection.cleanup()).await.unwrap();
     assert!(connection.cancel_token.is_cancelled());
-    assert_eq!(alive_rx.try_recv(), Err(TryRecvError::Disconnected));
+    assert_eq!(
+        alive_rx.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    );
 
     // Cleanup is idempotent: the close hook must not run twice.
     connection.cleanup().await;
@@ -396,11 +392,11 @@ async fn stalled_close_hook_is_bounded_by_timeout() {
 
 #[tokio::test]
 async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection() {
-    let order = Arc::new(StdMutex::new(Vec::new()));
+    let order = Arc::new(std::sync::Mutex::new(Vec::new()));
     let init_order = Arc::clone(&order);
     let middleware_order = Arc::clone(&order);
     let connect_order = Arc::clone(&order);
-    let (ready_tx, mut ready_rx) = mpsc::unbounded_channel();
+    let (ready_tx, mut ready_rx) = tokio::sync::mpsc::unbounded_channel();
     let (_server, connection, mut messages, _) = new_connection(|builder| {
         builder
             .with_init_request(|_| async { Ok(Some(7_u32)) })
@@ -475,8 +471,8 @@ async fn setup_hooks_run_in_order_and_ready_hook_observes_published_connection()
 #[tokio::test]
 async fn close_cancels_managed_work_before_cleanup() {
     let (_server, connection, _, _) = new_connection(|builder| builder);
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (alive_tx, mut alive_rx) = tokio::sync::mpsc::unbounded_channel();
     connection.spawn_task(park_until_dropped(started_tx, alive_tx));
     timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
     connection.close();
@@ -502,7 +498,7 @@ async fn cleanup_aborts_pending_init_response_watchdog() {
     assert!(connection.init_timeout_task.lock().await.is_none());
     timeout(TEST_TIMEOUT, async {
         while !watchdog.is_finished() {
-            yield_now().await;
+            tokio::task::yield_now().await;
         }
     })
     .await

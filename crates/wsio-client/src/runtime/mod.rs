@@ -25,13 +25,7 @@ use serde::{
 };
 use tokio::{
     select,
-    spawn,
-    sync::{
-        Mutex,
-        Notify,
-        mpsc,
-    },
-    task::JoinHandle,
+    sync::Notify,
     time::{
         sleep,
         timeout,
@@ -77,13 +71,13 @@ pub(crate) struct WsIoClientRuntime {
     cancel_token: ArcSwap<CancellationToken>,
     pub(crate) config: WsIoClientConfig,
     connect_url: Url,
-    connection_loop_task: Mutex<Option<JoinHandle<()>>>,
+    connection_loop_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     connect_completion: Arc<WsIoLifecycleCompletionSlot>,
     disconnect_completion: Arc<WsIoLifecycleCompletionSlot>,
     pub(crate) event_registry: WsIoEventRegistry<WsIoClientSession>,
-    lifecycle_lock: Mutex<()>,
-    send_event_message_task: Mutex<Option<JoinHandle<()>>>,
-    send_event_message_tx: ArcSwapOption<mpsc::Sender<Arc<Message>>>,
+    lifecycle_lock: tokio::sync::Mutex<()>,
+    send_event_message_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    send_event_message_tx: ArcSwapOption<tokio::sync::mpsc::Sender<Arc<Message>>>,
     session: ArcSwapOption<WsIoClientSession>,
     status: AtomicEnumCell<RuntimeStatus>,
     pub(crate) wake_send_event_message_task_notify: Notify,
@@ -102,12 +96,12 @@ impl WsIoClientRuntime {
             cancel_token: ArcSwap::new(Arc::new(CancellationToken::new())),
             config,
             connect_url,
-            connection_loop_task: Mutex::new(None),
+            connection_loop_task: tokio::sync::Mutex::new(None),
             connect_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             disconnect_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
             event_registry: WsIoEventRegistry::new(),
-            lifecycle_lock: Mutex::new(()),
-            send_event_message_task: Mutex::new(None),
+            lifecycle_lock: tokio::sync::Mutex::new(()),
+            send_event_message_task: tokio::sync::Mutex::new(None),
             send_event_message_tx: ArcSwapOption::new(None),
             session: ArcSwapOption::new(None),
             status: AtomicEnumCell::new(RuntimeStatus::Stopped),
@@ -139,10 +133,10 @@ impl WsIoClientRuntime {
 
         // Each explicit connect owns a queue; automatic reconnects reuse it.
         let (send_event_message_tx, mut send_event_message_rx) =
-            mpsc::channel::<Arc<Message>>(self.config.channel_capacity);
+            tokio::sync::mpsc::channel::<Arc<Message>>(self.config.channel_capacity);
 
         let runtime = Arc::clone(self);
-        *self.send_event_message_task.lock().await = Some(spawn(async move {
+        *self.send_event_message_task.lock().await = Some(tokio::task::spawn(async move {
             while let Some(message) = send_event_message_rx.recv().await {
                 #[cfg(feature = "tracing")]
                 tracing::trace!("dequeued client event message for delivery");
@@ -169,7 +163,7 @@ impl WsIoClientRuntime {
 
         // Publish the queue before starting connections and their ready callbacks.
         let runtime = Arc::clone(self);
-        *self.connection_loop_task.lock().await = Some(spawn(async move {
+        *self.connection_loop_task.lock().await = Some(tokio::task::spawn(async move {
             while runtime.status.is(RuntimeStatus::Running) {
                 if let Err(_err) = runtime.run_connection().await {
                     #[cfg(feature = "tracing")]
@@ -303,7 +297,7 @@ impl WsIoClientRuntime {
         // Create read and write tasks
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
         let session_clone = Arc::clone(&session);
-        let mut read_ws_stream_task = spawn(async move {
+        let mut read_ws_stream_task = tokio::task::spawn(async move {
             while let Some(message) = ws_stream_reader.next().await {
                 if match message {
                     Ok(Message::Binary(bytes)) => session_clone.handle_incoming_packet(bytes).await,
@@ -329,7 +323,7 @@ impl WsIoClientRuntime {
             }
         });
 
-        let mut write_ws_stream_task = spawn(async move {
+        let mut write_ws_stream_task = tokio::task::spawn(async move {
             while let Some(message) = message_rx.recv().await {
                 let message = (*message).clone();
                 let is_close = matches!(message, Message::Close(_));

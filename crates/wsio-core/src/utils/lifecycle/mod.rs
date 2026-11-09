@@ -3,16 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use tokio::{
-    spawn,
-    sync::Mutex,
-};
 use tokio_util::sync::CancellationToken;
 
 // Structs
 #[derive(Debug, Default)]
 pub struct WsIoLifecycleCompletionSlot {
-    token: Mutex<Option<CancellationToken>>,
+    token: tokio::sync::Mutex<Option<CancellationToken>>,
 }
 
 impl WsIoLifecycleCompletionSlot {
@@ -32,7 +28,7 @@ impl WsIoLifecycleCompletionSlot {
 
                 let slot = Arc::clone(self);
                 let completion_token = token.clone();
-                drop(spawn(async move {
+                drop(tokio::task::spawn(async move {
                     operation().await;
                     slot.token.lock().await.take();
                     completion_token.cancel();

@@ -1,8 +1,8 @@
 use std::{
+    fmt,
     fmt::{
         Debug as FmtDebug,
         Formatter,
-        Result as FmtResult,
     },
     sync::Arc,
 };
@@ -52,7 +52,7 @@ pub struct WsIoPacketTransformer {
 }
 
 impl FmtDebug for WsIoPacketTransformer {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.kind {
             WsIoPacketTransformerKind::Noop => f.write_str("WsIoPacketTransformer::Noop"),
 

@@ -1,12 +1,4 @@
 use bytes::Bytes;
-use tokio::{
-    spawn,
-    sync::mpsc::{
-        self,
-        error::TryRecvError,
-    },
-    time::Instant,
-};
 
 use super::*;
 #[cfg(feature = "packet-transformer-zstd")]
@@ -17,10 +9,10 @@ use crate::test_support::{
     tagged_transformer,
 };
 
-async fn spawn_parked_task() -> (JoinHandle<()>, mpsc::UnboundedReceiver<()>) {
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, alive_rx) = mpsc::unbounded_channel();
-    let task = spawn(async move {
+async fn spawn_parked_task() -> (tokio::task::JoinHandle<()>, tokio::sync::mpsc::UnboundedReceiver<()>) {
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (alive_tx, alive_rx) = tokio::sync::mpsc::unbounded_channel();
+    let task = tokio::task::spawn(async move {
         let _ = park_until_dropped(started_tx, alive_tx).await;
     });
 
@@ -32,7 +24,7 @@ async fn spawn_parked_task() -> (JoinHandle<()>, mpsc::UnboundedReceiver<()>) {
 async fn completion_of_either_side_aborts_and_joins_the_other() {
     for read_finishes in [false, true] {
         let (parked, mut alive) = spawn_parked_task().await;
-        let completed = spawn(async {});
+        let completed = tokio::task::spawn(async {});
         let (read, write) = if read_finishes {
             (completed, parked)
         } else {
@@ -46,7 +38,10 @@ async fn completion_of_either_side_aborts_and_joins_the_other() {
         .await
         .unwrap();
 
-        assert_eq!(alive.try_recv(), Err(TryRecvError::Disconnected));
+        assert_eq!(
+            alive.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+        );
     }
 }
 
@@ -54,11 +49,18 @@ async fn completion_of_either_side_aborts_and_joins_the_other() {
 async fn grace_timeout_aborts_and_joins_both_sides() {
     let (read, mut read_alive) = spawn_parked_task().await;
     let (write, mut write_alive) = spawn_parked_task().await;
-    let start = Instant::now();
+    let start = tokio::time::Instant::now();
     shutdown_websocket_stream_tasks(read, write, Duration::from_secs(5)).await;
     assert_eq!(start.elapsed(), Duration::from_secs(5));
-    assert_eq!(read_alive.try_recv(), Err(TryRecvError::Disconnected));
-    assert_eq!(write_alive.try_recv(), Err(TryRecvError::Disconnected));
+    assert_eq!(
+        read_alive.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    );
+
+    assert_eq!(
+        write_alive.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    );
 }
 
 #[test]

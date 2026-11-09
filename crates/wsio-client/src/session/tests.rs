@@ -8,11 +8,7 @@ use std::{
 };
 
 use futures_util::poll;
-use tokio::{
-    sync::mpsc::error::TryRecvError,
-    task::yield_now,
-    time::advance,
-};
+use tokio::time::advance;
 
 use super::*;
 use crate::{
@@ -27,8 +23,8 @@ fn new_session(
     configure: impl FnOnce(WsIoClientBuilder) -> WsIoClientBuilder,
 ) -> (
     Arc<WsIoClientSession>,
-    mpsc::Receiver<Arc<Message>>,
-    mpsc::Receiver<WsIoPacket>,
+    tokio::sync::mpsc::Receiver<Arc<Message>>,
+    tokio::sync::mpsc::Receiver<WsIoPacket>,
 ) {
     let builder = WsIoClient::builder("ws://localhost/test").unwrap().channel_capacity(1);
     WsIoClientSession::new(configure(builder).build().unwrap().0)
@@ -54,7 +50,7 @@ async fn decode_message(session: &WsIoClientSession, message: &Message) -> WsIoP
     config.packet_codec.decode(&bytes).unwrap()
 }
 
-async fn ready(session: &Arc<WsIoClientSession>, messages: &mut mpsc::Receiver<Arc<Message>>) {
+async fn ready(session: &Arc<WsIoClientSession>, messages: &mut tokio::sync::mpsc::Receiver<Arc<Message>>) {
     session.init().await;
     incoming(session, WsIoPacket::new_init(None)).await.unwrap();
     let packet = decode_message(session, &messages.try_recv().unwrap()).await;
@@ -124,7 +120,7 @@ async fn missing_init_or_ready_expires_and_success_disarms_watchdogs() {
     let (session, mut messages, _) = new_session(configure);
     ready(&session, &mut messages).await;
     advance(Duration::from_secs(3)).await;
-    yield_now().await;
+    tokio::task::yield_now().await;
     assert!(session.is_ready());
     assert!(!session.cancel_token.is_cancelled());
     assert!(session.init_timeout_task.lock().await.is_none());
@@ -200,8 +196,8 @@ async fn cleanup_cancels_and_joins_dispatch_without_prior_close() {
     });
 
     ready(&session, &mut messages).await;
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (alive_tx, mut alive_rx) = tokio::sync::mpsc::unbounded_channel();
     let id = session.runtime.event_registry.on("e", move |_, _: Arc<()>| {
         park_until_dropped(started_tx.clone(), alive_tx.clone())
     });
@@ -214,7 +210,11 @@ async fn cleanup_cancels_and_joins_dispatch_without_prior_close() {
     assert!(!session.cancel_token.is_cancelled());
     timeout(TEST_TIMEOUT, session.cleanup()).await.unwrap();
     assert!(session.cancel_token.is_cancelled());
-    assert_eq!(alive_rx.try_recv(), Err(TryRecvError::Disconnected));
+    assert_eq!(
+        alive_rx.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
+    );
+
     assert_eq!(closes.load(Ordering::SeqCst), 1);
     assert!(session.event_dispatcher_task.lock().await.is_none());
     assert!(session.ping_task.lock().await.is_none());
@@ -238,7 +238,7 @@ async fn stalled_close_hook_is_bounded_by_timeout() {
 
 #[tokio::test]
 async fn init_exchange_is_typed_and_ready_hook_runs_once() {
-    let (ready_tx, mut ready_rx) = mpsc::unbounded_channel();
+    let (ready_tx, mut ready_rx) = tokio::sync::mpsc::unbounded_channel();
     let (session, mut messages, _) = new_session(|builder| {
         builder
             .with_init_handler(|_, data: Option<u32>| async move {
@@ -283,8 +283,8 @@ async fn init_exchange_is_typed_and_ready_hook_runs_once() {
 #[tokio::test]
 async fn close_cancels_managed_work_before_cleanup() {
     let (session, _, _) = new_session(|builder| builder);
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (alive_tx, mut alive_rx) = tokio::sync::mpsc::unbounded_channel();
     session.spawn_task(park_until_dropped(started_tx, alive_tx));
     timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
     session.close();
@@ -318,7 +318,7 @@ async fn cleanup_aborts_pending_handshake_watchdogs_and_ping_task() {
         // abort_locked_task requests cancellation; it does not promise to join.
         timeout(TEST_TIMEOUT, async {
             while !watchdog_abort.is_finished() || !ping_abort.is_finished() {
-                yield_now().await;
+                tokio::task::yield_now().await;
             }
         })
         .await

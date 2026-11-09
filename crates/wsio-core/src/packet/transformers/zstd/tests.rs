@@ -2,10 +2,7 @@ use std::task::Poll;
 
 use bytes::Bytes;
 use futures_util::poll;
-use tokio::{
-    task::JoinSet,
-    time::timeout,
-};
+use tokio::time::timeout;
 use zstd::bulk::compress;
 
 use super::{
@@ -129,7 +126,7 @@ async fn cloned_transformers_can_share_contexts_concurrently() {
         ..WsIoPacketZstdTransformerConfig::default()
     });
 
-    let mut tasks = JoinSet::new();
+    let mut tasks = tokio::task::JoinSet::new();
     for byte in 0..16 {
         let transformer = transformer.clone();
         tasks.spawn(async move {

@@ -17,12 +17,7 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use tokio::{
-    io::{
-        AsyncWriteExt,
-        duplex,
-    },
-    spawn,
-    sync::mpsc,
+    io::AsyncWriteExt,
     time::timeout,
 };
 
@@ -187,7 +182,7 @@ fn rejected_requests_do_not_consume_upgrade_or_request_metadata() {
 
 #[tokio::test]
 async fn handshake_normalization_preserves_headers_and_uri_for_connection() {
-    let (metadata_tx, mut metadata_rx) = mpsc::unbounded_channel();
+    let (metadata_tx, mut metadata_rx) = tokio::sync::mpsc::unbounded_channel();
     let server = WsIoServer::builder()
         .disconnect_timeout(Duration::ZERO)
         .build()
@@ -205,9 +200,9 @@ async fn handshake_normalization_preserves_headers_and_uri_for_connection() {
         .register()
         .unwrap();
 
-    let (server_io, mut client_io) = duplex(4096);
+    let (server_io, mut client_io) = tokio::io::duplex(4096);
     let runtime = Arc::clone(&server.0);
-    let http_task = spawn(async move {
+    let http_task = tokio::task::spawn(async move {
         http1::Builder::new()
             .serve_connection(
                 TokioIo::new(server_io),

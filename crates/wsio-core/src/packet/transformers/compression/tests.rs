@@ -1,9 +1,6 @@
-use std::sync::mpsc as std_mpsc;
-
 use futures_util::poll;
 use tokio::{
     runtime::Builder,
-    sync::oneshot,
     time::timeout,
 };
 
@@ -74,8 +71,8 @@ fn dropping_encoding_keeps_queued_blocking_permits_until_completion() {
         .unwrap();
 
     for transformer in transformers {
-        let (started_tx, started_rx) = oneshot::channel();
-        let (release_tx, release_rx) = std_mpsc::channel();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
         let blocker = runtime.spawn_blocking(move || {
             started_tx.send(()).unwrap();
             // Dropping the sender also releases this worker if an assertion fails.

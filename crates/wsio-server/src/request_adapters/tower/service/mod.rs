@@ -2,7 +2,7 @@ use std::{
     convert::Infallible,
     fmt::Debug as FmtDebug,
     future::Ready,
-    mem::replace,
+    mem,
     pin::Pin,
     sync::Arc,
     task::{
@@ -11,6 +11,7 @@ use std::{
     },
 };
 
+use anyhow::Result;
 use http::{
     Request,
     Response,
@@ -63,7 +64,7 @@ where
             Box::pin(async move { dispatch_request(&mut request, &runtime) })
         } else {
             let inner = self.inner.clone();
-            let mut inner = replace(&mut self.inner, inner);
+            let mut inner = mem::replace(&mut self.inner, inner);
             Box::pin(async move { inner.call(request).await })
         }
     }

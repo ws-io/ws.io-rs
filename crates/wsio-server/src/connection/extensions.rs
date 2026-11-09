@@ -7,19 +7,18 @@ use std::{
 };
 
 use kikiutils::types::fx_collections::FxHashMap;
-use parking_lot::RwLock;
 
 // Structs
 #[derive(Debug)]
 pub struct ConnectionExtensions {
-    inner: RwLock<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+    inner: parking_lot::RwLock<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
 }
 
 impl ConnectionExtensions {
     #[inline]
     pub(super) fn new() -> Self {
         Self {
-            inner: RwLock::new(FxHashMap::default()),
+            inner: parking_lot::RwLock::new(FxHashMap::default()),
         }
     }
 

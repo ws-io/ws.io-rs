@@ -1,9 +1,5 @@
 use anyhow::Result;
 use bytes::Bytes;
-use postcard::{
-    from_bytes,
-    to_allocvec,
-};
 use serde::{
     Serialize,
     de::DeserializeOwned,
@@ -17,21 +13,21 @@ pub(super) struct WsIoPacketPostcardCodec;
 impl WsIoPacketPostcardCodec {
     #[inline]
     pub(super) fn decode(bytes: &[u8]) -> Result<WsIoPacket> {
-        WsIoPacket::from_inner(from_bytes(bytes)?)
+        WsIoPacket::from_inner(postcard::from_bytes(bytes)?)
     }
 
     #[inline]
     pub(super) fn decode_data<D: DeserializeOwned>(bytes: &[u8]) -> Result<D> {
-        Ok(from_bytes::<D>(bytes)?)
+        Ok(postcard::from_bytes::<D>(bytes)?)
     }
 
     #[inline]
     pub(super) fn encode(packet: &WsIoPacket) -> Result<Bytes> {
-        Ok(to_allocvec(&packet.to_inner_ref())?.into())
+        Ok(postcard::to_allocvec(&packet.to_inner_ref())?.into())
     }
 
     #[inline]
     pub(super) fn encode_data<D: Serialize>(data: &D) -> Result<Bytes> {
-        Ok(to_allocvec(data)?.into())
+        Ok(postcard::to_allocvec(data)?.into())
     }
 }

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use anyhow::Result;
 use futures_util::{
     SinkExt,
     StreamExt,
@@ -10,18 +11,7 @@ use http::{
 };
 use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
-use tokio::{
-    io::{
-        DuplexStream,
-        duplex,
-    },
-    spawn,
-    sync::mpsc::{
-        self,
-        error::TryRecvError,
-    },
-    time::timeout,
-};
+use tokio::time::timeout;
 use tokio_tungstenite::{
     WebSocketStream,
     client_async,
@@ -44,7 +34,7 @@ use crate::{
 
 // Intentionally not Clone: native Hyper forwarding must use the supplied service.
 struct InnerService {
-    requests_tx: mpsc::UnboundedSender<Request<TestBody>>,
+    requests_tx: tokio::sync::mpsc::UnboundedSender<Request<TestBody>>,
     error: Option<&'static str>,
 }
 
@@ -67,7 +57,7 @@ impl HyperService<Request<TestBody>> for InnerService {
     }
 }
 
-async fn next_packet(client: &mut WebSocketStream<DuplexStream>) -> WsIoPacket {
+async fn next_packet(client: &mut WebSocketStream<tokio::io::DuplexStream>) -> WsIoPacket {
     let message = timeout(TEST_TIMEOUT, client.next()).await.unwrap().unwrap().unwrap();
     let Message::Binary(bytes) = message else {
         panic!("expected a binary packet")
@@ -81,7 +71,7 @@ async fn hyper_service_routes_requests_and_preserves_inner_results() {
     let server = WsIoServer::builder().request_path("/socket").unwrap().build().unwrap();
 
     for error in [None, Some("inner failed")] {
-        let (requests_tx, mut requests_rx) = mpsc::unbounded_channel();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::unbounded_channel();
         let service = server.service_with_inner(InnerService { requests_tx, error });
         let request = Request::builder()
             .method(Method::POST)
@@ -91,7 +81,10 @@ async fn hyper_service_routes_requests_and_preserves_inner_results() {
 
         let response = timeout(TEST_TIMEOUT, service.call(request)).await.unwrap().unwrap();
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
-        assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+        assert_eq!(
+            requests_rx.try_recv().unwrap_err(),
+            tokio::sync::mpsc::error::TryRecvError::Empty
+        );
 
         for uri in ["/socket-extra", "/socket/", "/ws.io", "/other?namespace=/test"] {
             let mut request = Request::builder()
@@ -121,7 +114,10 @@ async fn hyper_service_routes_requests_and_preserves_inner_results() {
             assert_eq!(forwarded.headers()["x-request-id"], "original");
             assert_eq!(forwarded.body().0.as_deref(), Some(b"request payload".as_slice()));
             assert_eq!(forwarded.extensions().get::<u64>(), Some(&42));
-            assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+            assert_eq!(
+                requests_rx.try_recv().unwrap_err(),
+                tokio::sync::mpsc::error::TryRecvError::Empty
+            );
         }
     }
 }
@@ -145,8 +141,8 @@ async fn standalone_hyper_service_supports_fallback_and_websocket_upgrade() {
         assert_eq!(response.body().size_hint().exact(), Some(0));
     }
 
-    let (server_io, client_io) = duplex(4096);
-    let http_task = spawn(async move {
+    let (server_io, client_io) = tokio::io::duplex(4096);
+    let http_task = tokio::task::spawn(async move {
         http1::Builder::new()
             .serve_connection(TokioIo::new(server_io), service)
             .with_upgrades()

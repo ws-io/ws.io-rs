@@ -1,10 +1,10 @@
 use std::{
+    fmt,
     fmt::{
         Debug as FmtDebug,
         Formatter,
-        Result as FmtResult,
     },
-    mem::take,
+    mem,
     panic::AssertUnwindSafe,
     sync::{
         Arc,
@@ -34,19 +34,12 @@ use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
-use parking_lot::Mutex as ParkingLotMutex;
 use serde::{
     Serialize,
     de::DeserializeOwned,
 };
 use tokio::{
     select,
-    spawn,
-    sync::{
-        Mutex,
-        mpsc,
-    },
-    task::JoinHandle,
     time::{
         sleep,
         timeout,
@@ -94,24 +87,24 @@ enum ConnectionState {
 // Structs
 pub struct WsIoServerConnection {
     cancel_token: CancellationToken,
-    event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
-    event_queue_tx: mpsc::Sender<WsIoPacket>,
+    event_dispatcher_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    event_queue_tx: tokio::sync::mpsc::Sender<WsIoPacket>,
     event_registry: WsIoEventRegistry<WsIoServerConnection>,
     #[cfg(feature = "connection-extensions")]
     extensions: ConnectionExtensions,
     headers: HeaderMap,
     id: u64,
-    init_timeout_task: Mutex<Option<JoinHandle<()>>>,
-    joined_rooms: ParkingLotMutex<FxHashSet<String>>,
-    message_tx: mpsc::Sender<Arc<Message>>,
+    init_timeout_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    joined_rooms: parking_lot::Mutex<FxHashSet<String>>,
+    message_tx: tokio::sync::mpsc::Sender<Arc<Message>>,
     namespace: Arc<WsIoServerNamespace>,
-    on_close_handler: Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
+    on_close_handler: tokio::sync::Mutex<Option<BoxAsyncUnaryResultHandler<Self>>>,
     request_uri: Uri,
     state: AtomicEnumCell<ConnectionState>,
 }
 
 impl FmtDebug for WsIoServerConnection {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let event_dispatcher_task = match self.event_dispatcher_task.try_lock() {
             Ok(task) => {
                 if task.is_some() {
@@ -185,10 +178,14 @@ impl WsIoServerConnection {
         headers: HeaderMap,
         namespace: Arc<WsIoServerNamespace>,
         request_uri: Uri,
-    ) -> (Arc<Self>, mpsc::Receiver<Arc<Message>>, mpsc::Receiver<WsIoPacket>) {
+    ) -> (
+        Arc<Self>,
+        tokio::sync::mpsc::Receiver<Arc<Message>>,
+        tokio::sync::mpsc::Receiver<WsIoPacket>,
+    ) {
         let channel_capacity = namespace.config.channel_capacity;
-        let (event_queue_tx, event_queue_rx) = mpsc::channel(channel_capacity);
-        let (message_tx, message_rx) = mpsc::channel(channel_capacity);
+        let (event_queue_tx, event_queue_rx) = tokio::sync::mpsc::channel(channel_capacity);
+        let (message_tx, message_rx) = tokio::sync::mpsc::channel(channel_capacity);
         let id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
 
         #[cfg(feature = "tracing")]
@@ -202,18 +199,18 @@ impl WsIoServerConnection {
         (
             Arc::new(Self {
                 cancel_token: namespace.cancel_token.child_token(),
-                event_dispatcher_task: Mutex::new(None),
+                event_dispatcher_task: tokio::sync::Mutex::new(None),
                 event_queue_tx,
                 event_registry: WsIoEventRegistry::new(),
                 #[cfg(feature = "connection-extensions")]
                 extensions: ConnectionExtensions::new(),
                 headers,
                 id,
-                init_timeout_task: Mutex::new(None),
-                joined_rooms: ParkingLotMutex::new(FxHashSet::default()),
+                init_timeout_task: tokio::sync::Mutex::new(None),
+                joined_rooms: parking_lot::Mutex::new(FxHashSet::default()),
                 message_tx,
                 namespace,
-                on_close_handler: Mutex::new(None),
+                on_close_handler: tokio::sync::Mutex::new(None),
                 request_uri,
                 state: AtomicEnumCell::new(ConnectionState::Created),
             }),
@@ -384,7 +381,7 @@ impl WsIoServerConnection {
 
         // Leave all joined rooms
         // Closing rejects new joins; taking the same lock also waits for accepted joins to finish both index updates.
-        let joined_rooms = take(&mut *self.joined_rooms.lock());
+        let joined_rooms = mem::take(&mut *self.joined_rooms.lock());
         for room_name in &joined_rooms {
             self.namespace.remove_connection_id_from_room(room_name, self.id);
         }
@@ -486,7 +483,7 @@ impl WsIoServerConnection {
 
         // Spawn init-response-timeout watchdog to close connection if init not received in time
         let connection = Arc::clone(self);
-        *self.init_timeout_task.lock().await = Some(spawn(async move {
+        *self.init_timeout_task.lock().await = Some(tokio::task::spawn(async move {
             sleep(connection.namespace.config.init_response_timeout).await;
             if connection.state.is(ConnectionState::AwaitingInit) {
                 #[cfg(feature = "tracing")]
@@ -507,10 +504,13 @@ impl WsIoServerConnection {
         Ok(self.message_tx.send(message).await?)
     }
 
-    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: mpsc::Receiver<WsIoPacket>) {
+    pub(super) async fn start_event_dispatcher(
+        self: &Arc<Self>,
+        mut event_queue_rx: tokio::sync::mpsc::Receiver<WsIoPacket>,
+    ) {
         let cancel_token = self.cancel_token();
         let connection = Arc::clone(self);
-        *self.event_dispatcher_task.lock().await = Some(spawn(async move {
+        *self.event_dispatcher_task.lock().await = Some(tokio::task::spawn(async move {
             let dispatcher = async {
                 loop {
                     let event_packet = select! {

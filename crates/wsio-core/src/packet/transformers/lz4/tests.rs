@@ -5,10 +5,7 @@ use futures_util::{
     poll,
 };
 use lz4_flex::block::compress;
-use tokio::{
-    task::JoinSet,
-    time::timeout,
-};
+use tokio::time::timeout;
 
 use super::{
     super::compression::WsIoPacketCompressionTransformer,
@@ -152,7 +149,7 @@ async fn blocking_uses_original_size_and_cancelled_waits_release_capacity() {
     assert!(matches!(poll!(&mut decoding), Poll::Pending));
     drop(decoding);
     drop(permits);
-    let mut tasks = JoinSet::new();
+    let mut tasks = tokio::task::JoinSet::new();
     for _ in 0..8 {
         let transformer = transformer.clone();
         let input = input.clone();

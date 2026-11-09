@@ -20,7 +20,6 @@ use http_body::{
     Body,
     Frame,
 };
-use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::{
@@ -49,8 +48,8 @@ impl Body for TestBody {
 
 /// Reports that it started, then stays pending while holding `alive` until dropped.
 pub(crate) async fn park_until_dropped(
-    started: mpsc::UnboundedSender<()>,
-    _alive: mpsc::UnboundedSender<()>,
+    started: tokio::sync::mpsc::UnboundedSender<()>,
+    _alive: tokio::sync::mpsc::UnboundedSender<()>,
 ) -> Result<()> {
     started.send(()).unwrap();
     pending().await
@@ -59,7 +58,7 @@ pub(crate) async fn park_until_dropped(
 /// Completes the server handshake through the namespace codec and transformer.
 pub(crate) async fn ready_connection(
     namespace: &Arc<WsIoServerNamespace>,
-) -> (Arc<WsIoServerConnection>, mpsc::Receiver<Arc<Message>>) {
+) -> (Arc<WsIoServerConnection>, tokio::sync::mpsc::Receiver<Arc<Message>>) {
     let (connection, mut messages, _events) =
         WsIoServerConnection::new(HeaderMap::new(), Arc::clone(namespace), Uri::from_static("/ws.io"));
 

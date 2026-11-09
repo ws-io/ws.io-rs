@@ -1,6 +1,6 @@
 use std::{
     sync::Arc,
-    thread::available_parallelism,
+    thread,
 };
 
 use anyhow::{
@@ -14,7 +14,6 @@ use tokio::{
         OwnedSemaphorePermit,
         Semaphore,
     },
-    task::spawn_blocking,
 };
 
 pub(super) mod frame;
@@ -96,7 +95,7 @@ impl WsIoPacketCompressionTransformer {
     ) -> Self {
         Self(Arc::new(WsIoPacketCompressionState {
             backend,
-            blocking_semaphore: Arc::new(Semaphore::new(available_parallelism().map_or(1, usize::from))),
+            blocking_semaphore: Arc::new(Semaphore::new(thread::available_parallelism().map_or(1, usize::from))),
             blocking_threshold,
             compression_threshold,
             max_decompressed_size,
@@ -185,7 +184,7 @@ impl WsIoPacketCompressionTransformer {
         if work_size >= self.0.blocking_threshold && Handle::try_current().is_ok() {
             let permit = self.acquire_blocking_permit().await?;
             let state = Arc::clone(&self.0);
-            return spawn_blocking(move || {
+            return tokio::task::spawn_blocking(move || {
                 let result = operation(&state.backend);
                 drop(permit);
                 result

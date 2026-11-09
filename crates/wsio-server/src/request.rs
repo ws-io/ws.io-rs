@@ -1,5 +1,6 @@
-use std::mem::take;
+use std::mem;
 
+use anyhow::Result;
 use http::{
     HeaderName,
     HeaderValue,
@@ -117,7 +118,11 @@ pub(super) fn dispatch_request<ReqBody, ResBody: Default, E: Send>(
         return respond(StatusCode::INTERNAL_SERVER_ERROR);
     };
 
-    namespace.handle_on_upgrade_request(take(request.headers_mut()), on_upgrade, take(request.uri_mut()));
+    namespace.handle_on_upgrade_request(
+        mem::take(request.headers_mut()),
+        on_upgrade,
+        mem::take(request.uri_mut()),
+    );
 
     #[cfg(feature = "tracing")]
     tracing::debug!(namespace = %namespace_path, "accepted WebSocket upgrade request");

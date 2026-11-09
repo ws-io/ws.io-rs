@@ -13,6 +13,7 @@ use std::{
     },
 };
 
+use anyhow::Result;
 use bytes::Bytes;
 use http::{
     Request,

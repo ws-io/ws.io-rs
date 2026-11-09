@@ -3,7 +3,6 @@ use erased_serde::{
     Deserializer as ErasedDeserializer,
     Serialize as ErasedSerialize,
 };
-use rmp_serde::to_vec_named;
 use serde::de::value::{
     Error as ValueError,
     U8Deserializer,
@@ -132,7 +131,7 @@ impl WsIoPacketCustomCodec for ScalarCustomCodec {
 
     fn encode_data(&self, data: &dyn ErasedSerialize) -> Result<Bytes> {
         ensure!(!self.fail, "custom payload encode failure");
-        Ok(to_vec_named(data)?.into())
+        Ok(rmp_serde::to_vec_named(data)?.into())
     }
 }
 

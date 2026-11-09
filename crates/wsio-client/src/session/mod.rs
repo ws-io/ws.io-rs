@@ -20,12 +20,6 @@ use num_enum::{
 };
 use tokio::{
     select,
-    spawn,
-    sync::{
-        Mutex,
-        mpsc,
-    },
-    task::JoinHandle,
     time::{
         sleep,
         timeout,
@@ -63,12 +57,12 @@ enum SessionState {
 #[derive(Debug)]
 pub struct WsIoClientSession {
     cancel_token: CancellationToken,
-    event_dispatcher_task: Mutex<Option<JoinHandle<()>>>,
-    event_queue_tx: mpsc::Sender<WsIoPacket>,
-    init_timeout_task: Mutex<Option<JoinHandle<()>>>,
-    message_tx: mpsc::Sender<Arc<Message>>,
-    ping_task: Mutex<Option<JoinHandle<()>>>,
-    ready_timeout_task: Mutex<Option<JoinHandle<()>>>,
+    event_dispatcher_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    event_queue_tx: tokio::sync::mpsc::Sender<WsIoPacket>,
+    init_timeout_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    message_tx: tokio::sync::mpsc::Sender<Arc<Message>>,
+    ping_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    ready_timeout_task: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
     runtime: Arc<WsIoClientRuntime>,
     state: AtomicEnumCell<SessionState>,
 }
@@ -84,20 +78,24 @@ impl WsIoClientSession {
     #[inline]
     pub(crate) fn new(
         runtime: Arc<WsIoClientRuntime>,
-    ) -> (Arc<Self>, mpsc::Receiver<Arc<Message>>, mpsc::Receiver<WsIoPacket>) {
+    ) -> (
+        Arc<Self>,
+        tokio::sync::mpsc::Receiver<Arc<Message>>,
+        tokio::sync::mpsc::Receiver<WsIoPacket>,
+    ) {
         let channel_capacity = runtime.config.channel_capacity;
-        let (event_queue_tx, event_queue_rx) = mpsc::channel(channel_capacity);
-        let (message_tx, message_rx) = mpsc::channel(channel_capacity);
+        let (event_queue_tx, event_queue_rx) = tokio::sync::mpsc::channel(channel_capacity);
+        let (message_tx, message_rx) = tokio::sync::mpsc::channel(channel_capacity);
 
         (
             Arc::new(Self {
                 cancel_token: CancellationToken::new(),
-                event_dispatcher_task: Mutex::new(None),
+                event_dispatcher_task: tokio::sync::Mutex::new(None),
                 event_queue_tx,
-                init_timeout_task: Mutex::new(None),
+                init_timeout_task: tokio::sync::Mutex::new(None),
                 message_tx,
-                ping_task: Mutex::new(None),
-                ready_timeout_task: Mutex::new(None),
+                ping_task: tokio::sync::Mutex::new(None),
+                ready_timeout_task: tokio::sync::Mutex::new(None),
                 runtime,
                 state: AtomicEnumCell::new(SessionState::Created),
             }),
@@ -114,7 +112,7 @@ impl WsIoClientSession {
 
         self.close();
         let runtime = Arc::clone(&self.runtime);
-        spawn(async move { runtime.disconnect().await });
+        tokio::task::spawn(async move { runtime.disconnect().await });
     }
 
     #[inline]
@@ -176,7 +174,7 @@ impl WsIoClientSession {
 
         // Spawn ready-timeout watchdog to close session if Ready is not received in time
         let session = Arc::clone(self);
-        *self.ready_timeout_task.lock().await = Some(spawn(async move {
+        *self.ready_timeout_task.lock().await = Some(tokio::task::spawn(async move {
             sleep(session.runtime.config.ready_packet_timeout).await;
             if session.state.is(SessionState::AwaitingReady) {
                 #[cfg(feature = "tracing")]
@@ -337,7 +335,7 @@ impl WsIoClientSession {
         let session = Arc::clone(self);
 
         // Create init-timeout watchdog to close session if init not received in time
-        *self.init_timeout_task.lock().await = Some(spawn(async move {
+        *self.init_timeout_task.lock().await = Some(tokio::task::spawn(async move {
             sleep(session.runtime.config.init_packet_timeout).await;
             if session.state.is(SessionState::AwaitingInit) {
                 #[cfg(feature = "tracing")]
@@ -348,7 +346,7 @@ impl WsIoClientSession {
 
         // Create ping task to send 1-byte heartbeat frame to keep the connection alive
         let session = Arc::clone(self);
-        *self.ping_task.lock().await = Some(spawn(async move {
+        *self.ping_task.lock().await = Some(tokio::task::spawn(async move {
             loop {
                 sleep(session.runtime.config.ping_interval).await;
                 if session.send_message(PING_MESSAGE.clone()).await.is_err() {
@@ -360,10 +358,13 @@ impl WsIoClientSession {
         }));
     }
 
-    pub(super) async fn start_event_dispatcher(self: &Arc<Self>, mut event_queue_rx: mpsc::Receiver<WsIoPacket>) {
+    pub(super) async fn start_event_dispatcher(
+        self: &Arc<Self>,
+        mut event_queue_rx: tokio::sync::mpsc::Receiver<WsIoPacket>,
+    ) {
         let cancel_token = self.cancel_token();
         let session = Arc::clone(self);
-        *self.event_dispatcher_task.lock().await = Some(spawn(async move {
+        *self.event_dispatcher_task.lock().await = Some(tokio::task::spawn(async move {
             let dispatcher = async {
                 loop {
                     let event_packet = select! {

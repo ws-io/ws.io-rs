@@ -1,11 +1,10 @@
 use std::{
     io::Cursor,
-    thread::available_parallelism,
+    thread,
 };
 
 use anyhow::Result;
 use bytes::Bytes;
-use parking_lot::Mutex;
 use zstd::{
     bulk::{
         Compressor,
@@ -21,14 +20,14 @@ use super::super::compression::frame::{
 
 // Structs
 struct WsIoPacketContextCache<Context> {
-    contexts: Mutex<Vec<Context>>,
+    contexts: parking_lot::Mutex<Vec<Context>>,
 }
 
 impl<Context> WsIoPacketContextCache<Context> {
     #[inline]
     fn new() -> Self {
         Self {
-            contexts: Mutex::new(Vec::new()),
+            contexts: parking_lot::Mutex::new(Vec::new()),
         }
     }
 
@@ -66,7 +65,7 @@ impl WsIoPacketZstdContextPool {
             compression_level,
             compressors: WsIoPacketContextCache::new(),
             decompressors: WsIoPacketContextCache::new(),
-            max_contexts: available_parallelism().map_or(1, usize::from),
+            max_contexts: thread::available_parallelism().map_or(1, usize::from),
         }
     }
 

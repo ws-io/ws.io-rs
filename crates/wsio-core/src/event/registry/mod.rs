@@ -4,10 +4,10 @@ use std::{
         TypeId,
     },
     collections::hash_map::Entry,
+    fmt,
     fmt::{
         Debug as FmtDebug,
         Formatter,
-        Result as FmtResult,
     },
     iter::once,
     panic::AssertUnwindSafe,
@@ -26,12 +26,8 @@ use anyhow::Result;
 use bytes::Bytes;
 use futures_util::FutureExt;
 use kikiutils::types::fx_collections::FxHashMap;
-use parking_lot::RwLock;
 use serde::de::DeserializeOwned;
-use tokio::{
-    select,
-    task::JoinSet,
-};
+use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 use crate::packet::codecs::WsIoPacketCodec;
@@ -60,11 +56,11 @@ enum HandlerSnapshot<C> {
 struct EventEntry<C> {
     data_decoder: DataDecoder,
     data_type_id: TypeId,
-    handlers: RwLock<FxHashMap<u32, Handler<C>>>,
+    handlers: parking_lot::RwLock<FxHashMap<u32, Handler<C>>>,
 }
 
 impl<C> FmtDebug for EventEntry<C> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut debug = f.debug_struct("EventEntry");
         debug
             .field("data_decoder", &self.data_decoder)
@@ -85,7 +81,7 @@ impl<C> FmtDebug for EventEntry<C> {
 
 #[derive(Debug)]
 pub struct WsIoEventRegistry<C: Send + Sync + 'static> {
-    event_entries: RwLock<FxHashMap<String, Arc<EventEntry<C>>>>,
+    event_entries: parking_lot::RwLock<FxHashMap<String, Arc<EventEntry<C>>>>,
     next_handler_id: AtomicU32,
 }
 
@@ -99,7 +95,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
     #[inline]
     pub fn new() -> Self {
         Self {
-            event_entries: RwLock::new(FxHashMap::default()),
+            event_entries: parking_lot::RwLock::new(FxHashMap::default()),
             next_handler_id: AtomicU32::new(0),
         }
     }
@@ -184,7 +180,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
                 #[cfg(feature = "tracing")]
                 tracing::trace!(event, handler_count = handlers.len(), "dispatching event handlers");
 
-                let mut handler_tasks = JoinSet::new();
+                let mut handler_tasks = tokio::task::JoinSet::new();
                 for handler in handlers {
                     let ctx = Arc::clone(&ctx);
                     let data = Arc::clone(&data);
@@ -261,7 +257,7 @@ impl<C: Send + Sync + 'static> WsIoEventRegistry<C> {
             Entry::Vacant(vacant) => vacant.insert(Arc::new(EventEntry {
                 data_decoder: decode_data_as_any_arc::<D>,
                 data_type_id,
-                handlers: RwLock::new(FxHashMap::default()),
+                handlers: parking_lot::RwLock::new(FxHashMap::default()),
             })),
         };
 

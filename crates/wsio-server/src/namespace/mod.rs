@@ -29,12 +29,10 @@ use num_enum::{
     IntoPrimitive,
     TryFromPrimitive,
 };
-use parking_lot::Mutex;
 use roaring::RoaringTreemap;
 use serde::Serialize;
 use tokio::{
     select,
-    spawn,
     time::timeout,
 };
 use tokio_tungstenite::{
@@ -90,7 +88,7 @@ pub struct WsIoServerNamespace {
     pub(crate) cancel_token: CancellationToken,
     pub(crate) config: WsIoServerNamespaceConfig,
     connections: FxDashMap<u64, Arc<WsIoServerConnection>>,
-    connection_task_tracker: Mutex<TaskTracker>,
+    connection_task_tracker: parking_lot::Mutex<TaskTracker>,
     rooms: FxDashMap<String, RoaringTreemap>,
     runtime: Weak<WsIoServerRuntime>,
     shutdown_completion: Arc<WsIoLifecycleCompletionSlot>,
@@ -103,7 +101,7 @@ impl WsIoServerNamespace {
             cancel_token: CancellationToken::new(),
             config,
             connections: FxDashMap::default(),
-            connection_task_tracker: Mutex::new(TaskTracker::new()),
+            connection_task_tracker: parking_lot::Mutex::new(TaskTracker::new()),
             rooms: FxDashMap::default(),
             runtime: Arc::downgrade(runtime),
             shutdown_completion: Arc::new(WsIoLifecycleCompletionSlot::default()),
@@ -178,7 +176,7 @@ impl WsIoServerNamespace {
         let (mut ws_stream_writer, mut ws_stream_reader) = ws_stream.split();
         let connection_clone = Arc::clone(&connection);
         let connection_idle_timeout = self.config.connection_idle_timeout;
-        let mut read_ws_stream_task = spawn(async move {
+        let mut read_ws_stream_task = tokio::task::spawn(async move {
             loop {
                 let message = if let Some(idle_timeout) = connection_idle_timeout
                     && connection_clone.is_ready()
@@ -234,7 +232,7 @@ impl WsIoServerNamespace {
             }
         });
 
-        let mut write_ws_stream_task = spawn(async move {
+        let mut write_ws_stream_task = tokio::task::spawn(async move {
             while let Some(message) = message_rx.recv().await {
                 let message = (*message).clone();
                 let is_close = matches!(message, Message::Close(_));

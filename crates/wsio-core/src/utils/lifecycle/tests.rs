@@ -4,10 +4,7 @@ use std::sync::atomic::{
 };
 
 use futures_util::poll;
-use tokio::{
-    sync::oneshot,
-    time::timeout,
-};
+use tokio::time::timeout;
 
 use super::*;
 use crate::test_support::TEST_TIMEOUT;
@@ -16,9 +13,9 @@ use crate::test_support::TEST_TIMEOUT;
 async fn overlapping_waiters_share_work_and_cancellation_does_not_cancel_operation() {
     let slot = Arc::new(WsIoLifecycleCompletionSlot::default());
     let count = Arc::new(AtomicUsize::new(0));
-    let (entered_tx, entered_rx) = oneshot::channel();
-    let (release_tx, release_rx) = oneshot::channel();
-    let first = spawn({
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    let first = tokio::task::spawn({
         let slot = Arc::clone(&slot);
         let count = Arc::clone(&count);
         async move {

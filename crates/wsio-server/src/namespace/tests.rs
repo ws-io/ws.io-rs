@@ -16,12 +16,8 @@ use hyper::{
     server::conn::http1,
     service::service_fn,
 };
-use tokio::{
-    io::duplex,
-    sync::mpsc::{
-        self,
-        error::TryRecvError,
-    },
+use tokio::sync::mpsc::{
+    self,
 };
 use tokio_tungstenite::client_async;
 
@@ -45,7 +41,7 @@ use crate::{
 
 /// Reports a receiver that closes when the pending Init encoding future is dropped.
 struct StalledInitTransformer {
-    started_tx: mpsc::UnboundedSender<mpsc::UnboundedReceiver<()>>,
+    started_tx: tokio::sync::mpsc::UnboundedSender<tokio::sync::mpsc::UnboundedReceiver<()>>,
 }
 
 #[async_trait]
@@ -149,8 +145,8 @@ async fn room_membership_survives_duplicate_join_leave_and_cleanup() {
 
 #[tokio::test]
 async fn init_response_failure_drops_pending_init_and_allows_shutdown() {
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-    let (init_response_tx, mut init_response_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (init_response_tx, mut init_response_rx) = tokio::sync::mpsc::unbounded_channel();
     let server = WsIoServer::builder()
         .disconnect_timeout(Duration::ZERO)
         .build()
@@ -170,9 +166,9 @@ async fn init_response_failure_drops_pending_init_and_allows_shutdown() {
         .register()
         .unwrap();
 
-    let (server_io, client_io) = duplex(4096);
+    let (server_io, client_io) = tokio::io::duplex(4096);
     let runtime = Arc::clone(&server.0);
-    let http_task = spawn(async move {
+    let http_task = tokio::task::spawn(async move {
         http1::Builder::new()
             .serve_connection(
                 TokioIo::new(server_io),
@@ -196,7 +192,11 @@ async fn init_response_failure_drops_pending_init_and_allows_shutdown() {
 
     assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
     let mut init_alive_rx = timeout(TEST_TIMEOUT, started_rx.recv()).await.unwrap().unwrap();
-    assert_eq!(init_alive_rx.try_recv(), Err(TryRecvError::Empty));
+    assert_eq!(
+        init_alive_rx.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+    );
+
     assert_eq!(namespace.connection_count(), 0);
 
     // An early Init disarms the watchdog and fails the reader while server Init is still pending.

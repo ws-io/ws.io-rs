@@ -4,27 +4,17 @@ use std::{
         poll_fn,
         ready,
     },
-    mem::take,
+    mem,
 };
 
+use anyhow::Result;
 use bytes::Bytes;
 use http::{
     Method,
     StatusCode,
     Version,
 };
-use parking_lot::Mutex;
-use tokio::{
-    spawn,
-    sync::{
-        mpsc::{
-            self,
-            error::TryRecvError,
-        },
-        oneshot,
-    },
-    time::timeout,
-};
+use tokio::time::timeout;
 use tower_layer::Layer;
 
 use super::*;
@@ -37,19 +27,19 @@ use crate::{
 };
 
 struct TestService {
-    ready_rx: Arc<Mutex<mpsc::UnboundedReceiver<Result<(), &'static str>>>>,
-    requests_tx: mpsc::UnboundedSender<Request<TestBody>>,
+    ready_rx: Arc<parking_lot::Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<(), &'static str>>>>,
+    requests_tx: tokio::sync::mpsc::UnboundedSender<Request<TestBody>>,
     ready: bool,
     call_error: Option<&'static str>,
 }
 
 impl TestService {
     fn new(
-        ready_rx: mpsc::UnboundedReceiver<Result<(), &'static str>>,
-        requests_tx: mpsc::UnboundedSender<Request<TestBody>>,
+        ready_rx: tokio::sync::mpsc::UnboundedReceiver<Result<(), &'static str>>,
+        requests_tx: tokio::sync::mpsc::UnboundedSender<Request<TestBody>>,
     ) -> Self {
         Self {
-            ready_rx: Arc::new(Mutex::new(ready_rx)),
+            ready_rx: Arc::new(parking_lot::Mutex::new(ready_rx)),
             requests_tx,
             ready: false,
             call_error: None,
@@ -91,7 +81,7 @@ impl TowerService<Request<TestBody>> for TestService {
 
     fn call(&mut self, request: Request<TestBody>) -> Self::Future {
         assert!(
-            take(&mut self.ready),
+            mem::take(&mut self.ready),
             "call must use the instance that acquired readiness"
         );
 
@@ -111,8 +101,8 @@ impl TowerService<Request<TestBody>> for TestService {
 #[tokio::test]
 async fn request_paths_dispatch_or_forward_without_altering_requests() {
     let server = WsIoServer::builder().request_path("/socket").unwrap().build().unwrap();
-    let (ready_tx, ready_rx) = mpsc::unbounded_channel();
-    let (requests_tx, mut requests_rx) = mpsc::unbounded_channel();
+    let (ready_tx, ready_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (requests_tx, mut requests_rx) = tokio::sync::mpsc::unbounded_channel();
     let mut service = server.layer().layer(TestService::new(ready_rx, requests_tx));
     ready_tx.send(Ok(())).unwrap();
     timeout(TEST_TIMEOUT, poll_fn(|ctx| service.poll_ready(ctx)))
@@ -136,7 +126,10 @@ async fn request_paths_dispatch_or_forward_without_altering_requests() {
     .unwrap();
 
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
-    assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+    assert_eq!(
+        requests_rx.try_recv().unwrap_err(),
+        tokio::sync::mpsc::error::TryRecvError::Empty
+    );
 
     for uri in ["/socket-extra", "/socket/", "/ws.io", "/other?namespace=/test"] {
         ready_tx.send(Ok(())).unwrap();
@@ -167,20 +160,23 @@ async fn request_paths_dispatch_or_forward_without_altering_requests() {
         assert_eq!(forwarded.headers()["x-request-id"], "original");
         assert_eq!(forwarded.body().0.as_deref(), Some(b"request payload".as_slice()));
         assert_eq!(forwarded.extensions().get::<u64>(), Some(&42));
-        assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+        assert_eq!(
+            requests_rx.try_recv().unwrap_err(),
+            tokio::sync::mpsc::error::TryRecvError::Empty
+        );
     }
 }
 
 #[tokio::test]
 async fn readiness_wakes_waiters_and_call_uses_the_ready_instance() {
     let server = WsIoServer::builder().build().unwrap();
-    let (ready_tx, ready_rx) = mpsc::unbounded_channel();
-    let (requests_tx, mut requests_rx) = mpsc::unbounded_channel();
+    let (ready_tx, ready_rx) = tokio::sync::mpsc::unbounded_channel();
+    let (requests_tx, mut requests_rx) = tokio::sync::mpsc::unbounded_channel();
     let mut service = server.layer().layer(TestService::new(ready_rx, requests_tx));
 
     for uri in ["/first", "/second"] {
-        let (pending_tx, pending_rx) = oneshot::channel();
-        let readiness_task = spawn(async move {
+        let (pending_tx, pending_rx) = tokio::sync::oneshot::channel();
+        let readiness_task = tokio::task::spawn(async move {
             let mut pending_tx = Some(pending_tx);
             let result = poll_fn(|ctx| {
                 let result = service.poll_ready(ctx);
@@ -206,7 +202,10 @@ async fn readiness_wakes_waiters_and_call_uses_the_ready_instance() {
         let response = timeout(TEST_TIMEOUT, service.call(request)).await.unwrap().unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
         assert_eq!(requests_rx.try_recv().unwrap().uri(), uri);
-        assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+        assert_eq!(
+            requests_rx.try_recv().unwrap_err(),
+            tokio::sync::mpsc::error::TryRecvError::Empty
+        );
     }
 }
 
@@ -214,8 +213,8 @@ async fn readiness_wakes_waiters_and_call_uses_the_ready_instance() {
 async fn inner_readiness_and_call_errors_are_preserved() {
     let server = WsIoServer::builder().build().unwrap();
     for ready_result in [Err("readiness failed"), Ok(())] {
-        let (ready_tx, ready_rx) = mpsc::unbounded_channel();
-        let (requests_tx, mut requests_rx) = mpsc::unbounded_channel();
+        let (ready_tx, ready_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (requests_tx, mut requests_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut inner = TestService::new(ready_rx, requests_tx);
         inner.call_error = Some("call failed");
         let mut service = server.layer().layer(inner);
@@ -226,7 +225,11 @@ async fn inner_readiness_and_call_errors_are_preserved() {
             .unwrap();
 
         assert_eq!(result, ready_result);
-        assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+        assert_eq!(
+            requests_rx.try_recv().unwrap_err(),
+            tokio::sync::mpsc::error::TryRecvError::Empty
+        );
+
         if result.is_err() {
             continue;
         }
@@ -235,7 +238,10 @@ async fn inner_readiness_and_call_errors_are_preserved() {
         let error = timeout(TEST_TIMEOUT, service.call(request)).await.unwrap().unwrap_err();
         assert_eq!(error, "call failed");
         assert_eq!(requests_rx.try_recv().unwrap().uri(), "/other");
-        assert_eq!(requests_rx.try_recv().unwrap_err(), TryRecvError::Empty);
+        assert_eq!(
+            requests_rx.try_recv().unwrap_err(),
+            tokio::sync::mpsc::error::TryRecvError::Empty
+        );
     }
 }
 

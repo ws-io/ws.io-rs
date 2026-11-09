@@ -4,11 +4,7 @@ use std::{
 };
 
 use anyhow::bail;
-use tokio::{
-    spawn,
-    sync::mpsc,
-    time::timeout,
-};
+use tokio::time::timeout;
 
 use super::*;
 use crate::test_support::{
@@ -123,7 +119,7 @@ async fn active_dispatch_keeps_its_snapshot_when_handlers_are_replaced() {
     let registry = Arc::new(WsIoEventRegistry::<AtomicUsize>::new());
     let count = Arc::new(AtomicUsize::new(0));
     let release = CancellationToken::new();
-    let (started_tx, mut started_rx) = mpsc::unbounded_channel();
+    let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
     for _ in 0..2 {
         let release = release.clone();
         let started_tx = started_tx.clone();
@@ -139,7 +135,7 @@ async fn active_dispatch_keeps_its_snapshot_when_handlers_are_replaced() {
         });
     }
 
-    let task = spawn({
+    let task = tokio::task::spawn({
         let registry = Arc::clone(&registry);
         let count = Arc::clone(&count);
         async move { dispatch(&registry, count, None, &CancellationToken::new()).await }
@@ -171,8 +167,8 @@ async fn cancellation_and_dropping_dispatch_release_all_active_handlers() {
         for abort_dispatch in [false, true] {
             let registry = Arc::new(WsIoEventRegistry::<()>::new());
             let cancel = CancellationToken::new();
-            let (started_tx, mut started_rx) = mpsc::unbounded_channel();
-            let (alive_tx, mut alive_rx) = mpsc::unbounded_channel();
+            let (started_tx, mut started_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (alive_tx, mut alive_rx) = tokio::sync::mpsc::unbounded_channel();
             for _ in 0..handlers {
                 let started_tx = started_tx.clone();
                 let alive_tx = alive_tx.clone();
@@ -181,7 +177,7 @@ async fn cancellation_and_dropping_dispatch_release_all_active_handlers() {
                 });
             }
 
-            let task = spawn({
+            let task = tokio::task::spawn({
                 let registry = Arc::clone(&registry);
                 let cancel = cancel.clone();
                 async move { dispatch(&registry, Arc::new(()), None, &cancel).await }
