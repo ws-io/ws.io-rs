@@ -22,7 +22,7 @@ keep repository-specific helpers outside `public/`.
 - `require_dir path`: return 0 if directory exists; log error/return 1 otherwise.
 - `install_file src dest [mode]`: copy file, create parent dir, optionally chmod destination.
 - `absolute_path path [base]`: print absolute path without resolving symlinks/nonexistent final component.
-- `canonical_path path`: print physical path; resolves existing dirs and parent dir of files/nonexistent targets.
+- `canonical_path path`: print physical path; resolves symlinks and existing ancestors, allowing missing descendants.
 - `repo_root_from [dir]`: walk upward to nearest `.git`; print root or return 1.
 - `require_under_root path root`: exit if path is outside root after canonicalization.
 - `safe_rm_under_root root target...`: remove targets strictly below an existing non-`/` root; relative targets use root as their base, and the root itself is never removed.

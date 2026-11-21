@@ -25,6 +25,9 @@ Cargo.lock
 .cache/
 .temp/
 
+# dist output
+dist/
+
 # impeccable-ignore-start
 # Ephemeral output, runtime state, and per-dev overrides.
 # The **/ prefix covers .impeccable at the repo root or in a nested workspace.
@@ -52,6 +55,8 @@ Cargo.lock
 # Local AI agent and code-indexing files
 .omo/
 .omx/
+.omx-state-locks/
+.omx-state-locks.identity.json
 .codegraph/
 .aider*
 CLAUDE.local.md

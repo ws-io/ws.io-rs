@@ -41,6 +41,9 @@ rustflags = [
   # "--cfg", "tokio_unstable",
 ]
 
+[registry]
+global-min-publish-age = "1 days"
+
 # Targets
 
 # Dev-safe target-wide examples only. Release-only target flags belong in scripts.

@@ -17,7 +17,7 @@ absolute_path() {
     case "${path}" in
     /*) printf '%s\n' "${path}" ;;
     *)
-        base="$(cd -P -- "${base}" && pwd)"
+        base="$(cd -P -- "${base}" && pwd)" || return 1
         printf '%s/%s\n' "${base%/}" "${path}"
         ;;
     esac
@@ -28,11 +28,13 @@ canonical_path() {
     local dir base target
     local symlink_count=0
 
+    [[ -n "${path}" ]] || return 1
+
     while [[ -L "${path}" ]]; do
         ((symlink_count += 1))
         ((symlink_count <= 40)) || return 1
-        dir="$(cd -P -- "$(dirname -- "${path}")" && pwd)"
-        target="$(readlink "${path}")"
+        dir="$(cd -P -- "$(dirname -- "${path}")" && pwd)" || return 1
+        target="$(readlink "${path}")" || return 1
         case "${target}" in
         /*) path="${target}" ;;
         *) path="${dir}/${target}" ;;
@@ -46,8 +48,14 @@ canonical_path() {
 
     dir="$(dirname -- "${path}")"
     base="$(basename -- "${path}")"
-    dir="$(cd -P -- "${dir}" && pwd)"
-    printf '%s/%s\n' "${dir%/}" "${base}"
+
+    # Resolve existing ancestors physically, retaining missing descendants.
+    dir="$(canonical_path "${dir}")" || return 1
+    case "${base}" in
+    .) printf '%s\n' "${dir}" ;;
+    ..) dirname -- "${dir}" ;;
+    *) printf '%s/%s\n' "${dir%/}" "${base}" ;;
+    esac
 }
 
 repo_root_from() {
@@ -140,7 +148,9 @@ safe_rm_under_root() {
             return 1
         }
 
-        canonical_target="$(absolute_path "${target_name}" "${target_parent}")" || return 1
+        # The canonical parent may not exist; absolute_path requires an
+        # existing base. Do not resolve the final component's symlink target.
+        canonical_target="${target_parent%/}/${target_name}"
 
         case "${canonical_target}" in
         "${root}"/*) removal_paths+=("${target_path}") ;;
