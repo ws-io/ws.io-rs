@@ -1,0 +1,56 @@
+name: Test
+
+on:
+  # push:
+  #   tags:
+  #     - v*
+  workflow_dispatch: null
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Rust / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Tag-scoped caches are never restored by later tags.
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v2
+        with:
+          cache: false
+          components: llvm-tools-preview
+
+      # .cargo/config.toml links with mold on x86_64 Linux.
+      - name: Install cargo-llvm-cov and mold
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,mold
+
+      - name: Run tests with coverage
+        run: cargo coverage
+
+      - name: Generate lcov report
+        if: ${{ runner.os == 'Linux' }}
+        run: cargo llvm-cov report --lcov --output-path ./lcov.info --quiet
+
+      - name: Upload coverage to Codecov
+        if: ${{ runner.os == 'Linux' }}
+        uses: codecov/codecov-action@v7
+        with:
+          fail_ci_if_error: true
+          files: ./lcov.info
+          flags: rust
+          token: ${{ secrets.CODECOV_TOKEN }}
