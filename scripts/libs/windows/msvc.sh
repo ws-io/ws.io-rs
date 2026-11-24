@@ -5,6 +5,9 @@
 
 # Source libs/common.sh before this file.
 
+# Constants/Variables
+WINDOWS_MSVC_LLVM_VERSION=23
+
 # Functions
 require_windows_msvc_host() {
     if [[ "$(host_os)" != 'linux' ]]; then
@@ -14,7 +17,7 @@ require_windows_msvc_host() {
 }
 
 prepare_windows_msvc() {
-    local llvm_bin="${LLVM_BIN:-/usr/lib/llvm-19/bin}"
+    local llvm_bin="${LLVM_BIN:-/usr/lib/llvm-${WINDOWS_MSVC_LLVM_VERSION}/bin}"
 
     require_windows_msvc_host || return
     prepend_cargo_bin_to_path
