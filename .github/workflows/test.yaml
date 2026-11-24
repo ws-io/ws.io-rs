@@ -1,4 +1,4 @@
-name: Multi-Platform Verification & Code Coverage
+name: Test
 
 on:
   push:
@@ -11,15 +11,17 @@ on:
 permissions:
   contents: read
 
+# Tags released together point at the same commit; test it once.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.sha }}
 
 jobs:
   test:
-    name: Rust on ${{ matrix.os }}
+    name: Rust / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -28,29 +30,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Set up rust
+      # Tag-scoped caches are never restored by later tags.
+      - name: Set up Rust
         uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
+          cache: false
           components: llvm-tools-preview
 
-      - name: Install mold
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mold
+      # .cargo/config.toml links with mold on x86_64 Linux.
+      - name: Install cargo-llvm-cov and mold
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov,mold
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Run tests and show coverage
+      - name: Run tests with coverage
         run: cargo coverage
 
       - name: Generate lcov report
         if: ${{ runner.os == 'Linux' }}
-        run: cargo coverage-generate --no-run
+        run: cargo llvm-cov report --lcov --output-path ./lcov.info --quiet
 
-      - name: Upload lcov report to codecov
+      - name: Upload coverage to Codecov
         if: ${{ runner.os == 'Linux' }}
         uses: codecov/codecov-action@v7
         with:
