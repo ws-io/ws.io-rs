@@ -30,6 +30,7 @@ main() (
     local keep_unused_imports=false
     parse_args "$@"
     cd -- "${REPO_ROOT}"
+    ensure_cargo_target x86_64-pc-windows-msvc
     load_windows_msvc_env
 
     # cargo xwin env resets RUSTFLAGS, so apply this after loading the environment.
