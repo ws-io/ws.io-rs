@@ -10,8 +10,8 @@ source "${SCRIPT_DIR}/libs/common.sh"
 
 # Constants/Variables
 # Pin Mordant and its build toolchain together; leave the project's toolchain unchanged.
-readonly MORDANT_REV='564c8da5cb0d4fc9b1717b4b42e6e60dbeef237b'
-readonly MORDANT_TOOLCHAIN='nightly-2026-09-01'
+readonly MORDANT_REV='6cc00ea760233b179e8d443488632772cae01040'
+readonly MORDANT_TOOLCHAIN='nightly-2026-11-14'
 
 # Run
 main() {
