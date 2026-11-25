@@ -83,13 +83,13 @@ tracing = [
 # =============================================================================
 
 [dependencies]
-anyhow = "1.0.104"
-bytes = "1.12.1"
+anyhow = "1.0.105"
+bytes = "1.12.2"
 derive_more = { version = "2.1.1", features = ["debug"] }
 futures-util = { version = "0.3.34", default-features = false }
 http = "1.5.0"
 http-body = "1.1.0"
-hyper = "1.12.0"
+hyper = "1.13.0"
 hyper-util = { version = "0.1.21", features = ["tokio"] }
 kikiutils = { version = "0.13.2", features = ["atomic-enum-cell", "fx-collections"] }
 num_enum = "0.7.6"
@@ -102,7 +102,7 @@ tokio-util = { version = "0.7.20", features = ["rt"] }
 tower-layer = "0.3.3"
 tower-service = "0.3.3"
 tracing = { version = "0.1.44", optional = true }
-url = "2.5.8"
+url = "2.5.9"
 wsio-core.workspace = true
 
 # -----------------------------------------------------------------------------
@@ -227,7 +227,7 @@ wsio-core.workspace = true
 [dev-dependencies]
 async-trait = "0.1.92"
 futures-util = { version = "0.3.34", default-features = false, features = ["async-await"] }
-hyper = { version = "1.12.0", features = ["http1", "server"] }
+hyper = { version = "1.13.0", features = ["http1", "server"] }
 tokio = { version = "1.54.1", features = ["io-util", "test-util"] }
 
 # -----------------------------------------------------------------------------
